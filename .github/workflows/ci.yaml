@@ -47,3 +47,11 @@ jobs:
           path: server/target/auction-server.jar
           if-no-files-found: error
 
+      - name: Upload JAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: auction-system-jars
+          path: |
+            server/target/auction-server.jar
+            client/target/auction-client.jar
+          if-no-files-found: error
