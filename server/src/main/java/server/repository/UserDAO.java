@@ -13,7 +13,7 @@ import java.sql.SQLException;
 public class UserDAO {
 
 
-    public boolean register(String username, String password, String email) throws SQLException {
+    public boolean register(String username, String password, String email) {
 
         String sql = "INSERT INTO users (username, password, email, role, status) VALUES (?, ?, ?, ?, ?)";
 
@@ -21,7 +21,7 @@ public class UserDAO {
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
             ps.setString(1, username);
-            ps.setString(2, password); // lưu trực tiếp (đơn giản)
+            ps.setString(2, password);
             ps.setString(3, email);
             ps.setString(4, UserRole.USER.name());
             ps.setString(5, UserStatus.ACTIVE.name());
@@ -33,19 +33,20 @@ public class UserDAO {
         }
     }
 
-    public User login(String username, String password) throws SQLException {
+    public User login(String identifier, String password){
 
         String sql = """
             SELECT user_id, username, email, role, status, created_at
             FROM users
-            WHERE username = ? AND password = ?
+            WHERE (username = ? OR email = ?) AND password = ?
         """;
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            ps.setString(1, username);
-            ps.setString(2, password);
+            ps.setString(1, identifier);
+            ps.setString(2,identifier);
+            ps.setString(3, password);
 
             ResultSet rs = ps.executeQuery();
 
@@ -65,7 +66,7 @@ public class UserDAO {
         return null;
     }
 
-    public User getById(int userId) throws SQLException {
+    public User getById(int userId){
 
         String sql = """
             SELECT user_id, username, email, role, status, created_at
