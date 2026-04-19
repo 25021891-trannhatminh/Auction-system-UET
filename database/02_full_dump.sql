@@ -39,9 +39,9 @@ CREATE TABLE `auctions` (
   UNIQUE KEY `item_id` (`item_id`),
   KEY `current_winner_id` (`current_winner_id`),
   KEY `seller_id` (`seller_id`),
-  CONSTRAINT `auctions_ibfk_1` FOREIGN KEY (`current_winner_id`) REFERENCES `users` (`user_id`),
-  CONSTRAINT `auctions_ibfk_2` FOREIGN KEY (`seller_id`) REFERENCES `users` (`user_id`),
-  CONSTRAINT `auctions_ibfk_3` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`)
+  CONSTRAINT `auctions_ibfk_1` FOREIGN KEY (`current_winner_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
+  CONSTRAINT `auctions_ibfk_2` FOREIGN KEY (`seller_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT,
+  CONSTRAINT `auctions_ibfk_3` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -72,8 +72,8 @@ CREATE TABLE `auto_bids` (
   PRIMARY KEY (`auto_bid_id`),
   KEY `auction_id` (`auction_id`),
   KEY `bidder_id` (`bidder_id`),
-  CONSTRAINT `auto_bids_ibfk_1` FOREIGN KEY (`auction_id`) REFERENCES `auctions` (`auction_id`),
-  CONSTRAINT `auto_bids_ibfk_2` FOREIGN KEY (`bidder_id`) REFERENCES `users` (`user_id`)
+  CONSTRAINT `auto_bids_ibfk_1` FOREIGN KEY (`auction_id`) REFERENCES `auctions` (`auction_id`) ON DELETE CASCADE,
+  CONSTRAINT `auto_bids_ibfk_2` FOREIGN KEY (`bidder_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -103,8 +103,8 @@ CREATE TABLE `bids` (
   PRIMARY KEY (`bid_id`),
   KEY `auction_id` (`auction_id`),
   KEY `bidder_id` (`bidder_id`),
-  CONSTRAINT `bids_ibfk_1` FOREIGN KEY (`auction_id`) REFERENCES `auctions` (`auction_id`),
-  CONSTRAINT `bids_ibfk_2` FOREIGN KEY (`bidder_id`) REFERENCES `users` (`user_id`)
+  CONSTRAINT `bids_ibfk_1` FOREIGN KEY (`auction_id`) REFERENCES `auctions` (`auction_id`) ON DELETE CASCADE,
+  CONSTRAINT `bids_ibfk_2` FOREIGN KEY (`bidder_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -133,7 +133,7 @@ CREATE TABLE `items` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`item_id`),
   KEY `seller_id` (`seller_id`),
-  CONSTRAINT `items_ibfk_1` FOREIGN KEY (`seller_id`) REFERENCES `users` (`user_id`)
+  CONSTRAINT `items_ibfk_1` FOREIGN KEY (`seller_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -158,8 +158,8 @@ CREATE TABLE `users` (
   `username` varchar(100) NOT NULL,
   `password` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `role` enum('BIDDER','SELLER','ADMIN') NOT NULL,
-  `is_active` tinyint(1) DEFAULT '1',
+  `role` enum('USER','ADMIN') NOT NULL,
+  `status` enum('ACTIVE','SUSPENDED','BANNED') DEFAULT 'ACTIVE',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `username` (`username`),
@@ -185,4 +185,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-18  0:46:59
+-- Dump completed on 2026-04-18 12:22:30

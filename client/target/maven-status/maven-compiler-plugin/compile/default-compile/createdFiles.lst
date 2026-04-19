@@ -1,0 +1,10 @@
+client\service\SessionManager.class
+client\model\AccountStatus.class
+client\controller\LoginController.class
+client\Launcher.class
+client\service\AuthService.class
+client\model\SystemRole.class
+client\MainApp.class
+client\model\User.class
+client\controller\AuthController.class
+client\controller\RegisterController.class

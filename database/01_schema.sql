@@ -1,13 +1,15 @@
+create database if not exists auctionsystem;
 use auctionsystem;
 create table users(
 	user_id int auto_increment primary key,
     username varchar(100) not null unique,
+    password varchar(255) not null,
     email varchar(255) not null unique,
-    role enum('BIDDER','SELLER','ADMIN') not null,
-    is_active boolean default true,
+    role enum('USER','ADMIN') not null,
+    status enum('ACTIVE', 'SUSPENDED', 'BANNED') default 'ACTIVE',
     created_at timestamp default current_timestamp
 );
-use auctionsystem;
+
 create table items(
 	item_id int auto_increment primary key,
     seller_id int not null,
@@ -15,9 +17,10 @@ create table items(
     name varchar(255) not null,
     starting_price decimal(15,2) not null,
     created_at timestamp default current_timestamp,
-    foreign key (seller_id) references users(user_id)
+    foreign key (seller_id) references users(user_id) on delete restrict
+
 );
-use auctionsystem;
+
 
 create table auctions(
 	auction_id int auto_increment primary key,
@@ -30,14 +33,14 @@ create table auctions(
     current_winner_id int,
     status enum('OPEN','RUNNING','FINISHED','PAID','CANCELED') default 'OPEN',
     created_at timestamp default current_timestamp,
-    foreign key (current_winner_id) references users(user_id),
-    foreign key (seller_id) references users(user_id),
-    foreign key (item_id) references items(item_id)
-    
+    foreign key (current_winner_id) references users(user_id) on delete set null,
+    foreign key (seller_id) references users(user_id) on delete restrict,
+    foreign key (item_id) references items(item_id) on delete cascade
+
 );
 
 
-use auctionsystem;
+
 create table bids(
 	bid_id int auto_increment primary key,
     auction_id int not null,
@@ -45,8 +48,8 @@ create table bids(
     amount decimal(15,2) not null,
     bid_time timestamp default current_timestamp,
     is_auto_bid boolean default false,
-    foreign key (auction_id) references auctions(auction_id),
-    foreign key (bidder_id) references users(user_id)
+    foreign key (auction_id) references auctions(auction_id) on delete cascade,
+    foreign key (bidder_id) references users(user_id) on delete restrict
 );
 
 create table auto_bids(
@@ -57,7 +60,7 @@ create table auto_bids(
     increment decimal(15,2) not null,
     status enum('ACTIVE','COMPLETED','CANCELED') default 'ACTIVE',
     created_at timestamp default current_timestamp,
-    foreign key (auction_id) references auctions(auction_id),
-    foreign key (bidder_id) references users(user_id)
-    
+    foreign key (auction_id) references auctions(auction_id) on delete cascade,
+    foreign key (bidder_id) references users(user_id) on delete restrict
+
 );
