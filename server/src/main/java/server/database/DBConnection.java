@@ -10,16 +10,16 @@ public class DBConnection {
     private static Properties props = new Properties();
 
     static {
-        // Tự động chạy khi class được nạp vào bộ nhớ
+
         try (InputStream is = DBConnection.class.getClassLoader()
                 .getResourceAsStream("db.properties")) {
 
             if (is == null) {
-                // Nếu không tìm thấy file thật, báo lỗi ngay để bạn đi tạo file
+
                 System.err.println("❌ LỖI: Không tìm thấy file 'db.properties' trong thư mục resources!");
             } else {
                 props.load(is);
-                // Nạp Driver
+                
                 Class.forName(props.getProperty("db.driver"));
             }
         } catch (Exception e) {
