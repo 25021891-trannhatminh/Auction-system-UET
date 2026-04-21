@@ -15,7 +15,11 @@ public class User {
         this.systemRole = systemRole;
         this.accountStatus = accountStatus;
     }
-
+    public User(String username, SystemRole systemRole, AccountStatus accountStatus) {
+        this.username = username;
+        this.systemRole = systemRole;
+        this.accountStatus = accountStatus;
+    }
     public String getUsername() {
         return username;
     }

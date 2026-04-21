@@ -26,6 +26,7 @@ import client.model.AccountStatus;
 import client.model.SystemRole;
 import client.model.User;
 import client.service.AuthService;
+import client.service.NetworkManager;
 import client.service.SessionManager;
 
 public class AuthController {
@@ -35,6 +36,10 @@ public class AuthController {
 
     private static final String OVERLAY_IMAGE_PATH = "/client/images/overlay.jpg";
     private static final String OVERLAY_IMAGE_FALLBACK_PATH = "/client/images/bg.png";
+    private NetworkManager networkManager;
+    public void setNetworkManager(NetworkManager networkManager){
+        this.networkManager=networkManager;
+    }
 
     @FXML private AnchorPane overlayPane;
     @FXML private StackPane overlayViewport;
@@ -56,13 +61,16 @@ public class AuthController {
     @FXML private PasswordField signInPasswordField;
     @FXML private Label signInMessageLabel;
 
-    private final AuthService authService = new AuthService();
+    private AuthService authService ;
 
     private boolean signInMode = true;
     private boolean animating = false;
 
     @FXML
     public void initialize() {
+        networkManager = new NetworkManager();
+        networkManager.setMessageHandler(this::handleServerResponse);
+        authService = new AuthService(networkManager);
         setupOverlayViewport();
         applyState(true);
     }
@@ -210,13 +218,8 @@ public class AuthController {
             return;
         }
 
-        boolean success = authService.register(username, email, password);
-
-        if (!success) {
-            showError(signUpMessageLabel, "Username hoặc email đã tồn tại.");
-            return;
-        }
-
+        authService.register(username, email, password);
+        showSuccess(signInMessageLabel,"Đang đăng ký...");
         clearSignUpFields();
 
         showSignIn();
@@ -236,38 +239,58 @@ public class AuthController {
             showError(signInMessageLabel, "Vui lòng nhập đầy đủ thông tin.");
             return;
         }
-
-        User user = authService.login(identity, password);
-
-        if (user == null) {
-            showError(signInMessageLabel, "Sai tài khoản hoặc mật khẩu.");
-            return;
-        }
-
-        if (user.getAccountStatus() == AccountStatus.SUSPENDED) {
-            showError(signInMessageLabel, "Tài khoản đang bị tạm khóa.");
-            return;
-        }
-
-        if (user.getAccountStatus() == AccountStatus.BANNED) {
-            showError(signInMessageLabel, "Tài khoản đã bị cấm.");
-            return;
-        }
-
-        SessionManager.setCurrentUser(user);
-
-        try {
-            if (user.getSystemRole() == SystemRole.ADMIN) {
-                switchScene("/client/admin-home.fxml", "Admin Home");
-            } else {
-                switchScene("/client/user-home.fxml", "User Home");
-            }
-        } catch (Exception e) {
-            showError(signInMessageLabel, "Không thể chuyển màn hình.");
-            e.printStackTrace();
-        }
+        authService.login(identity, password);
+        showSuccess(signInMessageLabel, "Đang đăng nhập...");
     }
-
+    @FXML
+    public void handleServerResponse(String msg) {
+    // Bọc toàn bộ vào Platform.runLater để đảm bảo chạy trên FX thread
+        javafx.application.Platform.runLater(() -> {
+            String[] p = msg.split(" ");
+        
+            if (p[0].equals("LOGIN_SUCCESS")) {
+                String username = p[1];
+                SystemRole role = SystemRole.valueOf(p[2]);
+                AccountStatus status = AccountStatus.valueOf(p[3]);
+            
+                User user = new User(username, role, status);
+                SessionManager.setCurrentUser(user);
+        
+                try {  
+                    if (role == SystemRole.ADMIN) {    
+                        switchScene("/client/admin-home.fxml", "Admin Home");        
+                    } else {
+                        switchScene("/client/user-home.fxml", "User Home");
+                    }
+                } catch (Exception e) {
+                    showError(signInMessageLabel, "Không thể chuyển màn hình.");
+                }
+            } else if (p[0].equals("LOGIN_FAIL")) {
+            // Kiểm tra độ dài mảng tránh lỗi
+                if (p.length < 2) {
+                    showError(signInMessageLabel, "Đăng nhập thất bại.");
+                    return;
+                }
+                
+                String reason = p[1];
+                
+                switch (reason) {
+                    case "INVALID":
+                        showError(signInMessageLabel, "Sai tài khoản hoặc mật khẩu.");
+                        break;
+                    case "SUSPENDED":
+                        showError(signInMessageLabel, "Tài khoản đang bị tạm khóa.");
+                        break;
+                    case "BANNED":
+                        showError(signInMessageLabel, "Tài khoản đã bị cấm.");
+                        break;
+                    default:
+                        showError(signInMessageLabel, "Đăng nhập thất bại.");
+                        break;
+                }
+            }
+        });
+    }
     private void switchScene(String fxmlPath, String title) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();

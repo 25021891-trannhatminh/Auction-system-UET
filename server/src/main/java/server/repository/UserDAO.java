@@ -14,6 +14,8 @@ public class UserDAO {
 
 
     public boolean register(String username, String password, String email) {
+        System.out.println("=== ĐANG ĐĂNG KÝ ===");
+        System.out.println("Username: " + username);
 
         String sql = "INSERT INTO users (username, password, email, role, status) VALUES (?, ?, ?, ?, ?)";
 
@@ -28,6 +30,7 @@ public class UserDAO {
 
             return ps.executeUpdate() > 0;
         }catch(SQLException e){
+            System.out.println("❌ LỖI SQL: " + e.getMessage()); 
             e.printStackTrace();
             return false;
         }

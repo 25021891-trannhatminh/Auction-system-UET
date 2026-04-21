@@ -11,9 +11,12 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import client.service.AuthService;
+import client.service.NetworkManager;
 
 public class RegisterController {
-
+    private NetworkManager networkManager;
+    private AuthService authService;
+    
     @FXML
     private TextField usernameField;
 
@@ -29,7 +32,12 @@ public class RegisterController {
     @FXML
     private Label messageLabel;
 
-    private final AuthService authService = new AuthService();
+    @FXML
+    public void initialize(){
+        networkManager = new NetworkManager();
+        networkManager.setMessageHandler(this::handleServerResponse);
+        authService = new AuthService(networkManager);
+    }
 
     @FXML
     public void handleRegister() {
@@ -58,16 +66,21 @@ public class RegisterController {
             return;
         }
 
-        boolean success = authService.register(username, email, password);
-
-        if (!success) {
-            messageLabel.setText("Username hoặc email đã tồn tại.");
-            return;
-        }
-
-        messageLabel.setText("Đăng ký thành công. Quay lại đăng nhập.");
+        authService.register(username,email,password);
+        messageLabel.setText("Đang đăng ký...");
     }
 
+    private void handleServerResponse(String msg){
+        System.out.println("SERVER: "+msg);
+        String[] p = msg.split(" ");
+        if(p[0].equals("REGISTER_SUCCESS")){
+            messageLabel.setText("Đăng ký thành công!");
+
+        }else if (p[0].equals("REGISTER_FAIL")){
+            messageLabel.setText("Username hoặc email đã tồn tại.");
+        }
+    }
+        
     @FXML
     public void goToLogin(ActionEvent event) {
         try {
