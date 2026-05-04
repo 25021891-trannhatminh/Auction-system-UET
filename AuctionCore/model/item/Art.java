@@ -22,9 +22,9 @@ public class Art extends Item {
     /** Load từ DB */
     public Art(String id, LocalDateTime createdAt,
                String sellerId, String name, String description,
-               double startingPrice, String status,
+               double startingPrice,
                String artist, int yearCreated, String medium) {
-        super(id, createdAt, sellerId, name, description, startingPrice, status);
+        super(id, createdAt, sellerId, name, description, startingPrice);
         this.artist      = artist;
         this.yearCreated = yearCreated;
         this.medium      = medium;

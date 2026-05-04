@@ -20,9 +20,9 @@ public class Electronics extends Item {
     /** Load từ DB */
     public Electronics(String id, LocalDateTime createdAt,
                        String sellerId, String name, String description,
-                       double startingPrice, String status,
+                       double startingPrice,
                        String brand, int warrantyMonths) {
-        super(id, createdAt, sellerId, name, description, startingPrice, status);
+        super(id, createdAt, sellerId, name, description, startingPrice);
         this.brand          = brand;
         this.warrantyMonths = warrantyMonths;
     }
