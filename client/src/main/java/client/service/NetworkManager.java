@@ -6,7 +6,7 @@ import java.io.*;
 
 public class NetworkManager {
 
-    private static final String HOST = "192.168.54.114";
+    private static final String HOST = "192.168.1.16";
     private static final int PORT = 6666;
 
     private Socket socket;

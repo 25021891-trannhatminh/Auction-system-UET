@@ -1,37 +1,93 @@
 package server.common.model;
 
+import server.common.enums.BidStatus;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 
-public class BidHistoryDTO implements Serializable {
+/**
+ * DTO cho bảng BIDS.
+ *
+ * <p>Dùng để lưu và truyền thông tin lịch sử đấu giá của một auction,
+ * bao gồm số tiền bid, người bid, và trạng thái của bid.</p>
+ */
+public class BidHistoryDTO{
 
-    private static final long serialVersionUID = 1L;
 
-    private String username;
-    private BigDecimal amount;
-    private Timestamp bidTime;
-    private boolean isAutoBid;
+  /** ID lượt bid (Primary Key) */
+  private int bidId;
 
-    public BidHistoryDTO() {}
+  /** ID phiên đấu giá (FK -> AUCTIONS) */
+  private int auctionId;
 
-    public BidHistoryDTO(String username, BigDecimal amount,
-                         Timestamp bidTime, boolean isAutoBid) {
-        this.username = username;
-        this.amount = amount;
-        this.bidTime = bidTime;
-        this.isAutoBid = isAutoBid;
-    }
+  /** ID người đấu giá (FK -> USERS) */
+  private int bidderId;
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+  /** Số tiền bid */
+  private BigDecimal amount;
 
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
+  /** Có phải bid tự động (auto bid) hay không */
+  private boolean isAutoBid;
 
-    public Timestamp getBidTime() { return bidTime; }
-    public void setBidTime(Timestamp bidTime) { this.bidTime = bidTime; }
+  /**
+   * Trạng thái bid:
+   * PLACED / WINNING / OUTBID / WON / LOST
+   */
+  private BidStatus status;
 
-    public boolean isAutoBid() { return isAutoBid; }
-    public void setAutoBid(boolean autoBid) { isAutoBid = autoBid; }
+  /** Thời điểm thực hiện bid */
+  private Timestamp bidTime;
+
+  // ========================== Constructors ==========================
+
+  public BidHistoryDTO() {}
+
+  public BidHistoryDTO(int bidId, int auctionId, int bidderId,
+      BigDecimal amount, boolean isAutoBid,
+      BidStatus status, Timestamp bidTime) {
+    this.bidId = bidId;
+    this.auctionId = auctionId;
+    this.bidderId = bidderId;
+    this.amount = amount;
+    this.isAutoBid = isAutoBid;
+    this.status = status;
+    this.bidTime = bidTime;
+  }
+
+  // ========================== Getters & Setters ==========================
+
+  public int getBidId() { return bidId; }
+  public void setBidId(int bidId) { this.bidId = bidId; }
+
+  public int getAuctionId() { return auctionId; }
+  public void setAuctionId(int auctionId) { this.auctionId = auctionId; }
+
+  public int getBidderId() { return bidderId; }
+  public void setBidderId(int bidderId) { this.bidderId = bidderId; }
+
+  public BigDecimal getAmount() { return amount; }
+  public void setAmount(BigDecimal amount) { this.amount = amount; }
+
+  public boolean isAutoBid() { return isAutoBid; }
+  public void setAutoBid(boolean autoBid) { isAutoBid = autoBid; }
+
+  public BidStatus getStatus() { return status; }
+  public void setStatus(BidStatus status) { this.status = status; }
+
+  public Timestamp getBidTime() { return bidTime; }
+  public void setBidTime(Timestamp bidTime) { this.bidTime = bidTime; }
+
+  @Override
+  public String toString() {
+    return "BidHistoryDTO{" +
+        "bidId=" + bidId +
+        ", auctionId=" + auctionId +
+        ", bidderId=" + bidderId +
+        ", amount=" + amount +
+        ", isAutoBid=" + isAutoBid +
+        ", status=" + status +
+        ", bidTime=" + bidTime +
+        '}';
+  }
 }
