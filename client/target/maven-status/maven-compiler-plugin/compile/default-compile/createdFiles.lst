@@ -4,6 +4,7 @@ client\service\NetworkManager.class
 client\Launcher.class
 client\service\AuthService.class
 client\controller\UserDashboardController.class
+client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
 client\controller\RegisterController.class
 client\model\AccountStatus.class

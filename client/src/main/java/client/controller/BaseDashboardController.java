@@ -21,20 +21,20 @@ import javafx.stage.Stage;
 public abstract class BaseDashboardController {
 
     protected static class SectionContent {
-        private final String title;
-        private final String subtitle;
-        private final String surfaceTitle;
-        private final String surfaceDescription;
-        private final String rightTitle;
-        private final String rightDescription;
-        private final String[] statValues;
-        private final String[] statLabels;
-        private final String[] featureTitles;
-        private final String[] featureDescriptions;
-        private final String[] activityLines;
-        private final String[] quickTags;
-        private final String[] insightTitles;
-        private final String[] insightValues;
+        protected final String title;
+        protected final String subtitle;
+        protected final String surfaceTitle;
+        protected final String surfaceDescription;
+        protected final String rightTitle;
+        protected final String rightDescription;
+        protected final String[] statValues;
+        protected final String[] statLabels;
+        protected final String[] featureTitles;
+        protected final String[] featureDescriptions;
+        protected final String[] activityLines;
+        protected final String[] quickTags;
+        protected final String[] insightTitles;
+        protected final String[] insightValues;
 
         protected SectionContent(
                 String title,
@@ -163,47 +163,29 @@ public abstract class BaseDashboardController {
                 ? user.getEmail()
                 : username.toLowerCase().replace(" ", ".") + "@auction.local";
 
-        usernameLabel.setText(username);
-        emailLabel.setText(email);
-        roleLabel.setText(getRoleTitle());
-        avatarInitialsLabel.setText(buildInitials(username));
+        setText(usernameLabel, username);
+        setText(emailLabel, email);
+        setText(roleLabel, getRoleTitle());
+        setText(avatarInitialsLabel, buildInitials(username));
     }
 
     private void collectDisplayLabels() {
-        statValueLabels.add(statValue1);
-        statValueLabels.add(statValue2);
-        statValueLabels.add(statValue3);
-        statValueLabels.add(statValue4);
+        addIfPresent(statValueLabels, statValue1, statValue2, statValue3, statValue4);
+        addIfPresent(statTextLabels, statLabel1, statLabel2, statLabel3, statLabel4);
+        addIfPresent(featureTitleLabels, featureTitle1, featureTitle2, featureTitle3);
+        addIfPresent(featureDescriptionLabels, featureDescription1, featureDescription2, featureDescription3);
+        addIfPresent(activityLabels, activityLine1, activityLine2, activityLine3, activityLine4);
+        addIfPresent(quickTagLabels, quickTag1, quickTag2, quickTag3);
+        addIfPresent(insightTitleLabels, insightTitle1, insightTitle2, insightTitle3);
+        addIfPresent(insightValueLabels, insightValue1, insightValue2, insightValue3);
+    }
 
-        statTextLabels.add(statLabel1);
-        statTextLabels.add(statLabel2);
-        statTextLabels.add(statLabel3);
-        statTextLabels.add(statLabel4);
-
-        featureTitleLabels.add(featureTitle1);
-        featureTitleLabels.add(featureTitle2);
-        featureTitleLabels.add(featureTitle3);
-
-        featureDescriptionLabels.add(featureDescription1);
-        featureDescriptionLabels.add(featureDescription2);
-        featureDescriptionLabels.add(featureDescription3);
-
-        activityLabels.add(activityLine1);
-        activityLabels.add(activityLine2);
-        activityLabels.add(activityLine3);
-        activityLabels.add(activityLine4);
-
-        quickTagLabels.add(quickTag1);
-        quickTagLabels.add(quickTag2);
-        quickTagLabels.add(quickTag3);
-
-        insightTitleLabels.add(insightTitle1);
-        insightTitleLabels.add(insightTitle2);
-        insightTitleLabels.add(insightTitle3);
-
-        insightValueLabels.add(insightValue1);
-        insightValueLabels.add(insightValue2);
-        insightValueLabels.add(insightValue3);
+    private void addIfPresent(List<Label> target, Label... labels) {
+        for (Label label : labels) {
+            if (label != null) {
+                target.add(label);
+            }
+        }
     }
 
     private void registerNavigationButtons() {
@@ -230,14 +212,12 @@ public abstract class BaseDashboardController {
     protected void handleSidebarNavigation(ActionEvent event) {
         Object source = event.getSource();
 
-        if (!(source instanceof Button clickedButton)) {
-            return;
-        }
+        if (source instanceof Button clickedButton) {
+            String sectionKey = navigationMap.get(clickedButton);
 
-        String sectionKey = navigationMap.get(clickedButton);
-
-        if (sectionKey != null) {
-            showSection(sectionKey);
+            if (sectionKey != null) {
+                showSection(sectionKey);
+            }
         }
     }
 
@@ -250,14 +230,14 @@ public abstract class BaseDashboardController {
 
         updateActiveButton(sectionKey);
 
-        headerTitleLabel.setText(content.title);
-        headerSubtitleLabel.setText(content.subtitle);
-        sectionTitleLabel.setText(content.title);
-        sectionDescriptionLabel.setText(content.subtitle);
-        surfaceTitleLabel.setText(content.surfaceTitle);
-        surfaceDescriptionLabel.setText(content.surfaceDescription);
-        rightPanelTitleLabel.setText(content.rightTitle);
-        rightPanelDescriptionLabel.setText(content.rightDescription);
+        setText(headerTitleLabel, content.title);
+        setText(headerSubtitleLabel, content.subtitle);
+        setText(sectionTitleLabel, content.title);
+        setText(sectionDescriptionLabel, content.subtitle);
+        setText(surfaceTitleLabel, content.surfaceTitle);
+        setText(surfaceDescriptionLabel, content.surfaceDescription);
+        setText(rightPanelTitleLabel, content.rightTitle);
+        setText(rightPanelDescriptionLabel, content.rightDescription);
 
         applyTextArray(statValueLabels, content.statValues);
         applyTextArray(statTextLabels, content.statLabels);
@@ -291,8 +271,14 @@ public abstract class BaseDashboardController {
         }
     }
 
+    private void setText(Label label, String value) {
+        if (label != null) {
+            label.setText(value == null ? "" : value);
+        }
+    }
+
     private String buildInitials(String username) {
-        String[] parts = username.trim().split("\\s+");
+        String[] parts = username == null ? new String[0] : username.trim().split("\\s+");
 
         if (parts.length == 0 || parts[0].isBlank()) {
             return "AU";
@@ -303,10 +289,8 @@ public abstract class BaseDashboardController {
             return word.length() >= 2 ? word.substring(0, 2) : word;
         }
 
-        String first = parts[0].substring(0, 1).toUpperCase();
-        String second = parts[1].substring(0, 1).toUpperCase();
-
-        return first + second;
+        return parts[0].substring(0, 1).toUpperCase()
+                + parts[1].substring(0, 1).toUpperCase();
     }
 
     @FXML
