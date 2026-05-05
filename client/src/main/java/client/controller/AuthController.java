@@ -2,6 +2,13 @@ package client.controller;
 
 import java.net.URL;
 
+import client.MainApp;
+import client.model.AccountStatus;
+import client.model.SystemRole;
+import client.model.User;
+import client.service.AuthService;
+import client.service.NetworkManager;
+import client.service.SessionManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -22,12 +29,6 @@ import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import client.model.AccountStatus;
-import client.model.SystemRole;
-import client.model.User;
-import client.service.AuthService;
-import client.service.NetworkManager;
-import client.service.SessionManager;
 
 public class AuthController {
 
@@ -36,10 +37,9 @@ public class AuthController {
 
     private static final String OVERLAY_IMAGE_PATH = "/client/images/overlay.jpg";
     private static final String OVERLAY_IMAGE_FALLBACK_PATH = "/client/images/bg.png";
+
     private NetworkManager networkManager;
-    public void setNetworkManager(NetworkManager networkManager){
-        this.networkManager=networkManager;
-    }
+    private AuthService authService;
 
     @FXML private AnchorPane overlayPane;
     @FXML private StackPane overlayViewport;
@@ -61,8 +61,6 @@ public class AuthController {
     @FXML private PasswordField signInPasswordField;
     @FXML private Label signInMessageLabel;
 
-    private AuthService authService ;
-
     private boolean signInMode = true;
     private boolean animating = false;
 
@@ -71,6 +69,7 @@ public class AuthController {
         networkManager = new NetworkManager();
         networkManager.setMessageHandler(this::handleServerResponse);
         authService = new AuthService(networkManager);
+
         setupOverlayViewport();
         applyState(true);
     }
@@ -219,13 +218,7 @@ public class AuthController {
         }
 
         authService.register(username, email, password);
-        showSuccess(signInMessageLabel,"Đang đăng ký...");
-        clearSignUpFields();
-
-        showSignIn();
-        signInIdentityField.setText(email);
-        signInPasswordField.setText(password);
-        showSuccess(signInMessageLabel, "Đăng ký thành công. Bây giờ đăng nhập.");
+        showSuccess(signUpMessageLabel, "Đang đăng ký...");
     }
 
     @FXML
@@ -239,65 +232,87 @@ public class AuthController {
             showError(signInMessageLabel, "Vui lòng nhập đầy đủ thông tin.");
             return;
         }
+
         authService.login(identity, password);
         showSuccess(signInMessageLabel, "Đang đăng nhập...");
     }
+
     @FXML
     public void handleServerResponse(String msg) {
-    // Bọc toàn bộ vào Platform.runLater để đảm bảo chạy trên FX thread
         javafx.application.Platform.runLater(() -> {
+            if (msg == null || msg.isBlank()) {
+                return;
+            }
+
             String[] p = msg.split(" ");
-        
+
             if (p[0].equals("LOGIN_SUCCESS")) {
+                if (p.length < 4) {
+                    showError(signInMessageLabel, "Server trả dữ liệu đăng nhập không hợp lệ.");
+                    return;
+                }
+
                 String username = p[1];
                 SystemRole role = SystemRole.valueOf(p[2]);
                 AccountStatus status = AccountStatus.valueOf(p[3]);
-            
+
                 User user = new User(username, role, status);
                 SessionManager.setCurrentUser(user);
-        
-                try {  
-                    if (role == SystemRole.ADMIN) {    
-                        switchScene("/client/admin-home.fxml", "Admin Home");        
+
+                try {
+                    if (role == SystemRole.ADMIN) {
+                        switchScene("/client/admin-home.fxml", "Admin Dashboard");
                     } else {
-                        switchScene("/client/user-home.fxml", "User Home");
+                        switchScene("/client/user-home.fxml", "User Dashboard");
                     }
                 } catch (Exception e) {
-                    showError(signInMessageLabel, "Không thể chuyển màn hình.");
+                    e.printStackTrace();
+                    showError(signInMessageLabel, "Không thể chuyển màn hình dashboard.");
                 }
-            } else if (p[0].equals("LOGIN_FAIL")) {
-            // Kiểm tra độ dài mảng tránh lỗi
-                if (p.length < 2) {
-                    showError(signInMessageLabel, "Đăng nhập thất bại.");
-                    return;
-                }
-                
-                String reason = p[1];
-                
-                switch (reason) {
-                    case "INVALID":
-                        showError(signInMessageLabel, "Sai tài khoản hoặc mật khẩu.");
-                        break;
-                    case "SUSPENDED":
-                        showError(signInMessageLabel, "Tài khoản đang bị tạm khóa.");
-                        break;
-                    case "BANNED":
-                        showError(signInMessageLabel, "Tài khoản đã bị cấm.");
-                        break;
-                    default:
-                        showError(signInMessageLabel, "Đăng nhập thất bại.");
-                        break;
+
+                return;
+            }
+
+            if (p[0].equals("LOGIN_FAIL")) {
+                showError(signInMessageLabel, "Sai tài khoản hoặc mật khẩu.");
+                return;
+            }
+
+            if (p[0].equals("REGISTER_SUCCESS")) {
+                String email = signUpEmailField.getText().trim();
+                String password = signUpPasswordField.getText().trim();
+
+                clearSignUpFields();
+                showSignIn();
+
+                signInIdentityField.setText(email);
+                signInPasswordField.setText(password);
+
+                showSuccess(signInMessageLabel, "Đăng ký thành công. Bấm SIGN IN để vào hệ thống.");
+                return;
+            }
+
+            if (p[0].equals("REGISTER_FAIL")) {
+                String reason = p.length >= 2 ? p[1] : "ERROR";
+
+                if ("EXIST".equals(reason)) {
+                    showError(signUpMessageLabel, "Username hoặc email đã tồn tại.");
+                } else {
+                    showError(signUpMessageLabel, "Đăng ký thất bại.");
                 }
             }
         });
     }
+
     private void switchScene(String fxmlPath, String title) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();
 
         Stage stage = (Stage) signInIdentityField.getScene().getWindow();
-        stage.setScene(new Scene(root));
+        stage.setScene(new Scene(root, MainApp.APP_WIDTH, MainApp.APP_HEIGHT));
         stage.setTitle(title);
+        stage.setMinWidth(MainApp.APP_WIDTH);
+        stage.setMinHeight(MainApp.APP_HEIGHT);
         stage.show();
     }
 

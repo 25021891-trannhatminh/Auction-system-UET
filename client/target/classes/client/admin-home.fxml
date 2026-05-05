@@ -1,9 +1,297 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
 
-<StackPane xmlns="http://javafx.com/javafx/17"
-           xmlns:fx="http://javafx.com/fxml">
-    <Label text="Welcome Admin" />
-</StackPane>
+<AnchorPane prefHeight="650.0"
+            prefWidth="1000.0"
+            styleClass="dashboard-root"
+            stylesheets="@dashboard.css"
+            xmlns="http://javafx.com/javafx/17"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="client.controller.AdminDashboardController">
+
+    <children>
+        <HBox spacing="12.0"
+              styleClass="app-shell"
+              AnchorPane.bottomAnchor="0.0"
+              AnchorPane.leftAnchor="0.0"
+              AnchorPane.rightAnchor="0.0"
+              AnchorPane.topAnchor="0.0">
+
+            <children>
+                <ScrollPane fitToWidth="true"
+                            fitToHeight="true"
+                            hbarPolicy="NEVER"
+                            vbarPolicy="AS_NEEDED"
+                            pannable="true"
+                            prefWidth="205.0"
+                            minWidth="205.0"
+                            maxWidth="205.0"
+                            styleClass="sidebar-scroll">
+
+                    <content>
+                        <VBox prefWidth="205.0"
+                              spacing="15.0"
+                              styleClass="sidebar-shell">
+
+                            <children>
+                                <VBox spacing="11.0" styleClass="profile-card">
+                                    <children>
+                                        <StackPane styleClass="avatar-circle">
+                                            <children>
+                                                <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AD" />
+                                            </children>
+                                        </StackPane>
+
+                                        <Label fx:id="usernameLabel" styleClass="sidebar-name" text="Admin User" />
+                                        <Label fx:id="emailLabel" styleClass="sidebar-email" text="admin@auction.local" />
+                                        <Label fx:id="roleLabel" styleClass="role-pill" text="SYSTEM ADMIN" />
+                                    </children>
+                                </VBox>
+
+                                <VBox spacing="6.0">
+                                    <children>
+                                        <Label styleClass="menu-title" text="CONTROL PANEL" />
+                                        <Button fx:id="dashboardBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Dashboard" />
+                                        <Button fx:id="usersBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Users" />
+                                        <Button fx:id="auctionsBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Auctions" />
+                                        <Button fx:id="itemsBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Items" />
+                                        <Button fx:id="reportsBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Reports" />
+                                        <Button fx:id="settingsBtn"
+                                                mnemonicParsing="false"
+                                                onAction="#handleSidebarNavigation"
+                                                styleClass="nav-btn"
+                                                text="Settings" />
+                                    </children>
+                                </VBox>
+
+                                <VBox spacing="8.0" styleClass="sidebar-mini-card">
+                                    <children>
+                                        <Label styleClass="menu-title" text="ADMIN NOTE" />
+
+                                        <HBox spacing="5.0">
+                                            <children>
+                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="AN" /></children></StackPane>
+                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="BL" /></children></StackPane>
+                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="CH" /></children></StackPane>
+                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="+9" /></children></StackPane>
+                                            </children>
+                                        </HBox>
+
+                                        <Label styleClass="mini-text" text="Admin navigation is ready." wrapText="true" />
+                                        <Label styleClass="mini-subtext" text="Management tables can be plugged in later." wrapText="true" />
+                                    </children>
+                                </VBox>
+
+                                <Button mnemonicParsing="false"
+                                        onAction="#handleLogout"
+                                        styleClass="logout-btn"
+                                        text="Logout" />
+                            </children>
+                        </VBox>
+                    </content>
+                </ScrollPane>
+
+                <ScrollPane fitToWidth="true"
+                            fitToHeight="true"
+                            hbarPolicy="NEVER"
+                            vbarPolicy="AS_NEEDED"
+                            pannable="true"
+                            styleClass="content-scroll"
+                            HBox.hgrow="ALWAYS">
+
+                    <content>
+                        <VBox spacing="13.0" styleClass="content-shell">
+                            <children>
+                                <HBox alignment="CENTER_LEFT" spacing="12.0">
+                                    <children>
+                                        <VBox spacing="3.0">
+                                            <children>
+                                                <Label fx:id="headerTitleLabel" styleClass="top-title" text="Admin Dashboard" />
+                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Monitor the platform health and move across admin operations quickly." wrapText="true" />
+                                            </children>
+                                        </VBox>
+
+                                        <Region HBox.hgrow="ALWAYS" />
+                                        <TextField fx:id="searchField" promptText="Search..." styleClass="search-field" />
+                                        <Button mnemonicParsing="false" styleClass="action-btn" text="Quick Search" />
+                                    </children>
+                                </HBox>
+
+                                <FlowPane hgap="8.0" vgap="8.0">
+                                    <children>
+                                <Label styleClass="ghost-chip" text="Admin shell" />
+                                <Label styleClass="gold-chip" text="Control center" />
+                                <Label styleClass="ghost-chip" text="Moderation ready" />
+                                <Label styleClass="light-chip" text="Inspired layout" />
+                                    </children>
+                                </FlowPane>
+
+                                <HBox spacing="12.0" VBox.vgrow="ALWAYS">
+                                    <children>
+                                        <VBox spacing="13.0" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <VBox spacing="3.0">
+                                                    <children>
+                                                        <Label fx:id="sectionTitleLabel" styleClass="section-title" text="Admin Dashboard" />
+                                                        <Label fx:id="sectionDescriptionLabel" styleClass="section-subtitle" text="Placeholder content changes when you move through sidebar items." wrapText="true" />
+                                                    </children>
+                                                </VBox>
+
+                                                <HBox spacing="8.0">
+                                                    <children>
+                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label fx:id="statValue1" styleClass="stat-value" text="248" />
+                                                        <Label fx:id="statLabel1" styleClass="stat-label" text="Users" />
+                                                    </children>
+                                                </VBox>
+                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label fx:id="statValue2" styleClass="stat-value" text="31" />
+                                                        <Label fx:id="statLabel2" styleClass="stat-label" text="Auctions" />
+                                                    </children>
+                                                </VBox>
+                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label fx:id="statValue3" styleClass="stat-value" text="142" />
+                                                        <Label fx:id="statLabel3" styleClass="stat-label" text="Items" />
+                                                    </children>
+                                                </VBox>
+                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label fx:id="statValue4" styleClass="stat-value" text="912" />
+                                                        <Label fx:id="statLabel4" styleClass="stat-label" text="Bids" />
+                                                    </children>
+                                                </VBox>
+                                                    </children>
+                                                </HBox>
+
+                                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                                    <children>
+                                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="Operations Overview" />
+                                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="This area is ready for core admin widgets such as system summaries." wrapText="true" />
+
+                                                        <HBox spacing="8.0">
+                                                            <children>
+                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
+                                                            <children>
+                                                                <Label fx:id="featureTitle1" styleClass="placeholder-title" text="System health" />
+                                                                <Label fx:id="featureDescription1" styleClass="placeholder-desc" text="Primary panel reserved for admin insights." wrapText="true" />
+                                                            </children>
+                                                        </VBox>
+                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
+                                                            <children>
+                                                                <Label fx:id="featureTitle2" styleClass="placeholder-title" text="Operation queue" />
+                                                                <Label fx:id="featureDescription2" styleClass="placeholder-desc" text="Flagged records or approvals can go here." wrapText="true" />
+                                                            </children>
+                                                        </VBox>
+                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
+                                                            <children>
+                                                                <Label fx:id="featureTitle3" styleClass="placeholder-title" text="Recent actions" />
+                                                                <Label fx:id="featureDescription3" styleClass="placeholder-desc" text="Audit events or admin tools can go here." wrapText="true" />
+                                                            </children>
+                                                        </VBox>
+                                                            </children>
+                                                        </HBox>
+
+                                                        <VBox spacing="5.0" styleClass="placeholder-card" VBox.vgrow="ALWAYS">
+                                                            <children>
+                                                                <Label styleClass="placeholder-title" text="Placeholder activity feed" />
+                                                        <Label fx:id="activityLine1" styleClass="activity-line" text="User growth placeholder" wrapText="true" />
+                                                        <Label fx:id="activityLine2" styleClass="activity-line" text="Auction health placeholder" wrapText="true" />
+                                                        <Label fx:id="activityLine3" styleClass="activity-line" text="Moderation queue placeholder" wrapText="true" />
+                                                        <Label fx:id="activityLine4" styleClass="activity-line" text="Recent actions placeholder" wrapText="true" />
+                                                            </children>
+                                                        </VBox>
+                                                    </children>
+                                                </VBox>
+                                            </children>
+                                        </VBox>
+
+                                        <VBox prefWidth="180.0" minWidth="175.0" maxWidth="185.0" spacing="11.0">
+                                            <children>
+                                                <VBox spacing="9.0" styleClass="aside-card">
+                                                    <children>
+                                                        <Label styleClass="insight-title" text="QUICK SUMMARY" />
+                                                        <Label fx:id="rightPanelTitleLabel" styleClass="aside-big-title" text="Control Summary" wrapText="true" />
+                                                        <Label fx:id="rightPanelDescriptionLabel" styleClass="aside-big-desc" text="Use this compact panel for quick insights, alerts, and moderation counters." wrapText="true" />
+                                                    </children>
+                                                </VBox>
+
+                                                <FlowPane hgap="7.0" vgap="7.0">
+                                                    <children>
+                                                        <Label fx:id="quickTag1" styleClass="gold-chip" text="Overview" />
+                                                        <Label fx:id="quickTag2" styleClass="ghost-chip" text="Queue" />
+                                                        <Label fx:id="quickTag3" styleClass="ghost-chip" text="Moderation" />
+                                                    </children>
+                                                </FlowPane>
+
+                                                <VBox spacing="9.0">
+                                                    <children>
+                                                <VBox spacing="7.0" styleClass="insight-card">
+                                                    <children>
+                                                        <Label fx:id="insightTitle1" styleClass="insight-title" text="System" />
+                                                        <Label fx:id="insightValue1" styleClass="insight-value" text="Healthy" />
+                                                    </children>
+                                                </VBox>
+                                                <VBox spacing="7.0" styleClass="insight-card">
+                                                    <children>
+                                                        <Label fx:id="insightTitle2" styleClass="insight-title" text="Urgent" />
+                                                        <Label fx:id="insightValue2" styleClass="insight-value" text="3 items" />
+                                                    </children>
+                                                </VBox>
+                                                <VBox spacing="7.0" styleClass="insight-card">
+                                                    <children>
+                                                        <Label fx:id="insightTitle3" styleClass="insight-title" text="Load" />
+                                                        <Label fx:id="insightValue3" styleClass="insight-value" text="Normal" />
+                                                    </children>
+                                                </VBox>
+                                                    </children>
+                                                </VBox>
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </HBox>
+                            </children>
+
+                            <padding>
+                                <Insets bottom="1.0" left="1.0" right="1.0" top="1.0" />
+                            </padding>
+                        </VBox>
+                    </content>
+                </ScrollPane>
+            </children>
+        </HBox>
+    </children>
+</AnchorPane>
