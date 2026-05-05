@@ -22,7 +22,7 @@ import java.time.format.DateTimeFormatter;
  *   public void onBidUpdated(Auction auction, BidTransaction tx) {
  *       Platform.runLater(() -> {
  *           // Cập nhật Label giá hiện tại
- *           currentPriceLabel.setText(String.format("%.2f", auction.getCurrentPrice()));
+ *         +  currentPriceLabel.setText(String.format("%.2f", auction.getCurrentPrice()));
  *           // Thêm row vào TableView lịch sử bid
  *           bidHistoryTable.getItems().add(0, tx);
  *           // Highlight người dẫn đầu

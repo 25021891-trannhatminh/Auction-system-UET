@@ -19,8 +19,16 @@
         <javafx.version>23</javafx.version>
         <junit.version>5.11.0</junit.version>
     </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.mindrot</groupId>
+      <artifactId>jbcrypt</artifactId>
+      <version>0.4</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
 
-    <modules>
+  <modules>
         <module>server</module>
         <module>client</module>
     </modules>

@@ -1,6 +1,7 @@
 package server.common.enums;
 
 public enum UserRole {
-    USER,
+    BIDDER,
+    SELLER,
     ADMIN
 }
