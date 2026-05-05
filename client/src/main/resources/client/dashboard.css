@@ -540,3 +540,317 @@
     -fx-text-fill: #17352c;
     -fx-border-color: transparent;
 }
+
+/* User marketplace browse additions */
+
+.section-mini-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.category-grid,
+.auction-grid {
+    -fx-padding: 2 0 2 0;
+}
+
+.category-card {
+    -fx-background-color: rgba(255, 255, 255, 0.62);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(218, 229, 221, 0.95);
+    -fx-border-radius: 16;
+    -fx-padding: 12;
+}
+
+.category-card:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.12);
+}
+
+.category-title {
+    -fx-text-fill: #173d34;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.category-desc {
+    -fx-text-fill: #72837f;
+    -fx-font-size: 10px;
+    -fx-line-spacing: 2px;
+}
+
+.category-count {
+    -fx-text-fill: #294941;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.category-link {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-text-fill: #8a6a16;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.category-link:hover {
+    -fx-underline: true;
+}
+
+.browse-header {
+    -fx-padding: 4 0 0 0;
+}
+
+.sort-pill {
+    -fx-background-color: rgba(39, 75, 69, 0.07);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(39, 75, 69, 0.12);
+    -fx-border-radius: 999;
+    -fx-padding: 7 11 7 11;
+    -fx-text-fill: #294941;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.auction-product-card {
+    -fx-background-color: rgba(255, 255, 255, 0.68);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(218, 229, 221, 0.95);
+    -fx-border-radius: 18;
+    -fx-padding: 10;
+}
+
+.auction-product-card:hover {
+    -fx-background-color: rgba(39, 75, 69, 0.055);
+}
+
+.product-image-wrap {
+    -fx-background-color: rgba(39, 75, 69, 0.08);
+    -fx-background-radius: 15;
+    -fx-border-color: rgba(39, 75, 69, 0.10);
+    -fx-border-radius: 15;
+    -fx-alignment: center;
+    -fx-padding: 0;
+}
+
+.product-image {
+    -fx-background-radius: 15;
+}
+
+.product-badge {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 5 8 5 8;
+    -fx-font-size: 8px;
+    -fx-font-weight: bold;
+}
+
+.product-category {
+    -fx-text-fill: #738581;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.product-title {
+    -fx-text-fill: #173d34;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.product-price {
+    -fx-text-fill: #1f3e37;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.product-meta {
+    -fx-text-fill: #72837f;
+    -fx-font-size: 10px;
+}
+
+.pagination-bar {
+    -fx-padding: 4 0 0 0;
+}
+
+.pagination-btn,
+.pagination-active {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.pagination-btn {
+    -fx-background-color: #fbfaf6;
+    -fx-border-color: #dde7df;
+    -fx-text-fill: #294941;
+}
+
+.pagination-active {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-border-color: transparent;
+    -fx-text-fill: #17352c;
+}
+
+/* User marketplace browse additions - full grid */
+
+.section-mini-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.category-grid,
+.auction-grid {
+    -fx-padding: 2 0 2 0;
+}
+
+.category-card {
+    -fx-background-color: rgba(255, 255, 255, 0.62);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(218, 229, 221, 0.95);
+    -fx-border-radius: 16;
+    -fx-padding: 12;
+}
+
+.category-card:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.12);
+}
+
+.category-title {
+    -fx-text-fill: #173d34;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.category-desc {
+    -fx-text-fill: #72837f;
+    -fx-font-size: 10px;
+    -fx-line-spacing: 2px;
+}
+
+.category-count {
+    -fx-text-fill: #294941;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.category-link {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-text-fill: #8a6a16;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.category-link:hover {
+    -fx-underline: true;
+}
+
+.browse-header {
+    -fx-padding: 2 0 0 0;
+}
+
+.sort-pill {
+    -fx-background-color: rgba(39, 75, 69, 0.07);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(39, 75, 69, 0.12);
+    -fx-border-radius: 999;
+    -fx-padding: 7 11 7 11;
+    -fx-text-fill: #294941;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.auction-product-card {
+    -fx-background-color: rgba(255, 255, 255, 0.68);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(218, 229, 221, 0.95);
+    -fx-border-radius: 18;
+    -fx-padding: 12;
+}
+
+.auction-product-card:hover {
+    -fx-background-color: rgba(39, 75, 69, 0.055);
+}
+
+.product-image-wrap {
+    -fx-background-color: rgba(39, 75, 69, 0.08);
+    -fx-background-radius: 15;
+    -fx-border-color: rgba(39, 75, 69, 0.10);
+    -fx-border-radius: 15;
+    -fx-alignment: center;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.product-image {
+    -fx-background-radius: 15;
+}
+
+.product-badge {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 5 8 5 8;
+    -fx-font-size: 8px;
+    -fx-font-weight: bold;
+}
+
+.product-category {
+    -fx-text-fill: #738581;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.product-title {
+    -fx-text-fill: #173d34;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.product-price {
+    -fx-text-fill: #1f3e37;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.product-meta {
+    -fx-text-fill: #72837f;
+    -fx-font-size: 10px;
+}
+
+.pagination-bar {
+    -fx-padding: 4 0 0 0;
+}
+
+.pagination-btn,
+.pagination-active {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.pagination-btn {
+    -fx-background-color: #fbfaf6;
+    -fx-border-color: #dde7df;
+    -fx-text-fill: #294941;
+}
+
+.pagination-active {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-border-color: transparent;
+    -fx-text-fill: #17352c;
+}
+
+/* Keep auction thumbnails stable on first render. The controller crops the ImageView to cover this box. */
+.product-image-wrap {
+    -fx-min-height: 155;
+    -fx-pref-height: 155;
+    -fx-max-height: 155;
+}

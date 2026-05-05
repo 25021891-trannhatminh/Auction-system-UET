@@ -1,9 +1,12 @@
 client\service\SessionManager.class
+client\controller\UserDashboardController$CategoryData.class
 client\controller\BaseDashboardController$SectionContent.class
+client\controller\UserDashboardController$UserRow.class
 client\service\NetworkManager.class
 client\Launcher.class
 client\service\AuthService.class
 client\controller\UserDashboardController.class
+client\controller\UserDashboardController$AuctionCardData.class
 client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
 client\controller\RegisterController.class

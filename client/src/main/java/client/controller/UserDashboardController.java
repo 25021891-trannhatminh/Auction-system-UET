@@ -1,11 +1,62 @@
 package client.controller;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+
+import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
 
 public class UserDashboardController extends BaseDashboardController {
 
+    @FXML private FlowPane userActionBar;
+    @FXML private VBox workspaceBox;
+    @FXML private Label workspaceTitleLabel;
+    @FXML private Button primaryActionButton;
+
+    private static final int AUCTIONS_PER_PAGE = 6;
+    private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
+    private static final double PRODUCT_IMAGE_HEIGHT = 155;
+
     private final Map<String, SectionContent> sections = buildSections();
+    private final List<AuctionCardData> auctionCards = buildAuctionCards();
+    private final List<CategoryData> categories = buildCategories();
+    private final Map<String, Image> imageCache = new HashMap<>();
+
+    private String currentSectionKey = "dashboard";
+    private String activeFilter = "Overview";
+    private int auctionPage = 1;
+
+
+    @Override
+    @FXML
+    protected void initialize() {
+        preloadAuctionImages();
+        super.initialize();
+    }
+
+    private void preloadAuctionImages() {
+        for (AuctionCardData card : auctionCards) {
+            getCachedImage(card.imagePath);
+        }
+    }
 
     @Override
     protected Map<String, SectionContent> createSections() {
@@ -22,191 +73,1066 @@ public class UserDashboardController extends BaseDashboardController {
         return "BIDDER / SELLER";
     }
 
+    @Override
+    protected void showSection(String sectionKey) {
+        currentSectionKey = sectionKey;
+        activeFilter = getDefaultFilter(sectionKey);
+        auctionPage = 1;
+
+        super.showSection(sectionKey);
+        hideSurfaceDescription();
+        updatePrimaryAction(sectionKey);
+        renderWorkspace(sectionKey, activeFilter);
+    }
+
     private Map<String, SectionContent> buildSections() {
         Map<String, SectionContent> map = new LinkedHashMap<>();
 
-        map.put("dashboard", new SectionContent(
+        map.put("dashboard", page(
                 "Dashboard",
-                "Track ongoing auctions, monitor your activity, and jump back into the flow instantly.",
-                "Command Center Overview",
-                "This area is ready to host your real dashboard widgets later. For now it shows a polished placeholder structure based on the approved visual direction.",
-                "Today at a Glance",
-                "A compact side panel for quick insights, alerts, or countdown widgets once the real data is wired in.",
+                "Track bids, browse live auctions, manage listings, and follow transactions.",
+                "User Auction Workspace",
+                "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller tasks, and auto-bid warnings.",
                 new String[]{"12", "04", "03", "08"},
-                new String[]{"Active Auctions", "Winning Now", "Auto Bids", "Saved Items"},
-                new String[]{"Browse auctions", "Monitor bids", "Review selling items"},
+                new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
+                new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
                 new String[]{
-                        "Main list area prepared for auction cards.",
-                        "Placeholder block ready for bid history or live activity.",
-                        "Use this block later for seller-side shortcuts or recent drafts."
+                        "Outbid rows and ending-soon auctions are pushed to the top.",
+                        "My Bids keeps current price, your bid, status, and next action visible.",
+                        "Sold items and won auctions move into Transactions after bidding ends."
                 },
                 new String[]{
-                        "Newest auctions appear here",
-                        "Expiring lots can be listed here",
-                        "Outbid alerts can be surfaced here",
-                        "Recent winners can be summarized here"
-                },
-                new String[]{"Live auctions", "Fast bidding", "Seller mode"},
-                new String[]{"Focus", "Priority", "Mode"},
-                new String[]{"Ending soon", "Keep bidding", "Hybrid"}
+                        "You were outbid on Vintage Camera.",
+                        "MacBook Pro M3 ends in 42 minutes.",
+                        "Mechanical Keyboard sale is ready to ship.",
+                        "Auto bid reached 80% of max limit."
+                }
         ));
 
-        map.put("auctions", new SectionContent(
+        map.put("auctions", page(
                 "Auctions",
-                "Browse, search, and filter all auction sessions from a single hub.",
-                "Auction Listing Placeholder",
-                "Reserve this large content area for filters, auction cards, and detail modals. The overall layout is already in place.",
-                "Quick Filters",
-                "Perfect spot for status filters like running, upcoming, and finished, together with category shortcuts.",
-                new String[]{"25", "09", "06", "02"},
-                new String[]{"Running", "Ending Soon", "Followed", "Recommended"},
-                new String[]{"Search and filter", "Auction card grid", "Auction details panel"},
+                "Browse by category, filter live auctions, preview items, and place bids quickly.",
+                "Auction Browse",
+                "Marketplace-style browsing with product images, category cards, status filters, and paginated auction cards.",
+                new String[]{"32", "10", "08", "06"},
+                new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
+                new String[]{"Shop by Category", "Auction cards", "Pagination"},
                 new String[]{
-                        "Top utility row can host keyword search and categories.",
-                        "Middle section fits repeated auction result cards nicely.",
-                        "Right side can later preview selected auction detail."
+                        "Category cards work as practical browse shortcuts instead of decorative sections.",
+                        "Each auction card shows image, category, current bid, bid count, countdown, badge, and actions.",
+                        "Large result sets stay manageable with page 1, page 2, and Next/Previous controls."
                 },
                 new String[]{
-                        "Result list placeholder",
-                        "Sorting controls placeholder",
-                        "Mini statistics placeholder",
-                        "CTA buttons placeholder"
-                },
-                new String[]{"Running", "Upcoming", "Top value"},
-                new String[]{"Default view", "Best sort", "Attention"},
-                new String[]{"Card list", "Ending soon", "High demand"}
+                        "Vintage Camera is ending soon with high demand.",
+                        "MacBook Pro M3 is the most watched Electronics auction.",
+                        "Signed Art Print is a no-reserve auction.",
+                        "Use category cards before opening advanced filters."
+                }
         ));
 
-        map.put("myBids", new SectionContent(
+        map.put("myBids", page(
                 "My Bids",
-                "Keep track of all bids you placed and whether you are currently leading or outbid.",
+                "Track every bid you placed and act when you are winning, outbid, won, or lost.",
                 "Bid Tracking Board",
-                "Later you can drop in a table showing auction name, your latest bid, current price, and status.",
-                "Bid Status Summary",
-                "Use this area for a compact summary of winning, outbid, lost, or completed sessions.",
+                "A management table is best here: item thumbnail, current price, your bid, status, countdown, and quick action.",
                 new String[]{"18", "07", "05", "06"},
                 new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
-                new String[]{"Bid history table", "Current status chips", "Quick re-bid action"},
+                new String[]{"Bid history", "Status badges", "Quick re-bid"},
                 new String[]{
-                        "Ideal for a wide data table layout.",
-                        "Perfect place for row status or colored flags.",
-                        "Can later connect directly to bid detail or place-bid dialog."
+                        "Rows should compare current price, your latest bid, and closing pressure.",
+                        "Winning, Outbid, Won, and Lost statuses stay visible as badges.",
+                        "Outbid rows expose Bid Again without forcing a full detail page first."
                 },
                 new String[]{
-                        "Recent bid log placeholder",
-                        "Outbid notifications placeholder",
-                        "Winning sessions placeholder",
-                        "Closed auctions placeholder"
-                },
-                new String[]{"Winning", "Outbid", "History"},
-                new String[]{"Main signal", "Watchlist", "Refresh"},
-                new String[]{"Leading in 7", "Need action", "Realtime"}
+                        "You are winning 7 auctions right now.",
+                        "5 bids are outbid and need action.",
+                        "2 auctions end within the next hour.",
+                        "Completed bids move to Transactions."
+                }
         ));
 
-        map.put("autoBids", new SectionContent(
+        map.put("autoBids", page(
                 "Auto Bids",
-                "Manage your automation strategy and maximum bid limits from one place.",
-                "Auto Bid Manager",
-                "The content canvas can later contain a table of max bid, increment, status, and control actions.",
-                "Automation Snapshot",
-                "This side panel is ready for summaries such as active configurations, triggers, and recent executions.",
-                new String[]{"03", "01", "02", "11"},
-                new String[]{"Active Rules", "Paused", "Triggered Today", "Saved Limits"},
-                new String[]{"Rule list", "Edit max bid", "Pause / resume"},
+                "Manage automated bidding rules, maximum limits, increments, and pause or resume controls.",
+                "Auto Bid Controls",
+                "Auto bids are bidding rules, not just history. Keep max limit, current price, increment, warning threshold, and controls visible.",
+                new String[]{"03", "01", "02", "01"},
+                new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
+                new String[]{"Rule table", "Limit safety", "Pause / resume"},
                 new String[]{
-                        "Large surface area designed for a clean management table.",
-                        "Card placeholder fits form or edit drawer behaviour.",
-                        "Supplemental card works for rule explanations or guide text."
+                        "Show each automated rule beside the related auction item.",
+                        "Warn when current price approaches the configured max bid.",
+                        "Allow quick Edit, Pause, Resume, or Delete actions."
                 },
                 new String[]{
-                        "Auto bid items placeholder",
-                        "Triggered events placeholder",
-                        "Paused rules placeholder",
-                        "Create new rule placeholder"
-                },
-                new String[]{"Automation", "Safe limits", "Quick edit"},
-                new String[]{"Health", "Usage", "Control"},
-                new String[]{"Stable", "3 active", "Manual"}
+                        "MacBook Pro M3 auto bid is near its max limit.",
+                        "Vintage Camera auto bid is paused by user.",
+                        "Mechanical Keyboard auto bid ended with a winning result.",
+                        "Safety warning threshold is currently 80% of max limit."
+                }
         ));
 
-        map.put("myItems", new SectionContent(
+        map.put("myItems", page(
                 "My Items",
-                "View the items you are selling, draft new listings, and launch auctions later.",
+                "Manage seller listings, drafts, active auctions, sold items, and relist actions.",
                 "Seller Workspace",
-                "This placeholder section can later host item cards, create-item forms, and your seller-side action buttons.",
-                "Seller Snapshot",
-                "A natural place for item counts, listing drafts, and auction publishing shortcuts.",
+                "Seller management stays practical with item thumbnails, listing status, bids, watchers, countdown, winner, and context actions.",
                 new String[]{"14", "05", "03", "06"},
-                new String[]{"Items", "Draft Auctions", "Running Sales", "Archived"},
-                new String[]{"Item grid", "Create listing", "Launch auction"},
+                new String[]{"Items", "Drafts", "Active Sales", "Sold"},
+                new String[]{"Listing status", "Auction linkage", "Seller actions"},
                 new String[]{
-                        "Use the main card for item list or tile view.",
-                        "Secondary block suits an add-item form or quick editor.",
-                        "Third block can show selling tips or analytics later."
+                        "Draft, Pending, Active, Sold, and Unsold items are separated by filter chips.",
+                        "Each item shows whether it has bids, watchers, or a winner follow-up task.",
+                        "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, or Relist."
                 },
                 new String[]{
-                        "My items placeholder",
-                        "Draft items placeholder",
-                        "Published auctions placeholder",
-                        "Archived items placeholder"
-                },
-                new String[]{"Listing", "Drafts", "Seller tools"},
-                new String[]{"Inventory", "Workflow", "Status"},
-                new String[]{"Healthy", "In progress", "Ready"}
+                        "Leather Backpack draft needs image and starting price.",
+                        "Mechanical Keyboard is sold and ready to ship.",
+                        "Wireless Mouse has 11 watchers but no bids yet.",
+                        "Abstract Painting can be relisted after no winning bid."
+                }
         ));
 
-        map.put("winners", new SectionContent(
-                "Winners",
-                "Review auctions you won and keep the follow-up flow visible in a dedicated space.",
-                "Winning Results Board",
-                "Later you can place result cards, payment status, and next-step actions right inside this board.",
-                "Fulfilment Notes",
-                "Use the side panel for payment reminders, contact actions, or shipping milestones.",
+        map.put("winners", page(
+                "Transactions",
+                "Follow auctions you won and auctions you sold after bidding ends.",
+                "Post-Auction Transactions",
+                "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold Auctions for winners of your listings.",
                 new String[]{"06", "02", "03", "01"},
-                new String[]{"Won Auctions", "Pending Payment", "Ready to Close", "Flagged"},
-                new String[]{"Won auction cards", "Payment actions", "Delivery follow-up"},
+                new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
+                new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
                 new String[]{
-                        "Main content block supports a post-auction result grid.",
-                        "Second block fits invoice or payment prompt cards.",
-                        "Third block can be used for seller/buyer communication status."
+                        "Won Auctions track final price, seller, payment, and pickup or shipping status.",
+                        "Sold Auctions track winner, winning bid, payment status, and seller fulfilment.",
+                        "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or Leave Review."
                 },
                 new String[]{
-                        "Won item list placeholder",
-                        "Payment reminder placeholder",
-                        "Collection details placeholder",
-                        "Completed results placeholder"
-                },
-                new String[]{"Results", "Payments", "Delivery"},
-                new String[]{"Next step", "Urgent", "Progress"},
-                new String[]{"Pay 2 items", "1 reminder", "On track"}
+                        "Canon EOS M50 is waiting for payment.",
+                        "Mechanical Keyboard winner has paid and needs shipping.",
+                        "Signed Art Print transaction is completed.",
+                        "Vintage Camera invoice is ready to download."
+                }
         ));
 
-        map.put("settings", new SectionContent(
+        map.put("settings", page(
                 "Settings",
-                "Manage your profile, preferences, and display behaviour for the dashboard later.",
-                "Preferences Shell",
-                "This layout block can later host account settings, password changes, and notification toggles.",
-                "Personalization",
-                "Side space prepared for theme controls, saved filters, or help content.",
-                new String[]{"05", "03", "02", "01"},
-                new String[]{"Profile Blocks", "Notification Rules", "Saved Filters", "Theme Presets"},
-                new String[]{"Account settings", "Notification panel", "Display options"},
+                "Manage account details, notifications, bidding preferences, seller profile, payments, and app preferences.",
+                "Settings Workspace",
+                "Settings should be grouped forms, not auction tables: account, notifications, bidding, seller profile, payment, privacy, and preferences.",
+                new String[]{"07", "08", "04", "03"},
+                new String[]{"Groups", "Alerts", "Bid Rules", "Preferences"},
+                new String[]{"Account", "Notifications", "Bidding preferences"},
                 new String[]{
-                        "Main placeholder reserved for form sections.",
-                        "Useful for toggle groups or permission settings.",
-                        "Can later host support resources and FAQs."
+                        "Profile, email, phone number, avatar, and password change belong in Account.",
+                        "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts belong in Notifications.",
+                        "Default increment, quick bid confirmation, auto-bid threshold, currency, timezone, and default view belong in Preferences."
                 },
                 new String[]{
-                        "Profile form placeholder",
-                        "Password section placeholder",
-                        "Notification settings placeholder",
-                        "Preferences summary placeholder"
-                },
-                new String[]{"Profile", "Alerts", "Theme"},
-                new String[]{"Editable", "Sync", "Palette"},
-                new String[]{"Ready", "Enabled", "Login tone"}
+                        "Outbid and ending-soon alerts are enabled.",
+                        "Confirm before placing bid is enabled.",
+                        "Default auction view is Grid/List hybrid.",
+                        "Currency is set to VND."
+                }
         ));
 
         return map;
+    }
+
+    private SectionContent page(
+            String title,
+            String subtitle,
+            String surfaceTitle,
+            String surfaceDescription,
+            String[] statValues,
+            String[] statLabels,
+            String[] featureTitles,
+            String[] featureDescriptions,
+            String[] activityLines) {
+        return new SectionContent(
+                title,
+                subtitle,
+                surfaceTitle,
+                surfaceDescription,
+                "",
+                "",
+                statValues,
+                statLabels,
+                featureTitles,
+                featureDescriptions,
+                activityLines,
+                new String[0],
+                new String[0],
+                new String[0]
+        );
+    }
+
+    private List<CategoryData> buildCategories() {
+        List<CategoryData> list = new ArrayList<>();
+        list.add(category("Electronics", "Phones, laptops, cameras, audio devices", "5 live", "EL"));
+        list.add(category("Art", "Paintings, prints, sculpture, handmade items", "4 live", "AR"));
+        list.add(category("Vehicle", "Bikes, motorbikes, cars, vehicle accessories", "3 live", "VE"));
+        return list;
+    }
+
+    private List<AuctionCardData> buildAuctionCards() {
+        List<AuctionCardData> list = new ArrayList<>();
+        list.add(auction("MacBook Pro M3", "Electronics", "32,500,000 VND", "18 bids", "42m", "Hot", "/client/images/overlay2.jpg", "Seller minh.seller - high value laptop auction with active auto bids."));
+        list.add(auction("Vintage Camera", "Electronics", "4,600,000 VND", "21 bids", "38m", "Ending Soon", "/client/images/overlay3.jpg", "Camera auction with strong demand and quick final-minute pressure."));
+        list.add(auction("Wireless Headset", "Electronics", "1,100,000 VND", "5 bids", "1d", "Running", "/client/images/overlay5.jpg", "Audio item with quick bid increment and shipping support."));
+        list.add(auction("Mechanical Keyboard", "Electronics", "2,400,000 VND", "9 bids", "6h", "Watched", "/client/images/overlay7.jpg", "Watched item with current leading bid and compact bid history."));
+        list.add(auction("Smart Speaker", "Electronics", "1,250,000 VND", "7 bids", "8h", "No Reserve", "/client/images/overlay2.jpg", "Electronics auction with no reserve and high watcher count."));
+        list.add(auction("Signed Art Print", "Art", "8,200,000 VND", "11 bids", "3h", "No Reserve", "/client/images/overlay4.jpg", "No-reserve art listing with gallery preview and verified seller note."));
+        list.add(auction("Abstract Painting", "Art", "3,000,000 VND", "2 bids", "1d", "Running", "/client/images/overlay.jpg", "Painting listing with preview image and artist note."));
+        list.add(auction("Ceramic Sculpture", "Art", "5,900,000 VND", "13 bids", "2h", "Ending Soon", "/client/images/overlay4.jpg", "Art auction with a detailed preview image and closing pressure."));
+        list.add(auction("Digital Artwork Print", "Art", "1,750,000 VND", "6 bids", "22h", "Watched", "/client/images/bg2.jpg", "Watched art print with seller notes and shipping support."));
+        list.add(auction("City Bike", "Vehicle", "2,800,000 VND", "6 bids", "5h", "Ending Soon", "/client/images/overlay3.jpg", "Vehicle listing with pickup information and bidder questions."));
+        list.add(auction("Electric Scooter", "Vehicle", "7,500,000 VND", "10 bids", "1d", "Hot", "/client/images/overlay6.jpg", "Vehicle auction with active watchers and pickup arrangement."));
+        list.add(auction("Vintage Motorbike", "Vehicle", "18,000,000 VND", "16 bids", "2d", "Running", "/client/images/overlay5.jpg", "Vehicle auction with seller inspection notes and bidder questions."));
+        return list;
+    }
+
+    private CategoryData category(String title, String description, String count, String initials) {
+        return new CategoryData(title, description, count, initials);
+    }
+
+    private AuctionCardData auction(String title, String category, String price, String bids, String endsIn, String badge, String imagePath, String detail) {
+        return new AuctionCardData(title, category, price, bids, endsIn, badge, imagePath, detail);
+    }
+
+    private String getDefaultFilter(String sectionKey) {
+        return switch (sectionKey) {
+            case "dashboard" -> "Overview";
+            case "settings" -> "Account";
+            default -> "All";
+        };
+    }
+
+    private void updatePrimaryAction(String sectionKey) {
+        if (primaryActionButton == null) {
+            return;
+        }
+
+        switch (sectionKey) {
+            case "auctions" -> configurePrimaryAction("Advanced Filter", () -> showTemporaryDetail("Advanced Filter", "Open category, status, price range, ending time, condition, and sort controls."));
+            case "myBids" -> configurePrimaryAction("Bid Again", () -> applyFilter("Outbid"));
+            case "autoBids" -> configurePrimaryAction("Create Auto Bid", () -> showTemporaryDetail("Create Auto Bid", "Create a rule with max bid, increment, and warning threshold for a selected auction."));
+            case "myItems" -> configurePrimaryAction("Create Listing", () -> showTemporaryDetail("Create Listing", "Start a draft item listing before publishing or submitting it for approval."));
+            case "winners" -> configurePrimaryAction("Open Transactions", () -> applyFilter("Payment Due"));
+            case "settings" -> configurePrimaryAction("Save Settings", () -> showTemporaryDetail("Save Settings", "Persist account, notification, bidding, seller, payment, and preference changes."));
+            default -> configurePrimaryAction("Browse Auctions", () -> showSection("auctions"));
+        }
+    }
+
+    private void configurePrimaryAction(String text, Runnable action) {
+        primaryActionButton.setText(text);
+        primaryActionButton.setOnAction(event -> action.run());
+    }
+
+    private void applyFilter(String filter) {
+        activeFilter = filter;
+        auctionPage = 1;
+        renderWorkspace(currentSectionKey, activeFilter);
+    }
+
+    private void renderWorkspace(String sectionKey, String filter) {
+        if (workspaceBox == null) {
+            return;
+        }
+
+        workspaceBox.getChildren().clear();
+
+        if (userActionBar != null) {
+            userActionBar.getChildren().clear();
+        }
+
+        switch (sectionKey) {
+            case "auctions" -> renderAuctions(filter);
+            case "myBids" -> renderMyBids(filter);
+            case "autoBids" -> renderAutoBids(filter);
+            case "myItems" -> renderMyItems(filter);
+            case "winners" -> renderTransactions(filter);
+            case "settings" -> renderSettings(filter);
+            default -> renderDashboard(filter);
+        }
+    }
+
+    private void renderDashboard(String filter) {
+        setWorkspaceTitle("Action Needed");
+        renderChips(filter, "Overview", "Needs Action", "Ending Soon", "Seller", "Auto Bid");
+
+        addHeader("Item / Task", "Value", "Time / Signal");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("Vintage Camera", "My bid 4,300,000 VND - current price moved above your bid", "4,600,000 VND", "Ends in 38m", "Outbid", "You were outbid. Place a higher bid or configure auto bid before the auction closes.", "VC", "Bid Again", "View"));
+        rows.add(row("MacBook Pro M3", "Winning now - auto bid active until 35,000,000 VND", "32,500,000 VND", "Ends in 42m", "Winning", "You are currently leading. Watch closing pressure and bid history before the final minutes.", "MB", "View", "Auto Bid"));
+        rows.add(row("Canon EOS M50", "Won auction - seller camera.store - payment required", "5,200,000 VND", "Due today", "Payment Due", "This won auction should move through payment before fulfilment can continue.", "CE", "Pay Now", "Contact"));
+        rows.add(row("Mechanical Keyboard", "Sold item - winner thanh.user has paid", "2,400,000 VND", "Ship today", "To Ship", "Winner payment is complete. Seller should prepare shipping or pickup confirmation.", "MK", "Ship", "Details"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private void renderAuctions(String filter) {
+        setWorkspaceTitle("All Auctions");
+        renderChips(filter, "All", "Running", "Ending Soon", "Hot", "No Reserve", "Watched");
+
+        HBox browseHeader = new HBox(10);
+        browseHeader.setAlignment(Pos.CENTER_RIGHT);
+        browseHeader.getStyleClass().add("browse-header");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Label sortLabel = new Label("Sort: Ending Soon");
+        sortLabel.getStyleClass().add("sort-pill");
+
+        browseHeader.getChildren().addAll(spacer, sortLabel);
+        workspaceBox.getChildren().add(browseHeader);
+
+        List<AuctionCardData> filtered = filterAuctionCards(filter);
+        int totalPages = Math.max(1, (int) Math.ceil(filtered.size() / (double) AUCTIONS_PER_PAGE));
+        auctionPage = Math.max(1, Math.min(auctionPage, totalPages));
+
+        int fromIndex = (auctionPage - 1) * AUCTIONS_PER_PAGE;
+        int toIndex = Math.min(fromIndex + AUCTIONS_PER_PAGE, filtered.size());
+
+        GridPane productGrid = createThreeColumnGrid("auction-grid");
+
+        if (filtered.isEmpty()) {
+            addGridCell(productGrid, emptyCard("No auctions found for filter: " + filter), 0);
+        } else {
+            int index = 0;
+            for (AuctionCardData card : filtered.subList(fromIndex, toIndex)) {
+                addGridCell(productGrid, buildAuctionProductCard(card), index++);
+            }
+        }
+
+        workspaceBox.getChildren().add(productGrid);
+        workspaceBox.getChildren().add(buildPagination(totalPages, filtered.size()));
+
+        workspaceBox.getChildren().add(sectionHeader("Shop by Category", ""));
+
+        GridPane categoryGrid = createThreeColumnGrid("category-grid");
+        for (int index = 0; index < categories.size(); index++) {
+            addGridCell(categoryGrid, buildCategoryCard(categories.get(index)), index);
+        }
+
+        workspaceBox.getChildren().add(categoryGrid);
+    }
+
+    private void renderMyBids(String filter) {
+        setWorkspaceTitle("My Bid Tracking");
+        renderChips(filter, "All", "Winning", "Outbid", "Won", "Lost", "Ending Soon");
+
+        addHeader("Auction", "My Bid", "Current / Ends");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("MacBook Pro M3", "Latest bid 32,500,000 VND - max auto bid 35,000,000 VND", "32,500,000 VND", "32,500,000 VND - 42m", "Winning", "You are currently leading. Keep watching or edit the max auto bid limit.", "MB", "View", "Edit Auto"));
+        rows.add(row("Vintage Camera", "Latest bid 4,300,000 VND - current price is higher", "4,300,000 VND", "4,600,000 VND - 38m", "Outbid", "You need to bid again if you still want this item.", "VC", "Bid Again", "View"));
+        rows.add(row("Canon EOS M50", "Final winning bid accepted", "5,200,000 VND", "Won today", "Won", "Auction is won and should be handled in Transactions for payment.", "CE", "Pay Now", "View"));
+        rows.add(row("Gaming Chair", "Final bid 1,900,000 VND - another bidder won", "1,900,000 VND", "Closed", "Lost", "This auction is closed. Use View for bid history only.", "GC", "View"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private void renderAutoBids(String filter) {
+        setWorkspaceTitle("Auto Bid Rules");
+        renderChips(filter, "All", "Active", "Paused", "Near Limit", "Limit Reached", "Ended");
+
+        addHeader("Auction Rule", "Current / Max", "Increment");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("MacBook Pro M3", "Auto bid active - stop at 35,000,000 VND - threshold 80%", "32.5M / 35M", "+500,000 VND", "Near Limit", "Current price is close to max limit. Edit max bid or watch manually.", "MB", "Edit", "Pause"));
+        rows.add(row("Vintage Camera", "Auto bid paused by user - can resume before close", "4.6M / 5M", "+100,000 VND", "Paused", "Paused auto bid will not respond to new bids until resumed.", "VC", "Resume", "Edit"));
+        rows.add(row("Signed Art Print", "Auto bid active - no reserve auction", "8.2M / 10M", "+200,000 VND", "Active", "Auto bid rule is healthy and still below warning threshold.", "AP", "Edit", "Pause"));
+        rows.add(row("Mechanical Keyboard", "Auto bid ended after auction close", "2.4M / 2.5M", "+50,000 VND", "Ended", "Rule is ended and the transaction should be tracked after close.", "MK", "View"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private void renderMyItems(String filter) {
+        setWorkspaceTitle("Seller Listings");
+        renderChips(filter, "All", "Draft", "Pending", "Active", "Sold", "Unsold");
+
+        addHeader("Item", "Price / Bids", "Watchers / Ends");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("Mechanical Keyboard", "Sold through AUC-0977 - winner thanh.user", "2,400,000 VND", "9 bids - paid", "Sold", "Winner has paid. Prepare shipment or pickup confirmation.", "MK", "Ship", "Contact"));
+        rows.add(row("Leather Backpack", "Draft listing - missing photo validation and starting price", "No price", "Draft", "Draft", "Complete required listing details before publishing or submitting for approval.", "LB", "Edit", "Publish"));
+        rows.add(row("Wireless Mouse", "Active sale - 11 watchers but no bid yet", "450,000 VND", "11 watchers - 1d", "Active", "Consider lowering start price or promoting before the auction ends.", "WM", "View Bids", "Edit"));
+        rows.add(row("Abstract Painting", "Ended without winner - eligible for relist", "3,000,000 VND", "0 bids - closed", "Unsold", "Relist with improved title, image, or starting price.", "AR", "Relist", "Edit"));
+        rows.add(row("Vintage Watch", "Submitted for review before auction launch", "6,000,000 VND", "Pending", "Pending", "Item is waiting review before it can become ACTIVE.", "VW", "View"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private void renderTransactions(String filter) {
+        setWorkspaceTitle("Won Auctions / Sold Auctions");
+        renderChips(filter, "All", "Won Auctions", "Sold Auctions", "Payment Due", "To Ship", "Completed");
+
+        addHeader("Transaction", "Final Price", "Next Step");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("Won - Canon EOS M50", "Seller camera.store - invoice ready", "5,200,000 VND", "Pay today", "Payment Due", "Bidder flow: pay the final price, then track shipping or pickup.", "CE", "Pay Now", "Contact Seller"));
+        rows.add(row("Sold - Mechanical Keyboard", "Winner thanh.user - payment completed", "2,400,000 VND", "Ship today", "To Ship", "Seller flow: winner has paid, so mark shipped after fulfilment.", "MK", "Ship", "Contact Winner"));
+        rows.add(row("Won - Signed Art Print", "Seller art.house - completed purchase", "8,200,000 VND", "Leave review", "Completed", "Transaction complete. User can leave seller review or download receipt.", "AP", "Review", "Receipt"));
+        rows.add(row("Sold - Wireless Mouse", "Winner pending payment confirmation", "450,000 VND", "Payment check", "Payment Due", "Seller should wait for payment confirmation before shipment.", "WM", "View", "Reminder"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private void renderSettings(String filter) {
+        setWorkspaceTitle("Settings Groups");
+        renderChips(filter, "Account", "Notifications", "Bidding", "Seller", "Payment", "Preferences");
+
+        addHeader("Setting Group", "Configured", "Scope");
+
+        List<UserRow> rows = new ArrayList<>();
+        rows.add(row("Account", "Display name, email, phone, avatar, and password", "Profile", "User", "Ready", "Account settings should manage profile and password changes.", "AC", "Edit"));
+        rows.add(row("Notifications", "Outbid, ending soon, won auction, new bid, payment reminders", "8 alerts", "Email / in-app", "Active", "Notification settings are critical in auction flows because timing matters.", "NO", "Edit"));
+        rows.add(row("Bidding Preferences", "Confirm bid, quick bid, default increment, auto-bid warning threshold", "4 rules", "Bidding", "Ready", "Bidding preferences reduce mistakes before placing manual or automated bids.", "BP", "Edit"));
+        rows.add(row("Seller Profile", "Seller name, bio, pickup location, verification status", "Seller", "Listings", "Ready", "Seller profile supports My Items and Sold Auctions fulfilment.", "SP", "Edit"));
+        rows.add(row("Payment & Payout", "Payment method, payout method, invoices, receipts", "Prepared", "Transactions", "Pending", "Payment and payout settings support Won Auctions and Sold Auctions.", "PP", "Edit"));
+        rows.add(row("App Preferences", "Theme, language, currency, timezone, default auction view and sort", "VND", "Dashboard", "Ready", "App preferences should persist default grid/list and ending-soon sort.", "AP", "Edit"));
+
+        addFilteredRows(rows, filter);
+    }
+
+    private VBox sectionHeader(String titleText, String descriptionText) {
+        VBox box = new VBox(3);
+        Label title = new Label(titleText);
+        title.getStyleClass().add("section-mini-title");
+        box.getChildren().add(title);
+
+        if (descriptionText != null && !descriptionText.isBlank()) {
+            Label description = new Label(descriptionText);
+            description.getStyleClass().add("row-meta");
+            description.setWrapText(true);
+            box.getChildren().add(description);
+        }
+
+        return box;
+    }
+
+    private VBox buildCategoryCard(CategoryData data) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("category-card");
+        card.setMinWidth(0);
+        card.setMaxWidth(Double.MAX_VALUE);
+
+        HBox top = new HBox(8);
+        top.setAlignment(Pos.CENTER_LEFT);
+
+        StackPane icon = buildThumbnail(data.initials);
+        Label title = new Label(data.title);
+        title.getStyleClass().add("category-title");
+        title.setWrapText(true);
+        top.getChildren().addAll(icon, title);
+
+        Label description = new Label(data.description);
+        description.getStyleClass().add("category-desc");
+        description.setWrapText(true);
+
+        HBox bottom = new HBox(8);
+        bottom.setAlignment(Pos.CENTER_LEFT);
+        Label count = new Label(data.count);
+        count.getStyleClass().add("category-count");
+        Button open = new Button("View >");
+        open.setMnemonicParsing(false);
+        open.getStyleClass().add("category-link");
+        open.setOnAction(event -> applyFilter(data.title));
+        bottom.getChildren().addAll(count, open);
+
+        card.getChildren().addAll(top, description, bottom);
+        return card;
+    }
+
+    private VBox buildAuctionProductCard(AuctionCardData data) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("auction-product-card");
+        card.setMinWidth(0);
+        card.setMaxWidth(Double.MAX_VALUE);
+
+        StackPane imageWrap = new StackPane();
+        imageWrap.getStyleClass().add("product-image-wrap");
+        imageWrap.setMinWidth(0);
+        imageWrap.setPrefHeight(PRODUCT_IMAGE_HEIGHT);
+        imageWrap.setMinHeight(PRODUCT_IMAGE_HEIGHT);
+        imageWrap.setMaxHeight(PRODUCT_IMAGE_HEIGHT);
+        imageWrap.setMaxWidth(Double.MAX_VALUE);
+
+        Rectangle wrapClip = new Rectangle();
+        wrapClip.widthProperty().bind(imageWrap.widthProperty());
+        wrapClip.heightProperty().bind(imageWrap.heightProperty());
+        wrapClip.setArcWidth(28);
+        wrapClip.setArcHeight(28);
+        imageWrap.setClip(wrapClip);
+
+        Image image = getCachedImage(data.imagePath);
+        if (image != null && !image.isError()) {
+            ImageView imageView = new ImageView(image);
+            imageView.getStyleClass().add("product-image");
+            imageView.setSmooth(true);
+            imageView.setCache(true);
+            imageView.setPreserveRatio(false);
+            imageView.setFitWidth(PRODUCT_IMAGE_INITIAL_WIDTH);
+            imageView.setFitHeight(PRODUCT_IMAGE_HEIGHT);
+            imageView.fitWidthProperty().bind(imageWrap.widthProperty());
+            imageView.fitHeightProperty().bind(imageWrap.heightProperty());
+
+            imageWrap.widthProperty().addListener((observable, oldValue, newValue) -> updateCoverViewport(imageView, imageWrap));
+            imageWrap.heightProperty().addListener((observable, oldValue, newValue) -> updateCoverViewport(imageView, imageWrap));
+
+            imageWrap.getChildren().add(imageView);
+            imageWrap.applyCss();
+            imageWrap.layout();
+            updateCoverViewport(imageView, imageWrap);
+        } else {
+            imageWrap.getChildren().add(buildThumbnail(data.title.substring(0, Math.min(2, data.title.length())).toUpperCase()));
+        }
+
+        Label badge = new Label(data.badge);
+        badge.getStyleClass().add("product-badge");
+        badge.getStyleClass().add(statusStyle(data.badge));
+        StackPane.setAlignment(badge, Pos.TOP_LEFT);
+        imageWrap.getChildren().add(badge);
+
+        Label category = new Label(data.category);
+        category.getStyleClass().add("product-category");
+
+        Label title = new Label(data.title);
+        title.getStyleClass().add("product-title");
+        title.setWrapText(true);
+
+        Label price = new Label(data.price);
+        price.getStyleClass().add("product-price");
+
+        HBox meta = new HBox(8);
+        meta.setAlignment(Pos.CENTER_LEFT);
+        Label bids = new Label(data.bids);
+        bids.getStyleClass().add("product-meta");
+        Label ends = new Label("Ends in " + data.endsIn);
+        ends.getStyleClass().add("product-meta");
+        meta.getChildren().addAll(bids, ends);
+
+        HBox actions = new HBox(7);
+        actions.setAlignment(Pos.CENTER_LEFT);
+        Button bid = new Button("Bid Now");
+        bid.setMnemonicParsing(false);
+        bid.getStyleClass().add("mini-action-btn");
+        bid.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(bid, Priority.ALWAYS);
+        bid.setOnAction(event -> showTemporaryDetail("Bid Now - " + data.title, data.detail));
+
+        Button view = new Button("View");
+        view.setMnemonicParsing(false);
+        view.getStyleClass().add("mini-action-btn");
+        view.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(view, Priority.ALWAYS);
+        view.setOnAction(event -> showTemporaryDetail(data.title, data.detail));
+        actions.getChildren().addAll(bid, view);
+
+        card.getChildren().addAll(imageWrap, category, title, price, meta, actions);
+        return card;
+    }
+
+    private Image getCachedImage(String imagePath) {
+        if (imagePath == null || imagePath.isBlank()) {
+            return null;
+        }
+
+        if (imageCache.containsKey(imagePath)) {
+            return imageCache.get(imagePath);
+        }
+
+        Image image = loadImage(imagePath);
+        imageCache.put(imagePath, image);
+        return image;
+    }
+
+    private Image loadImage(String imagePath) {
+        try {
+            if (getClass().getResource(imagePath) == null) {
+                return null;
+            }
+
+            return new Image(getClass().getResource(imagePath).toExternalForm(), false);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private void updateCoverViewport(ImageView imageView, Region container) {
+        Image image = imageView.getImage();
+        if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0 || container.getWidth() <= 0 || container.getHeight() <= 0) {
+            return;
+        }
+
+        double imageRatio = image.getWidth() / image.getHeight();
+        double targetRatio = container.getWidth() / container.getHeight();
+
+        double viewportWidth = image.getWidth();
+        double viewportHeight = image.getHeight();
+
+        if (imageRatio > targetRatio) {
+            viewportWidth = image.getHeight() * targetRatio;
+        } else {
+            viewportHeight = image.getWidth() / targetRatio;
+        }
+
+        double x = (image.getWidth() - viewportWidth) / 2;
+        double y = (image.getHeight() - viewportHeight) / 2;
+        imageView.setViewport(new Rectangle2D(x, y, viewportWidth, viewportHeight));
+    }
+
+    private VBox emptyCard(String text) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("auction-product-card");
+        card.setMinWidth(0);
+        card.setMaxWidth(Double.MAX_VALUE);
+        Label label = new Label(text);
+        label.getStyleClass().add("row-meta");
+        label.setWrapText(true);
+        card.getChildren().add(label);
+        return card;
+    }
+
+    private HBox buildPagination(int totalPages, int totalItems) {
+        HBox pagination = new HBox(7);
+        pagination.setAlignment(Pos.CENTER_RIGHT);
+        pagination.getStyleClass().add("pagination-bar");
+
+        Label total = new Label(totalItems + " results");
+        total.getStyleClass().add("row-meta");
+        HBox.setHgrow(total, Priority.ALWAYS);
+
+        Button previous = paginationButton("< Previous", auctionPage <= 1);
+        previous.setOnAction(event -> {
+            if (auctionPage > 1) {
+                auctionPage--;
+                renderWorkspace("auctions", activeFilter);
+            }
+        });
+
+        pagination.getChildren().addAll(total, previous);
+
+        for (int page = 1; page <= totalPages; page++) {
+            final int targetPage = page;
+            Button button = paginationButton(String.valueOf(page), false);
+            button.getStyleClass().add(page == auctionPage ? "pagination-active" : "pagination-btn");
+            button.setOnAction(event -> {
+                auctionPage = targetPage;
+                renderWorkspace("auctions", activeFilter);
+            });
+            pagination.getChildren().add(button);
+        }
+
+        Button next = paginationButton("Next >", auctionPage >= totalPages);
+        next.setOnAction(event -> {
+            if (auctionPage < totalPages) {
+                auctionPage++;
+                renderWorkspace("auctions", activeFilter);
+            }
+        });
+
+        pagination.getChildren().add(next);
+        return pagination;
+    }
+
+    private Button paginationButton(String text, boolean disabled) {
+        Button button = new Button(text);
+        button.setMnemonicParsing(false);
+        button.getStyleClass().add("pagination-btn");
+        button.setDisable(disabled);
+        return button;
+    }
+
+    private GridPane createThreeColumnGrid(String styleClass) {
+        GridPane grid = new GridPane();
+        grid.setHgap(14);
+        grid.setVgap(14);
+        grid.getStyleClass().add(styleClass);
+        grid.setMaxWidth(Double.MAX_VALUE);
+
+        for (int index = 0; index < 3; index++) {
+            ColumnConstraints column = new ColumnConstraints();
+            column.setPercentWidth(33.3333);
+            column.setHgrow(Priority.ALWAYS);
+            grid.getColumnConstraints().add(column);
+        }
+
+        return grid;
+    }
+
+    private void addGridCell(GridPane grid, Node node, int index) {
+        grid.add(node, index % 3, index / 3);
+        GridPane.setHgrow(node, Priority.ALWAYS);
+        GridPane.setFillWidth(node, true);
+
+        if (node instanceof Region region) {
+            region.setMaxWidth(Double.MAX_VALUE);
+        }
+    }
+
+    private List<AuctionCardData> filterAuctionCards(String filter) {
+        List<AuctionCardData> filtered = new ArrayList<>();
+        String normalizedFilter = normalize(filter);
+
+        for (AuctionCardData card : auctionCards) {
+            String haystack = normalize(card.title + " " + card.category + " " + card.badge + " " + card.detail);
+
+            if (isAllLikeFilter(filter)
+                    || haystack.contains(normalizedFilter)
+                    || normalize(card.category).equals(normalizedFilter)) {
+                filtered.add(card);
+            }
+        }
+
+        return filtered;
+    }
+
+    private void setWorkspaceTitle(String title) {
+        if (workspaceTitleLabel != null) {
+            workspaceTitleLabel.setText(title);
+        }
+    }
+
+    private void renderChips(String selectedFilter, String... labels) {
+        if (userActionBar == null) {
+            return;
+        }
+
+        userActionBar.getChildren().clear();
+
+        for (String labelText : labels) {
+            Button chip = new Button(labelText);
+            chip.setMnemonicParsing(false);
+
+            if (labelText.equalsIgnoreCase(selectedFilter)) {
+                chip.getStyleClass().add("filter-chip-active");
+            } else {
+                chip.getStyleClass().add("filter-chip");
+            }
+
+            chip.setOnAction(event -> applyFilter(labelText));
+            userActionBar.getChildren().add(chip);
+        }
+    }
+
+    private void addHeader(String main, String first, String second) {
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.getStyleClass().add("data-header");
+
+        header.getChildren().addAll(
+                headerLabel(main, 330, true),
+                headerLabel(first, 135, false),
+                headerLabel(second, 130, false),
+                headerLabel("Status", 115, false),
+                headerLabel("Actions", 240, false)
+        );
+
+        workspaceBox.getChildren().add(header);
+    }
+
+    private Label headerLabel(String text, double width, boolean grow) {
+        Label label = new Label(text);
+        label.getStyleClass().add("table-header-label");
+        label.setMinWidth(width);
+        label.setPrefWidth(width);
+
+        if (grow) {
+            HBox.setHgrow(label, Priority.ALWAYS);
+        }
+
+        return label;
+    }
+
+    private UserRow row(String title, String meta, String firstValue, String secondValue, String status, String detail, String thumbnail, String... actions) {
+        return new UserRow(title, meta, firstValue, secondValue, status, detail, thumbnail, actions);
+    }
+
+    private void addFilteredRows(List<UserRow> rows, String filter) {
+        int count = 0;
+
+        for (UserRow row : rows) {
+            if (matchesFilter(row, filter)) {
+                addRow(row);
+                count++;
+            }
+        }
+
+        if (count == 0) {
+            addEmptyRow(filter);
+        }
+    }
+
+    private boolean matchesFilter(UserRow row, String filter) {
+        if (filter == null || isAllLikeFilter(filter)) {
+            return true;
+        }
+
+        String normalizedFilter = normalize(filter);
+        String haystack = normalize(String.join(" ",
+                row.title,
+                row.meta,
+                row.firstValue,
+                row.secondValue,
+                row.status,
+                row.detail,
+                String.join(" ", row.actions)
+        ));
+
+        if (normalizedFilter.equals("needs action")) {
+            return haystack.contains("outbid")
+                    || haystack.contains("payment due")
+                    || haystack.contains("to ship")
+                    || haystack.contains("near limit")
+                    || haystack.contains("limit reached");
+        }
+
+        if (normalizedFilter.equals("ending soon")) {
+            return haystack.contains("ending soon")
+                    || haystack.contains("ends in")
+                    || haystack.contains("42m")
+                    || haystack.contains("38m");
+        }
+
+        if (normalizedFilter.equals("won auctions")) {
+            return normalize(row.title).startsWith("won")
+                    || haystack.contains("won auction")
+                    || normalize(row.status).equals("won");
+        }
+
+        if (normalizedFilter.equals("sold auctions")) {
+            return normalize(row.title).startsWith("sold")
+                    || haystack.contains("sold auction")
+                    || normalize(row.status).equals("sold")
+                    || normalize(row.status).equals("to ship");
+        }
+
+        return haystack.contains(normalizedFilter);
+    }
+
+    private boolean isAllLikeFilter(String filter) {
+        String normalized = normalize(filter);
+
+        return normalized.equals("all")
+                || normalized.equals("overview");
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.toLowerCase().trim().replace("_", " ");
+    }
+
+    private void addEmptyRow(String filter) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("data-row");
+
+        Label empty = new Label("No records found for filter: " + filter);
+        empty.getStyleClass().add("row-meta");
+        empty.setWrapText(true);
+        HBox.setHgrow(empty, Priority.ALWAYS);
+
+        row.getChildren().add(empty);
+        workspaceBox.getChildren().add(row);
+    }
+
+    private void addRow(UserRow data) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("data-row");
+
+        HBox mainCell = new HBox(9);
+        mainCell.setAlignment(Pos.CENTER_LEFT);
+        mainCell.setMinWidth(330);
+        mainCell.setPrefWidth(330);
+        HBox.setHgrow(mainCell, Priority.ALWAYS);
+
+        StackPane thumbnail = buildThumbnail(data.thumbnail);
+
+        VBox textCell = new VBox(2);
+        HBox.setHgrow(textCell, Priority.ALWAYS);
+
+        Button link = new Button(data.title);
+        link.setMnemonicParsing(false);
+        link.getStyleClass().add("row-link");
+        link.setMaxWidth(Double.MAX_VALUE);
+        link.setOnAction(event -> showTemporaryDetail(data.title, data.detail));
+
+        Label meta = new Label(data.meta);
+        meta.getStyleClass().add("row-meta");
+        meta.setWrapText(true);
+
+        textCell.getChildren().addAll(link, meta);
+        mainCell.getChildren().addAll(thumbnail, textCell);
+
+        Label firstMetric = rowMetric(data.firstValue, 135);
+        Label secondMetric = rowMetric(data.secondValue, 130);
+        Label status = statusBadge(data.status);
+
+        HBox actions = new HBox(7);
+        actions.setAlignment(Pos.CENTER_LEFT);
+        actions.setMinWidth(240);
+        actions.setPrefWidth(240);
+
+        for (String action : data.actions) {
+            Button button = new Button(action);
+            button.setMnemonicParsing(false);
+            button.getStyleClass().add("mini-action-btn");
+            button.setMinWidth(calculateActionButtonWidth(action));
+            button.setPrefWidth(calculateActionButtonWidth(action));
+            button.setOnAction(event -> showTemporaryDetail(action + " - " + data.title, data.detail));
+            actions.getChildren().add(button);
+        }
+
+        row.getChildren().addAll(mainCell, firstMetric, secondMetric, status, actions);
+        workspaceBox.getChildren().add(row);
+    }
+
+    private StackPane buildThumbnail(String text) {
+        StackPane thumbnail = new StackPane();
+        thumbnail.setMinSize(54, 46);
+        thumbnail.setPrefSize(54, 46);
+        thumbnail.setMaxSize(54, 46);
+        thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #d1b15d, #8fb1a4); -fx-background-radius: 14; -fx-border-color: rgba(39, 75, 69, 0.16); -fx-border-radius: 14;");
+
+        Label label = new Label(text == null || text.isBlank() ? "IT" : text);
+        label.setStyle("-fx-text-fill: #17352c; -fx-font-size: 12px; -fx-font-weight: bold;");
+
+        thumbnail.getChildren().add(label);
+        return thumbnail;
+    }
+
+    private double calculateActionButtonWidth(String text) {
+        if (text == null) {
+            return 74;
+        }
+
+        return Math.max(74, text.length() * 8.5 + 26);
+    }
+
+    private Label rowMetric(String text, double width) {
+        Label label = new Label(text);
+        label.getStyleClass().add("row-metric");
+        label.setMinWidth(width);
+        label.setPrefWidth(width);
+        label.setWrapText(true);
+        return label;
+    }
+
+    private Label statusBadge(String status) {
+        Label label = new Label(status);
+        label.getStyleClass().add("status-badge");
+        label.setMinWidth(115);
+        label.setPrefWidth(115);
+        label.getStyleClass().add(statusStyle(status));
+        return label;
+    }
+
+    private String statusStyle(String status) {
+        String normalized = normalize(status);
+
+        if (normalized.contains("winning")
+                || normalized.contains("running")
+                || normalized.contains("active")
+                || normalized.contains("won")
+                || normalized.contains("sold")
+                || normalized.contains("completed")
+                || normalized.contains("ready")
+                || normalized.contains("hot")
+                || normalized.contains("watched")) {
+            return "status-good";
+        }
+
+        if (normalized.contains("outbid")
+                || normalized.contains("payment due")
+                || normalized.contains("near limit")
+                || normalized.contains("pending")
+                || normalized.contains("to ship")
+                || normalized.contains("ending soon")
+                || normalized.contains("no reserve")) {
+            return "status-warn";
+        }
+
+        if (normalized.contains("lost")
+                || normalized.contains("limit reached")
+                || normalized.contains("unsold")) {
+            return "status-danger";
+        }
+
+        return "status-neutral";
+    }
+
+    private void hideSurfaceDescription() {
+        if (surfaceDescriptionLabel != null) {
+            surfaceDescriptionLabel.setText("");
+            surfaceDescriptionLabel.setVisible(false);
+            surfaceDescriptionLabel.setManaged(false);
+        }
+    }
+
+    private void showTemporaryDetail(String title, String description) {
+        if (surfaceTitleLabel != null) {
+            surfaceTitleLabel.setText(title);
+        }
+    }
+
+    private static class CategoryData {
+        private final String title;
+        private final String description;
+        private final String count;
+        private final String initials;
+
+        private CategoryData(String title, String description, String count, String initials) {
+            this.title = title;
+            this.description = description;
+            this.count = count;
+            this.initials = initials;
+        }
+    }
+
+    private static class AuctionCardData {
+        private final String title;
+        private final String category;
+        private final String price;
+        private final String bids;
+        private final String endsIn;
+        private final String badge;
+        private final String imagePath;
+        private final String detail;
+
+        private AuctionCardData(String title, String category, String price, String bids, String endsIn, String badge, String imagePath, String detail) {
+            this.title = title;
+            this.category = category;
+            this.price = price;
+            this.bids = bids;
+            this.endsIn = endsIn;
+            this.badge = badge;
+            this.imagePath = imagePath;
+            this.detail = detail;
+        }
+    }
+
+    private static class UserRow {
+        private final String title;
+        private final String meta;
+        private final String firstValue;
+        private final String secondValue;
+        private final String status;
+        private final String detail;
+        private final String thumbnail;
+        private final String[] actions;
+
+        private UserRow(String title, String meta, String firstValue, String secondValue, String status, String detail, String thumbnail, String... actions) {
+            this.title = title;
+            this.meta = meta;
+            this.firstValue = firstValue;
+            this.secondValue = secondValue;
+            this.status = status;
+            this.detail = detail;
+            this.thumbnail = thumbnail;
+            this.actions = actions;
+        }
     }
 }

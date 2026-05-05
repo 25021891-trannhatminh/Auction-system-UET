@@ -40,10 +40,7 @@
                             styleClass="sidebar-scroll">
 
                     <content>
-                        <VBox prefWidth="205.0"
-                              spacing="15.0"
-                              styleClass="sidebar-shell">
-
+                        <VBox prefWidth="205.0" spacing="15.0" styleClass="sidebar-shell">
                             <children>
                                 <VBox spacing="11.0" styleClass="profile-card">
                                     <children>
@@ -62,66 +59,19 @@
                                 <VBox spacing="6.0">
                                     <children>
                                         <Label styleClass="menu-title" text="NAVIGATION" />
-                                        <Button fx:id="dashboardBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="Dashboard" />
-                                        <Button fx:id="auctionsBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="Auctions" />
-                                        <Button fx:id="myBidsBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="My Bids" />
-                                        <Button fx:id="autoBidsBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="Auto Bids" />
-                                        <Button fx:id="myItemsBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="My Items" />
-                                        <Button fx:id="winnersBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="Winners" />
-                                        <Button fx:id="settingsBtn"
-                                                mnemonicParsing="false"
-                                                onAction="#handleSidebarNavigation"
-                                                styleClass="nav-btn"
-                                                text="Settings" />
+                                        <Button fx:id="dashboardBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Dashboard" />
+                                        <Button fx:id="auctionsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auctions" />
+                                        <Button fx:id="myBidsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="My Bids" />
+                                        <Button fx:id="autoBidsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auto Bids" />
+                                        <Button fx:id="myItemsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="My Items" />
+                                        <Button fx:id="winnersBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Transactions" />
+                                        <Button fx:id="settingsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Settings" />
                                     </children>
                                 </VBox>
 
-                                <VBox spacing="8.0" styleClass="sidebar-mini-card">
-                                    <children>
-                                        <Label styleClass="menu-title" text="ACTIVE USERS" />
+                                <Region VBox.vgrow="ALWAYS" />
 
-                                        <HBox spacing="5.0">
-                                            <children>
-                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="AN" /></children></StackPane>
-                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="BL" /></children></StackPane>
-                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="CH" /></children></StackPane>
-                                                <StackPane styleClass="mini-avatar"><children><Label styleClass="mini-avatar-text" text="+9" /></children></StackPane>
-                                            </children>
-                                        </HBox>
-
-                                        <Label styleClass="mini-text" text="Sidebar navigation is ready." wrapText="true" />
-                                        <Label styleClass="mini-subtext" text="Real section content can be plugged in later." wrapText="true" />
-                                    </children>
-                                </VBox>
-
-                                <Button mnemonicParsing="false"
-                                        onAction="#handleLogout"
-                                        styleClass="logout-btn"
-                                        text="Logout" />
+                                <Button mnemonicParsing="false" onAction="#handleLogout" styleClass="logout-btn" text="Logout" />
                             </children>
                         </VBox>
                     </content>
@@ -140,154 +90,72 @@
                             <children>
                                 <HBox alignment="CENTER_LEFT" spacing="12.0">
                                     <children>
-                                        <VBox spacing="3.0">
+                                        <VBox spacing="3.0" HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Label fx:id="headerTitleLabel" styleClass="top-title" text="Dashboard" />
-                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Track ongoing auctions and return to important actions fast." wrapText="true" />
+                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Track bids, browse live auctions, manage listings, and follow transactions." wrapText="true" />
                                             </children>
                                         </VBox>
 
-                                        <Region HBox.hgrow="ALWAYS" />
                                         <TextField fx:id="searchField" promptText="Search..." styleClass="search-field" />
-                                        <Button mnemonicParsing="false" styleClass="action-btn" text="Quick Search" />
+                                        <Button fx:id="primaryActionButton" mnemonicParsing="false" styleClass="action-btn" text="Browse Auctions" />
                                     </children>
                                 </HBox>
 
-                                <FlowPane hgap="8.0" vgap="8.0">
+                                <HBox spacing="8.0">
                                     <children>
-                                <Label styleClass="ghost-chip" text="One view" />
-                                <Label styleClass="gold-chip" text="Auction flow" />
-                                <Label styleClass="ghost-chip" text="User workspace" />
-                                <Label styleClass="light-chip" text="Inspired layout" />
-                                    </children>
-                                </FlowPane>
-
-                                <HBox spacing="12.0" VBox.vgrow="ALWAYS">
-                                    <children>
-                                        <VBox spacing="13.0" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
                                             <children>
-                                                <VBox spacing="3.0">
-                                                    <children>
-                                                        <Label fx:id="sectionTitleLabel" styleClass="section-title" text="Dashboard" />
-                                                        <Label fx:id="sectionDescriptionLabel" styleClass="section-subtitle" text="Placeholder content changes when you move through sidebar items." wrapText="true" />
-                                                    </children>
-                                                </VBox>
-
-                                                <HBox spacing="8.0">
-                                                    <children>
-                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
-                                                    <children>
-                                                        <Label fx:id="statValue1" styleClass="stat-value" text="12" />
-                                                        <Label fx:id="statLabel1" styleClass="stat-label" text="Active" />
-                                                    </children>
-                                                </VBox>
-                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
-                                                    <children>
-                                                        <Label fx:id="statValue2" styleClass="stat-value" text="04" />
-                                                        <Label fx:id="statLabel2" styleClass="stat-label" text="Winning" />
-                                                    </children>
-                                                </VBox>
-                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
-                                                    <children>
-                                                        <Label fx:id="statValue3" styleClass="stat-value" text="03" />
-                                                        <Label fx:id="statLabel3" styleClass="stat-label" text="Auto Bids" />
-                                                    </children>
-                                                </VBox>
-                                                <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
-                                                    <children>
-                                                        <Label fx:id="statValue4" styleClass="stat-value" text="08" />
-                                                        <Label fx:id="statLabel4" styleClass="stat-label" text="Saved" />
-                                                    </children>
-                                                </VBox>
-                                                    </children>
-                                                </HBox>
-
-                                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
-                                                    <children>
-                                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="Command Center Overview" />
-                                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="This area is ready to host your real dashboard widgets later." wrapText="true" />
-
-                                                        <HBox spacing="8.0">
-                                                            <children>
-                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
-                                                            <children>
-                                                                <Label fx:id="featureTitle1" styleClass="placeholder-title" text="Browse auctions" />
-                                                                <Label fx:id="featureDescription1" styleClass="placeholder-desc" text="Main list area prepared for auction cards." wrapText="true" />
-                                                            </children>
-                                                        </VBox>
-                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
-                                                            <children>
-                                                                <Label fx:id="featureTitle2" styleClass="placeholder-title" text="Monitor bids" />
-                                                                <Label fx:id="featureDescription2" styleClass="placeholder-desc" text="Placeholder block ready for bid history or live activity." wrapText="true" />
-                                                            </children>
-                                                        </VBox>
-                                                        <VBox spacing="7.0" styleClass="placeholder-card" HBox.hgrow="ALWAYS">
-                                                            <children>
-                                                                <Label fx:id="featureTitle3" styleClass="placeholder-title" text="Review items" />
-                                                                <Label fx:id="featureDescription3" styleClass="placeholder-desc" text="Seller shortcuts can go here later." wrapText="true" />
-                                                            </children>
-                                                        </VBox>
-                                                            </children>
-                                                        </HBox>
-
-                                                        <VBox spacing="5.0" styleClass="placeholder-card" VBox.vgrow="ALWAYS">
-                                                            <children>
-                                                                <Label styleClass="placeholder-title" text="Placeholder activity feed" />
-                                                        <Label fx:id="activityLine1" styleClass="activity-line" text="Newest auctions appear here" wrapText="true" />
-                                                        <Label fx:id="activityLine2" styleClass="activity-line" text="Expiring lots can be listed here" wrapText="true" />
-                                                        <Label fx:id="activityLine3" styleClass="activity-line" text="Outbid alerts can be surfaced here" wrapText="true" />
-                                                        <Label fx:id="activityLine4" styleClass="activity-line" text="Recent winners can be summarized here" wrapText="true" />
-                                                            </children>
-                                                        </VBox>
-                                                    </children>
-                                                </VBox>
+                                                <Label fx:id="statValue1" styleClass="stat-value" text="12" />
+                                                <Label fx:id="statLabel1" styleClass="stat-label" text="Active Bids" />
                                             </children>
                                         </VBox>
-
-                                        <VBox prefWidth="180.0" minWidth="175.0" maxWidth="185.0" spacing="11.0">
+                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
                                             <children>
-                                                <VBox spacing="9.0" styleClass="aside-card">
-                                                    <children>
-                                                        <Label styleClass="insight-title" text="QUICK SUMMARY" />
-                                                        <Label fx:id="rightPanelTitleLabel" styleClass="aside-big-title" text="Today at a Glance" wrapText="true" />
-                                                        <Label fx:id="rightPanelDescriptionLabel" styleClass="aside-big-desc" text="Use this compact panel for alerts, countdowns, and auction insights." wrapText="true" />
-                                                    </children>
-                                                </VBox>
-
-                                                <FlowPane hgap="7.0" vgap="7.0">
-                                                    <children>
-                                                        <Label fx:id="quickTag1" styleClass="gold-chip" text="Live auctions" />
-                                                        <Label fx:id="quickTag2" styleClass="ghost-chip" text="Fast bidding" />
-                                                        <Label fx:id="quickTag3" styleClass="ghost-chip" text="Seller mode" />
-                                                    </children>
-                                                </FlowPane>
-
-                                                <VBox spacing="9.0">
-                                                    <children>
-                                                <VBox spacing="7.0" styleClass="insight-card">
-                                                    <children>
-                                                        <Label fx:id="insightTitle1" styleClass="insight-title" text="Focus" />
-                                                        <Label fx:id="insightValue1" styleClass="insight-value" text="Ending soon" />
-                                                    </children>
-                                                </VBox>
-                                                <VBox spacing="7.0" styleClass="insight-card">
-                                                    <children>
-                                                        <Label fx:id="insightTitle2" styleClass="insight-title" text="Priority" />
-                                                        <Label fx:id="insightValue2" styleClass="insight-value" text="Keep bidding" />
-                                                    </children>
-                                                </VBox>
-                                                <VBox spacing="7.0" styleClass="insight-card">
-                                                    <children>
-                                                        <Label fx:id="insightTitle3" styleClass="insight-title" text="Mode" />
-                                                        <Label fx:id="insightValue3" styleClass="insight-value" text="Hybrid" />
-                                                    </children>
-                                                </VBox>
-                                                    </children>
-                                                </VBox>
+                                                <Label fx:id="statValue2" styleClass="stat-value" text="04" />
+                                                <Label fx:id="statLabel2" styleClass="stat-label" text="Winning Now" />
+                                            </children>
+                                        </VBox>
+                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Label fx:id="statValue3" styleClass="stat-value" text="03" />
+                                                <Label fx:id="statLabel3" styleClass="stat-label" text="Outbid" />
+                                            </children>
+                                        </VBox>
+                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Label fx:id="statValue4" styleClass="stat-value" text="08" />
+                                                <Label fx:id="statLabel4" styleClass="stat-label" text="Ending Soon" />
                                             </children>
                                         </VBox>
                                     </children>
                                 </HBox>
+
+                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                    <children>
+                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="User Auction Workspace" />
+                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="Action-first workspace for bidding, auto bid rules, seller listings, and post-auction transactions." wrapText="true" />
+
+                                        <FlowPane fx:id="userActionBar" hgap="7.0" vgap="7.0" />
+
+                                        <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">
+                                            <children>
+                                                <Label fx:id="workspaceTitleLabel" styleClass="table-title" text="Action Needed" />
+                                                <VBox fx:id="workspaceBox" spacing="9.0" VBox.vgrow="ALWAYS" />
+                                            </children>
+                                        </VBox>
+
+                                        <VBox spacing="5.0" styleClass="activity-card">
+                                            <children>
+                                                <Label styleClass="placeholder-title" text="Recent Activity" />
+                                                <Label fx:id="activityLine1" styleClass="activity-line" text="You were outbid on Vintage Camera." wrapText="true" />
+                                                <Label fx:id="activityLine2" styleClass="activity-line" text="MacBook Pro M3 ends in 42 minutes." wrapText="true" />
+                                                <Label fx:id="activityLine3" styleClass="activity-line" text="Mechanical Keyboard sale is ready to ship." wrapText="true" />
+                                                <Label fx:id="activityLine4" styleClass="activity-line" text="Auto bid reached 80% of max limit." wrapText="true" />
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </VBox>
                             </children>
 
                             <padding>
