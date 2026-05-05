@@ -8,7 +8,7 @@ create table users (
     email varchar(255) not null unique,
     full_name varchar(255),
     phone varchar(20),
-    role enum('USER', 'BIDDER','SELLER') not null default 'USER',
+    role enum('USER', 'ADMIN') not null default 'USER',
     is_active boolean not null default true,
     status enum('ACTIVE', 'SUSPENDED', 'BANNED') not null default 'ACTIVE',
     last_login timestamp null,

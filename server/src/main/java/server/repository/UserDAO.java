@@ -1,16 +1,20 @@
 package server.repository;
 
-import server.common.enums.UserRole;
-import server.common.enums.UserStatus;
-import server.common.entity.User;
-import server.database.DBConnection;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import server.common.entity.User;
+import server.common.enums.UserRole;
+import server.common.enums.UserStatus;
+import server.database.DBConnection;
 
 /**
  * Data Access Object cho bảng {@code USERS}.
@@ -58,7 +62,7 @@ public class UserDAO {
     // ============================================================
 
     /**
-     * Đăng ký tài khoản người dùng mới với vai trò mặc định là BIDDER.
+     * Đăng ký tài khoản người dùng mới với vai trò mặc định là USER.
      * Mật khẩu sẽ được băm (hash) tự động trước khi lưu vào cơ sở dữ liệu.
      *
      * @param username Username duy nhất.
@@ -79,7 +83,7 @@ public class UserDAO {
             ps.setString(3, email);
             ps.setString(4, fullName);
             ps.setString(5, phone);
-            ps.setString(6, UserRole.BIDDER.name());
+            ps.setString(6, UserRole.USER.name());
             ps.setString(7, UserStatus.ACTIVE.name());
 
             return ps.executeUpdate() > 0;

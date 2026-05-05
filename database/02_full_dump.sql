@@ -317,7 +317,7 @@ CREATE TABLE `users` (
                          `email` varchar(255) NOT NULL,
                          `full_name` varchar(255) DEFAULT NULL,
                          `phone` varchar(20) DEFAULT NULL,
-                         `role` enum('USER','BIDDER','SELLER') NOT NULL DEFAULT 'USER',
+                         `role` enum('USER','ADMIN') NOT NULL DEFAULT 'USER',
                          `is_active` tinyint(1) NOT NULL DEFAULT '1',
                          `status` enum('ACTIVE','SUSPENDED','BANNED') NOT NULL DEFAULT 'ACTIVE',
                          `last_login` timestamp NULL DEFAULT NULL,
