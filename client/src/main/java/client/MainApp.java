@@ -13,7 +13,7 @@ public class MainApp extends Application {
     @Override
     public void start(Stage stage) throws Exception {
         FXMLLoader fxmlLoader = new FXMLLoader(
-                MainApp.class.getResource("/client/user-home.fxml")
+                MainApp.class.getResource("/client/auth.fxml")
         );
 
         Scene scene = new Scene(fxmlLoader.load(), APP_WIDTH, APP_HEIGHT);

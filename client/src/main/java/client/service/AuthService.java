@@ -2,7 +2,7 @@ package client.service;
 
 public class AuthService {
 
-    private NetworkManager networkManager;
+    private final NetworkManager networkManager;
 
     public AuthService(NetworkManager networkManager) {
         this.networkManager = networkManager;
@@ -12,7 +12,7 @@ public class AuthService {
         networkManager.send("LOGIN " + identity + " " + password);
     }
 
-    public void register(String username, String email, String password) {
-        networkManager.send("REGISTER " + username + " " + email + " " + password);
+    public void register(String username, String password, String email, String fullName, String phone) {
+        networkManager.send("REGISTER " + username + " " + password + " " + email + " " + fullName + " " + phone);
     }
 }

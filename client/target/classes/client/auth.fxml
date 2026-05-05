@@ -24,46 +24,137 @@
                             <children>
 
                                 <!-- SIGN IN -->
-                                <VBox fx:id="signInFormPane" alignment="CENTER" maxHeight="540.0" maxWidth="430.0" minHeight="540.0" minWidth="430.0" prefHeight="540.0" prefWidth="430.0" spacing="16.0" styleClass="form-pane">
+                                <VBox fx:id="signInFormPane" alignment="CENTER" maxHeight="540.0" maxWidth="430.0" minHeight="540.0" minWidth="430.0" prefHeight="540.0" prefWidth="430.0" spacing="0.0" styleClass="form-pane">
                                     <padding>
-                                        <Insets left="58.0" right="58.0" />
+                                        <Insets bottom="32.0" left="58.0" right="58.0" top="48.0" />
                                     </padding>
 
                                     <children>
-                                        <Label styleClass="title" text="Sign In" />
-                                        <Label styleClass="sub-title" text="Use your account to continue" />
+                                        <Region VBox.vgrow="ALWAYS" />
 
-                                        <TextField fx:id="signInIdentityField" prefHeight="46.0" prefWidth="300.0" promptText="Username or Email" styleClass="input" />
+                                        <VBox alignment="CENTER" fillWidth="false" spacing="18.0">
+                                            <children>
+                                                <Label styleClass="title" text="Sign In" />
 
-                                        <PasswordField fx:id="signInPasswordField" prefHeight="46.0" prefWidth="300.0" promptText="Password" styleClass="input" />
+                                                <Label styleClass="sub-title" text="Use your account to continue" />
 
-                                        <Button fx:id="signInBtn" mnemonicParsing="false" onAction="#handleSignIn" prefHeight="44.0" prefWidth="170.0" styleClass="round-btn" text="SIGN IN" />
+                                                <TextField fx:id="signInIdentityField"
+                                                           alignment="CENTER_LEFT"
+                                                           prefHeight="46.0"
+                                                           prefWidth="300.0"
+                                                           promptText="Username or Email"
+                                                           styleClass="input" />
 
-                                        <Label fx:id="signInMessageLabel" prefWidth="300.0" styleClass="message-label" text="" wrapText="true" />
+                                                <PasswordField fx:id="signInPasswordField"
+                                                               alignment="CENTER_LEFT"
+                                                               prefHeight="46.0"
+                                                               prefWidth="300.0"
+                                                               promptText="Password"
+                                                               styleClass="input" />
+
+                                                <Button fx:id="signInBtn"
+                                                        mnemonicParsing="false"
+                                                        onAction="#handleSignIn"
+                                                        prefHeight="44.0"
+                                                        prefWidth="170.0"
+                                                        styleClass="round-btn"
+                                                        text="SIGN IN" />
+
+                                                <Label fx:id="signInMessageLabel"
+                                                       prefWidth="300.0"
+                                                       styleClass="message-label"
+                                                       text=""
+                                                       wrapText="true" />
+                                            </children>
+                                        </VBox>
+
+                                        <Region VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
 
                                 <!-- SIGN UP -->
-                                <VBox fx:id="signUpFormPane" alignment="TOP_CENTER" maxHeight="540.0" maxWidth="430.0" minHeight="540.0" minWidth="430.0" prefHeight="540.0" prefWidth="430.0" spacing="16.0" styleClass="form-pane">
+                                <VBox fx:id="signUpFormPane" alignment="CENTER" maxHeight="540.0" maxWidth="430.0" minHeight="540.0" minWidth="430.0" prefHeight="540.0" prefWidth="430.0" spacing="0.0" styleClass="form-pane">
                                     <padding>
-                                        <Insets bottom="50.0" left="58.0" right="58.0" top="62.0" />
+                                        <Insets bottom="18.0" left="58.0" right="58.0" top="18.0" />
                                     </padding>
 
                                     <children>
-                                        <Label styleClass="title" text="Create Account" />
-                                        <Label styleClass="sub-title" text="Register to start your journey" />
+                                        <!-- spacer trên lớn hơn để đẩy cả cụm xuống -->
+                                        <Region minHeight="34.0" VBox.vgrow="ALWAYS" />
 
-                                        <TextField fx:id="signUpUsernameField" prefHeight="46.0" prefWidth="300.0" promptText="Username" styleClass="input" />
+                                        <VBox alignment="CENTER" fillWidth="false" spacing="13.0">
+                                            <children>
+                                                <Label styleClass="title" text="Create Account" />
 
-                                        <TextField fx:id="signUpEmailField" prefHeight="46.0" prefWidth="300.0" promptText="Email" styleClass="input" />
+                                                <Label styleClass="sub-title" text="Register to start your journey" />
 
-                                        <PasswordField fx:id="signUpPasswordField" prefHeight="46.0" prefWidth="300.0" promptText="Password" styleClass="input" />
+                                                <TextField fx:id="signUpUsernameField"
+                                                           alignment="CENTER_LEFT"
+                                                           prefHeight="38.0"
+                                                           prefWidth="300.0"
+                                                           promptText="Username"
+                                                           styleClass="input" />
 
-                                        <PasswordField fx:id="signUpConfirmPasswordField" prefHeight="46.0" prefWidth="300.0" promptText="Confirm Password" styleClass="input" />
+                                                <TextField fx:id="signUpEmailField"
+                                                           alignment="CENTER_LEFT"
+                                                           prefHeight="38.0"
+                                                           prefWidth="300.0"
+                                                           promptText="Email"
+                                                           styleClass="input" />
 
-                                        <Button fx:id="signUpBtn" mnemonicParsing="false" onAction="#handleSignUp" prefHeight="44.0" prefWidth="170.0" styleClass="round-btn" text="SIGN UP" />
+                                                <TextField fx:id="signUpFullNameField"
+                                                           alignment="CENTER_LEFT"
+                                                           prefHeight="38.0"
+                                                           prefWidth="300.0"
+                                                           promptText="Full name"
+                                                           styleClass="input" />
 
-                                        <Label fx:id="signUpMessageLabel" prefWidth="300.0" styleClass="message-label" text="" wrapText="true" />
+                                                <TextField fx:id="signUpPhoneField"
+                                                           alignment="CENTER_LEFT"
+                                                           prefHeight="38.0"
+                                                           prefWidth="300.0"
+                                                           promptText="Phone number"
+                                                           styleClass="input" />
+
+                                                <PasswordField fx:id="signUpPasswordField"
+                                                               alignment="CENTER_LEFT"
+                                                               prefHeight="38.0"
+                                                               prefWidth="300.0"
+                                                               promptText="Password"
+                                                               styleClass="input" />
+
+                                                <PasswordField fx:id="signUpConfirmPasswordField"
+                                                               alignment="CENTER_LEFT"
+                                                               prefHeight="38.0"
+                                                               prefWidth="300.0"
+                                                               promptText="Confirm Password"
+                                                               styleClass="input" />
+
+                                                <Button fx:id="signUpBtn"
+                                                        mnemonicParsing="false"
+                                                        onAction="#handleSignUp"
+                                                        prefHeight="40.0"
+                                                        prefWidth="170.0"
+                                                        styleClass="round-btn"
+                                                        text="SIGN UP">
+                                                    <VBox.margin>
+                                                        <Insets top="12.0" />
+                                                    </VBox.margin>
+                                                </Button>
+
+                                                <Label fx:id="signUpMessageLabel"
+                                                       prefWidth="300.0"
+                                                       styleClass="message-label"
+                                                       text=""
+                                                       wrapText="true">
+                                                    <VBox.margin>
+                                                        <Insets top="2.0" />
+                                                    </VBox.margin>
+                                                </Label>
+                                            </children>
+                                        </VBox>
+
+                                        <Region VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
 
@@ -75,19 +166,37 @@
                             <children>
                                 <StackPane fx:id="overlayViewport" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
                                     <children>
-                                        <ImageView fx:id="overlayImageView" fitHeight="540.0" fitWidth="860.0" opacity="0.96" pickOnBounds="true" preserveRatio="false" smooth="true" />
+                                        <ImageView fx:id="overlayImageView"
+                                                   fitHeight="540.0"
+                                                   fitWidth="860.0"
+                                                   opacity="0.96"
+                                                   pickOnBounds="true"
+                                                   preserveRatio="false"
+                                                   smooth="true" />
 
                                         <VBox fx:id="overlayWelcomePane" alignment="TOP_LEFT" fillWidth="true" spacing="0.0">
                                             <children>
                                                 <VBox alignment="TOP_LEFT" fillWidth="true" maxWidth="320.0" prefWidth="320.0" spacing="18.0">
                                                     <children>
-                                                        <Label alignment="CENTER_LEFT" maxWidth="320.0" prefWidth="320.0" styleClass="overlay-title-left" text="Professional bidding, redefined." textAlignment="LEFT" wrapText="true">
+                                                        <Label alignment="CENTER_LEFT"
+                                                               maxWidth="320.0"
+                                                               prefWidth="320.0"
+                                                               styleClass="overlay-title-left"
+                                                               text="Professional bidding, redefined."
+                                                               textAlignment="LEFT"
+                                                               wrapText="true">
                                                             <VBox.margin>
                                                                 <Insets left="10.0" top="50.0" />
                                                             </VBox.margin>
                                                         </Label>
 
-                                                        <Label alignment="CENTER_LEFT" maxWidth="320.0" prefWidth="320.0" styleClass="overlay-desc-left" text="Access opportunities, place bids seamlessly, and manage the process with confidence." textAlignment="LEFT" wrapText="true">
+                                                        <Label alignment="CENTER_LEFT"
+                                                               maxWidth="320.0"
+                                                               prefWidth="320.0"
+                                                               styleClass="overlay-desc-left"
+                                                               text="Access opportunities, place bids seamlessly, and manage the process with confidence."
+                                                               textAlignment="LEFT"
+                                                               wrapText="true">
                                                             <VBox.margin>
                                                                 <Insets left="10.0" />
                                                             </VBox.margin>
@@ -99,9 +208,22 @@
 
                                                 <VBox alignment="CENTER" fillWidth="false" maxWidth="400.0" prefWidth="320.0" spacing="8.0">
                                                     <children>
-                                                        <Label alignment="CENTER" maxWidth="400.0" prefHeight="43.0" prefWidth="376.0" styleClass="overlay-desc-center" text="New to our platform? Create an account to get started." textAlignment="CENTER" wrapText="true" />
+                                                        <Label alignment="CENTER"
+                                                               maxWidth="400.0"
+                                                               prefHeight="43.0"
+                                                               prefWidth="376.0"
+                                                               styleClass="overlay-desc-center"
+                                                               text="New to our platform? Create an account to get started."
+                                                               textAlignment="CENTER"
+                                                               wrapText="true" />
 
-                                                        <Button fx:id="switchToSignUpBtn" mnemonicParsing="false" onAction="#showSignUp" prefHeight="42.0" prefWidth="170.0" styleClass="ghost-btn" text="SIGN UP" />
+                                                        <Button fx:id="switchToSignUpBtn"
+                                                                mnemonicParsing="false"
+                                                                onAction="#showSignUp"
+                                                                prefHeight="42.0"
+                                                                prefWidth="170.0"
+                                                                styleClass="ghost-btn"
+                                                                text="SIGN UP" />
                                                     </children>
                                                 </VBox>
                                             </children>
@@ -115,13 +237,25 @@
                                             <children>
                                                 <VBox alignment="TOP_LEFT" fillWidth="true" maxWidth="320.0" prefWidth="320.0" spacing="18.0">
                                                     <children>
-                                                        <Label alignment="CENTER_LEFT" maxWidth="320.0" prefWidth="320.0" styleClass="overlay-title-left" text="Elevate your bidding experience." textAlignment="LEFT" wrapText="true">
+                                                        <Label alignment="CENTER_LEFT"
+                                                               maxWidth="320.0"
+                                                               prefWidth="320.0"
+                                                               styleClass="overlay-title-left"
+                                                               text="Elevate your bidding experience."
+                                                               textAlignment="LEFT"
+                                                               wrapText="true">
                                                             <VBox.margin>
                                                                 <Insets left="10.0" top="50.0" />
                                                             </VBox.margin>
                                                         </Label>
 
-                                                        <Label alignment="CENTER_LEFT" maxWidth="320.0" prefWidth="320.0" styleClass="overlay-desc-left" text="Join a trusted platform designed to simplify and strengthen your bidding experience." textAlignment="LEFT" wrapText="true">
+                                                        <Label alignment="CENTER_LEFT"
+                                                               maxWidth="320.0"
+                                                               prefWidth="320.0"
+                                                               styleClass="overlay-desc-left"
+                                                               text="Join a trusted platform designed to simplify and strengthen your bidding experience."
+                                                               textAlignment="LEFT"
+                                                               wrapText="true">
                                                             <VBox.margin>
                                                                 <Insets left="10.0" />
                                                             </VBox.margin>
@@ -133,9 +267,21 @@
 
                                                 <VBox alignment="CENTER" fillWidth="false" maxWidth="320.0" prefWidth="320.0" spacing="18.0">
                                                     <children>
-                                                        <Label alignment="CENTER" maxWidth="320.0" prefWidth="320.0" styleClass="overlay-desc-center" text="Already registered? Sign in to continue." textAlignment="CENTER" wrapText="true" />
+                                                        <Label alignment="CENTER"
+                                                               maxWidth="320.0"
+                                                               prefWidth="320.0"
+                                                               styleClass="overlay-desc-center"
+                                                               text="Already registered? Sign in to continue."
+                                                               textAlignment="CENTER"
+                                                               wrapText="true" />
 
-                                                        <Button fx:id="switchToSignInBtn" mnemonicParsing="false" onAction="#showSignIn" prefHeight="42.0" prefWidth="170.0" styleClass="ghost-btn" text="SIGN IN" />
+                                                        <Button fx:id="switchToSignInBtn"
+                                                                mnemonicParsing="false"
+                                                                onAction="#showSignIn"
+                                                                prefHeight="42.0"
+                                                                prefWidth="170.0"
+                                                                styleClass="ghost-btn"
+                                                                text="SIGN IN" />
                                                     </children>
                                                 </VBox>
                                             </children>

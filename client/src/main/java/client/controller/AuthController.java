@@ -53,6 +53,8 @@ public class AuthController {
 
     @FXML private TextField signUpUsernameField;
     @FXML private TextField signUpEmailField;
+    @FXML private TextField signUpFullNameField;
+    @FXML private TextField signUpPhoneField;
     @FXML private PasswordField signUpPasswordField;
     @FXML private PasswordField signUpConfirmPasswordField;
     @FXML private Label signUpMessageLabel;
@@ -192,18 +194,31 @@ public class AuthController {
     private void handleSignUp() {
         String username = signUpUsernameField.getText().trim();
         String email = signUpEmailField.getText().trim();
+        String fullName = signUpFullNameField.getText().trim();
+        String phone = signUpPhoneField.getText().trim();
         String password = signUpPasswordField.getText().trim();
         String confirmPassword = signUpConfirmPasswordField.getText().trim();
 
         clearMessages();
 
-        if (username.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+        if (username.isEmpty() || email.isEmpty() || fullName.isEmpty() || phone.isEmpty()
+                || password.isEmpty() || confirmPassword.isEmpty()) {
             showError(signUpMessageLabel, "Vui lòng nhập đầy đủ thông tin.");
             return;
         }
 
-        if (!email.contains("@")) {
+        if (containsWhitespace(username) || containsWhitespace(email) || containsWhitespace(password)) {
+            showError(signUpMessageLabel, "Username, email và mật khẩu không được chứa khoảng trắng.");
+            return;
+        }
+
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
             showError(signUpMessageLabel, "Email không hợp lệ.");
+            return;
+        }
+
+        if (!phone.matches("^[0-9+()\\-. ]{8,20}$")) {
+            showError(signUpMessageLabel, "Số điện thoại không hợp lệ.");
             return;
         }
 
@@ -217,7 +232,14 @@ public class AuthController {
             return;
         }
 
-        authService.register(username, email, password);
+        authService.register(
+                username,
+                password,
+                email,
+                normalizeFullNameForProtocol(fullName),
+                normalizePhoneForProtocol(phone)
+        );
+
         showSuccess(signUpMessageLabel, "Đang đăng ký...");
     }
 
@@ -230,6 +252,11 @@ public class AuthController {
 
         if (identity.isEmpty() || password.isEmpty()) {
             showError(signInMessageLabel, "Vui lòng nhập đầy đủ thông tin.");
+            return;
+        }
+
+        if (containsWhitespace(identity) || containsWhitespace(password)) {
+            showError(signInMessageLabel, "Tài khoản/email và mật khẩu không được chứa khoảng trắng.");
             return;
         }
 
@@ -252,19 +279,27 @@ public class AuthController {
                     return;
                 }
 
-                String username = p[1];
-                SystemRole role = SystemRole.valueOf(p[2]);
-                AccountStatus status = AccountStatus.valueOf(p[3]);
-
-                User user = new User(username, role, status);
-                SessionManager.setCurrentUser(user);
-
                 try {
+                    String username = p[1];
+                    SystemRole role = SystemRole.valueOf(p[2]);
+                    AccountStatus status = AccountStatus.valueOf(p[3]);
+
+                    User user = new User(username, role, status);
+
+                    String identity = signInIdentityField.getText().trim();
+                    if (identity.contains("@")) {
+                        user.setEmail(identity);
+                    }
+
+                    SessionManager.setCurrentUser(user);
+
                     if (role == SystemRole.ADMIN) {
                         switchScene("/client/admin-home.fxml", "Admin Dashboard");
                     } else {
                         switchScene("/client/user-home.fxml", "User Dashboard");
                     }
+                } catch (IllegalArgumentException e) {
+                    showError(signInMessageLabel, "Role hoặc trạng thái tài khoản không khớp client.");
                 } catch (Exception e) {
                     e.printStackTrace();
                     showError(signInMessageLabel, "Không thể chuyển màn hình dashboard.");
@@ -295,8 +330,10 @@ public class AuthController {
             if (p[0].equals("REGISTER_FAIL")) {
                 String reason = p.length >= 2 ? p[1] : "ERROR";
 
-                if ("EXIST".equals(reason)) {
+                if (reason.contains("EXIST")) {
                     showError(signUpMessageLabel, "Username hoặc email đã tồn tại.");
+                } else if (reason.contains("INVALID_FORMAT")) {
+                    showError(signUpMessageLabel, "Dữ liệu đăng ký chưa đúng định dạng server yêu cầu.");
                 } else {
                     showError(signUpMessageLabel, "Đăng ký thất bại.");
                 }
@@ -319,6 +356,8 @@ public class AuthController {
     private void clearSignUpFields() {
         signUpUsernameField.clear();
         signUpEmailField.clear();
+        signUpFullNameField.clear();
+        signUpPhoneField.clear();
         signUpPasswordField.clear();
         signUpConfirmPasswordField.clear();
     }
@@ -326,6 +365,18 @@ public class AuthController {
     private void clearMessages() {
         signUpMessageLabel.setText("");
         signInMessageLabel.setText("");
+    }
+
+    private boolean containsWhitespace(String value) {
+        return value != null && value.matches(".*\\s+.*");
+    }
+
+    private String normalizeFullNameForProtocol(String fullName) {
+        return fullName.trim().replaceAll("\\s+", "\u00A0");
+    }
+
+    private String normalizePhoneForProtocol(String phone) {
+        return phone.trim().replaceAll("\\s+", "");
     }
 
     private void showError(Label label, String message) {
