@@ -16,7 +16,7 @@ create table users (
 );
 
 create table item_categories (
-    category_id int auto_increment primitem_categoriesary key,
+    category_id int auto_increment primary key,
     name varchar(100) not null,
     parent_id int null,
     foreign key (parent_id) references item_categories(category_id) on delete set null
