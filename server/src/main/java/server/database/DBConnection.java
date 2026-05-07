@@ -1,8 +1,10 @@
 package server.database;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -17,7 +19,7 @@ import java.util.logging.Logger;
 public class DBConnection {
 
     private static final Logger LOGGER = Logger.getLogger(DBConnection.class.getName());
-    private static final Properties props = new Properties();
+    private static HikariDataSource dataSource;
 
     static {
         try (InputStream is = DBConnection.class.getClassLoader()
@@ -26,8 +28,20 @@ public class DBConnection {
             if (is == null) {
                 LOGGER.severe("Không tìm thấy file db.properties trong resources");
             } else {
+                Properties props = new Properties();
                 props.load(is);
-                Class.forName(props.getProperty("db.driver"));
+
+                HikariConfig config = new HikariConfig();
+                config.setDriverClassName(props.getProperty("db.driver"));
+                config.setJdbcUrl(props.getProperty("db.url"));
+                config.setUsername(props.getProperty("db.user"));
+                config.setPassword(props.getProperty("db.password"));
+                config.setMaximumPoolSize(10);
+                config.setMinimumIdle(2);
+                config.setConnectionTimeout(30000);
+                config.setIdleTimeout(600000);
+
+                dataSource = new HikariDataSource(config);
                 LOGGER.info("Load DB config thành công");
             }
 
@@ -40,11 +54,7 @@ public class DBConnection {
      * Lấy connection tới database.
      */
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(
-            props.getProperty("db.url"),
-            props.getProperty("db.user"),
-            props.getProperty("db.password")
-        );
+        return dataSource.getConnection();
     }
 
     // Test nhanh
