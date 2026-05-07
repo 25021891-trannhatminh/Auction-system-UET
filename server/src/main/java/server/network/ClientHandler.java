@@ -142,6 +142,9 @@ public class ClientHandler implements Runnable {
                     ClientManager.broadcast("MSG " + this.username + ": " + msg.substring(4).trim());
                 }
                 break;
+            case "PING":
+                send("PONG");
+                break;
 
             default:
                 send("UNKNOWN_COMMAND");
