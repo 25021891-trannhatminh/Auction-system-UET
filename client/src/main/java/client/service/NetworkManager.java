@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 
 public class NetworkManager {
 
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST = ServerFinder.find();
     private static final int PORT = 6666;
 
     private static final int BASE_RETRY_DELAY = 1000;

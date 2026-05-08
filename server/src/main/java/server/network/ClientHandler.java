@@ -58,6 +58,10 @@ public class ClientHandler implements Runnable {
 
         // Dùng giới hạn split để tránh lỗi khi description hoặc name có khoảng trắng
         String[] p = msg.split(" ", 6);
+        if ("PING".equals(p[0])){
+            send("PONG");
+            return;
+        }
         System.out.println("MSG FROM CLIENT: " + msg);
 
         switch (p[0]) {
@@ -142,9 +146,7 @@ public class ClientHandler implements Runnable {
                     ClientManager.broadcast("MSG " + this.username + ": " + msg.substring(4).trim());
                 }
                 break;
-            case "PING":
-                send("PONG");
-                break;
+                
 
             default:
                 send("UNKNOWN_COMMAND");

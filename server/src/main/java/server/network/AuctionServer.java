@@ -6,6 +6,7 @@ import java.net.InetAddress;
 
 public class AuctionServer {
     public static void main(String[] args) {
+        ServerDiscovery.start();
         int port = 6666;
 
         try {
