@@ -6,6 +6,7 @@ client\service\NetworkManager.class
 client\Launcher.class
 client\service\AuthService.class
 client\controller\UserDashboardController.class
+client\SceneNavigator.class
 client\controller\UserDashboardController$AuctionCardData.class
 client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
@@ -16,5 +17,6 @@ client\controller\BaseDashboardController.class
 client\model\SystemRole.class
 client\MainApp.class
 client\service\SimpleClient.class
+client\service\ServerFinder.class
 client\controller\AdminDashboardController.class
 client\controller\AuthController.class

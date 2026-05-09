@@ -1,8 +1,10 @@
 package client.controller;
 
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
-import client.MainApp;
+import client.SceneNavigator;
 import client.model.AccountStatus;
 import client.model.SystemRole;
 import client.model.User;
@@ -17,7 +19,6 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
@@ -271,29 +272,16 @@ public class AuthController {
                 return;
             }
 
-            String[] p = msg.split(" ");
+            String[] p = msg.split(" ", 2);
 
             if (p[0].equals("LOGIN_SUCCESS")) {
-                if (p.length < 4) {
-                    showError(signInMessageLabel, "Server trả dữ liệu đăng nhập không hợp lệ.");
-                    return;
-                }
-
                 try {
-                    String username = p[1];
-                    SystemRole role = SystemRole.valueOf(p[2]);
-                    AccountStatus status = AccountStatus.valueOf(p[3]);
-
-                    User user = new User(username, role, status);
-
-                    String identity = signInIdentityField.getText().trim();
-                    if (identity.contains("@")) {
-                        user.setEmail(identity);
-                    }
+                    String payload = p.length > 1 ? p[1] : "";
+                    User user = parseLoginSuccessPayload(payload);
 
                     SessionManager.setCurrentUser(user);
 
-                    if (role == SystemRole.ADMIN) {
+                    if (user.getSystemRole() == SystemRole.ADMIN) {
                         switchScene("/client/admin-home.fxml", "Admin Dashboard");
                     } else {
                         switchScene("/client/user-home.fxml", "User Dashboard");
@@ -341,16 +329,109 @@ public class AuthController {
         });
     }
 
+
+    private User parseLoginSuccessPayload(String payload) {
+        if (payload != null && payload.contains("|")) {
+            List<String> fields = splitPayload(payload);
+            if (fields.size() < 8) {
+                throw new IllegalArgumentException("Invalid LOGIN_SUCCESS payload");
+            }
+
+            int userId = parseIntOrDefault(fields.get(0), 0);
+            String username = fallback(fields.get(1), signInIdentityField.getText().trim());
+            String email = fields.get(2);
+            String fullName = fields.get(3);
+            String phone = fields.get(4);
+            SystemRole role = SystemRole.valueOf(fallback(fields.get(5), "USER").toUpperCase());
+            AccountStatus status = AccountStatus.valueOf(fallback(fields.get(6), "ACTIVE").toUpperCase());
+            boolean active = !"0".equals(fields.get(7)) && !"false".equalsIgnoreCase(fields.get(7));
+
+            User user = new User(userId, username, email, fullName, phone, role, status, active);
+            return user;
+        }
+
+        String[] legacy = payload == null ? new String[0] : payload.split(" ");
+        if (legacy.length < 3) {
+            throw new IllegalArgumentException("Invalid legacy LOGIN_SUCCESS payload");
+        }
+
+        String username = legacy[0];
+        SystemRole role = SystemRole.valueOf(legacy[1]);
+        AccountStatus status = AccountStatus.valueOf(legacy[2]);
+        User user = new User(username, role, status);
+
+        String identity = signInIdentityField.getText().trim();
+        if (identity.contains("@")) {
+            user.setEmail(identity);
+        }
+        return user;
+    }
+
+    private List<String> splitPayload(String payload) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean escaped = false;
+
+        for (int i = 0; i < payload.length(); i++) {
+            char character = payload.charAt(i);
+
+            if (escaped) {
+                switch (character) {
+                    case 'p' -> current.append('|');
+                    case 'n' -> current.append('\n');
+                    case 'r' -> current.append('\r');
+                    case '\\' -> current.append('\\');
+                    default -> current.append(character);
+                }
+                escaped = false;
+                continue;
+            }
+
+            if (character == '\\') {
+                escaped = true;
+                continue;
+            }
+
+            if (character == '|') {
+                fields.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+
+            current.append(character);
+        }
+
+        if (escaped) {
+            current.append('\\');
+        }
+
+        fields.add(current.toString());
+        return fields;
+    }
+
+    private int parseIntOrDefault(String value, int fallbackValue) {
+        try {
+            return value == null || value.isBlank() ? fallbackValue : Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return fallbackValue;
+        }
+    }
+
+    private String fallback(String value, String fallbackValue) {
+        return value == null || value.isBlank() ? fallbackValue : value;
+    }
+
     private void switchScene(String fxmlPath, String title) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();
 
+        Object controller = loader.getController();
+        if (controller instanceof BaseDashboardController dashboardController) {
+            dashboardController.refreshUserMeta();
+        }
+
         Stage stage = (Stage) signInIdentityField.getScene().getWindow();
-        stage.setScene(new Scene(root, MainApp.APP_WIDTH, MainApp.APP_HEIGHT));
-        stage.setTitle(title);
-        stage.setMinWidth(MainApp.APP_WIDTH);
-        stage.setMinHeight(MainApp.APP_HEIGHT);
-        stage.show();
+        SceneNavigator.switchSceneKeepingWindow(stage, root, title);
     }
 
     private void clearSignUpFields() {

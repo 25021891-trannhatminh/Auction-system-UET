@@ -12,8 +12,8 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane prefHeight="650.0"
-            prefWidth="1000.0"
+<AnchorPane prefHeight="720.0"
+            prefWidth="1150.0"
             styleClass="dashboard-root"
             stylesheets="@dashboard.css"
             xmlns="http://javafx.com/javafx/17"
@@ -62,7 +62,7 @@
                                         <Button fx:id="dashboardBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Dashboard" />
                                         <Button fx:id="usersBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Users" />
                                         <Button fx:id="auctionsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auctions" />
-                                        <Button fx:id="itemsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Items" />
+                                        <Button fx:id="itemsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Item Review" />
                                         <Button fx:id="reportsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Reports" />
                                         <Button fx:id="settingsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Settings" />
                                     </children>
@@ -101,34 +101,34 @@
                                     </children>
                                 </HBox>
 
-                                <HBox spacing="8.0">
+                                <FlowPane hgap="8.0" vgap="8.0" styleClass="stat-grid">
                                     <children>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue1" styleClass="stat-value" text="248" />
                                                 <Label fx:id="statLabel1" styleClass="stat-label" text="Users" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue2" styleClass="stat-value" text="31" />
                                                 <Label fx:id="statLabel2" styleClass="stat-label" text="Running Auctions" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue3" styleClass="stat-value" text="142" />
                                                 <Label fx:id="statLabel3" styleClass="stat-label" text="Listed Items" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue4" styleClass="stat-value" text="912" />
                                                 <Label fx:id="statLabel4" styleClass="stat-label" text="Total Bids" />
                                             </children>
                                         </VBox>
                                     </children>
-                                </HBox>
+                                </FlowPane>
 
                                 <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
@@ -144,13 +144,21 @@
                                             </children>
                                         </VBox>
 
-                                        <VBox spacing="5.0" styleClass="activity-card">
+                                        <VBox spacing="8.0" styleClass="detail-card">
                                             <children>
-                                                <Label styleClass="placeholder-title" text="Recent Activity" />
-                                                <Label fx:id="activityLine1" styleClass="activity-line" text="6 AVAILABLE items are ready for auction creation." wrapText="true" />
-                                                <Label fx:id="activityLine2" styleClass="activity-line" text="4 RUNNING auctions need attention." wrapText="true" />
-                                                <Label fx:id="activityLine3" styleClass="activity-line" text="11 SUSPENDED accounts are waiting for audit." wrapText="true" />
-                                                <Label fx:id="activityLine4" styleClass="activity-line" text="3 FINISHED auctions need payment follow-up." wrapText="true" />
+                                                <Label styleClass="detail-kicker" text="SELECTED DETAIL" />
+                                                <Label fx:id="detailTitleLabel" styleClass="detail-title" text="Control Center ready" wrapText="true" />
+                                                <Label fx:id="detailDescriptionLabel" styleClass="detail-desc" text="Pick a row, View button, or ... menu to inspect actions without expanding the table." wrapText="true" />
+
+                                                <VBox spacing="5.0" styleClass="activity-compact-card">
+                                                    <children>
+                                                        <Label styleClass="placeholder-title" text="Recent Activity" />
+                                                        <Label fx:id="activityLine1" styleClass="activity-line" text="6 AVAILABLE items are ready for auction creation." wrapText="true" />
+                                                        <Label fx:id="activityLine2" styleClass="activity-line" text="4 RUNNING auctions need attention." wrapText="true" />
+                                                        <Label fx:id="activityLine3" styleClass="activity-line" text="11 SUSPENDED accounts are waiting for audit." wrapText="true" />
+                                                        <Label fx:id="activityLine4" styleClass="activity-line" text="3 FINISHED auctions need payment follow-up." wrapText="true" />
+                                                    </children>
+                                                </VBox>
                                             </children>
                                         </VBox>
                                     </children>

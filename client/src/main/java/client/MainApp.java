@@ -7,21 +7,17 @@ import javafx.stage.Stage;
 
 public class MainApp extends Application {
 
-    public static final double APP_WIDTH = 1000;
-    public static final double APP_HEIGHT = 650;
-
     @Override
     public void start(Stage stage) throws Exception {
         FXMLLoader fxmlLoader = new FXMLLoader(
                 MainApp.class.getResource("/client/auth.fxml")
         );
 
-        Scene scene = new Scene(fxmlLoader.load(), APP_WIDTH, APP_HEIGHT);
+        Scene scene = SceneNavigator.createInitialScene(fxmlLoader.load());
 
         stage.setTitle("Auction System");
         stage.setScene(scene);
-        stage.setMinWidth(APP_WIDTH);
-        stage.setMinHeight(APP_HEIGHT);
+        SceneNavigator.applyStageBounds(stage);
         stage.show();
     }
 

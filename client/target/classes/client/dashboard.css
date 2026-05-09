@@ -854,3 +854,307 @@
     -fx-pref-height: 155;
     -fx-max-height: 155;
 }
+
+/* Admin compact control-panel redesign */
+.stat-grid {
+    -fx-padding: 0;
+}
+
+.content-shell {
+    -fx-padding: 14 16 14 16;
+}
+
+.table-card {
+    -fx-padding: 11;
+}
+
+.detail-card {
+    -fx-padding: 12;
+}
+
+.activity-compact-card {
+    -fx-background-color: rgba(39, 75, 69, 0.045);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(218, 229, 221, 0.85);
+    -fx-border-radius: 16;
+    -fx-padding: 10;
+}
+
+.data-header {
+    -fx-padding: 8 10 8 10;
+}
+
+.data-row {
+    -fx-padding: 9 10 9 10;
+    -fx-cursor: hand;
+}
+
+.row-link {
+    -fx-font-size: 11px;
+}
+
+.row-meta {
+    -fx-font-size: 9.5px;
+}
+
+.row-metric {
+    -fx-font-size: 10.5px;
+}
+
+.status-badge {
+    -fx-font-size: 8.5px;
+    -fx-padding: 5 6 5 6;
+}
+
+.mini-action-btn {
+    -fx-padding: 5 7 5 7;
+    -fx-font-size: 8.5px;
+    -fx-min-width: 62;
+}
+
+.more-action-btn {
+    -fx-background-color: #f7f3e9;
+    -fx-background-radius: 999;
+    -fx-border-color: #dce7df;
+    -fx-border-radius: 999;
+    -fx-text-fill: #173d34;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-padding: 4 4 4 4;
+    -fx-cursor: hand;
+}
+
+.more-action-btn:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.20);
+}
+
+.detail-kicker {
+    -fx-text-fill: #8a6a16;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.more-action-btn > .arrow-button {
+    -fx-padding: 0;
+}
+
+.more-action-btn > .arrow-button > .arrow {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+}
+
+/* Admin control-panel alignment pass */
+.data-header,
+.data-row {
+    -fx-hgap: 12;
+}
+
+.data-header {
+    -fx-padding: 9 14 9 14;
+}
+
+.data-row {
+    -fx-padding: 11 14 11 14;
+}
+
+.table-header-label {
+    -fx-alignment: center-left;
+}
+
+.row-metric {
+    -fx-alignment: center-right;
+    -fx-text-alignment: right;
+}
+
+.status-badge {
+    -fx-min-width: 104;
+    -fx-pref-width: 104;
+    -fx-max-width: 104;
+}
+
+.mini-action-btn {
+    -fx-min-width: 72;
+    -fx-pref-width: 72;
+    -fx-alignment: center;
+}
+
+.more-action-btn {
+    -fx-min-width: 38;
+    -fx-pref-width: 38;
+    -fx-max-width: 38;
+    -fx-alignment: center;
+}
+
+.detail-page-hero,
+.detail-page-block {
+    -fx-background-color: rgba(255, 255, 255, 0.66);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(218, 229, 221, 0.95);
+    -fx-border-radius: 16;
+    -fx-padding: 13;
+}
+
+.detail-page-title {
+    -fx-text-fill: #173d34;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.detail-page-meta,
+.detail-page-line {
+    -fx-text-fill: #72837f;
+    -fx-font-size: 11px;
+    -fx-line-spacing: 2px;
+}
+
+.detail-metric-card {
+    -fx-background-color: rgba(39, 75, 69, 0.055);
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(218, 229, 221, 0.85);
+    -fx-border-radius: 14;
+    -fx-padding: 9 11 9 11;
+}
+
+.detail-metric-label {
+    -fx-text-fill: #8a6a16;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.detail-metric-value {
+    -fx-text-fill: #25483f;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+/* Admin table straight-column fix */
+.data-header,
+.data-row {
+    -fx-hgap: 14;
+}
+
+.data-header {
+    -fx-padding: 10 16 10 16;
+}
+
+.data-row {
+    -fx-padding: 12 16 12 16;
+}
+
+.table-header-label {
+    -fx-alignment: center;
+}
+
+.row-metric {
+    -fx-alignment: center-right;
+    -fx-text-alignment: right;
+}
+
+.status-badge {
+    -fx-min-width: 118;
+    -fx-pref-width: 118;
+    -fx-max-width: 118;
+    -fx-alignment: center;
+}
+
+.mini-action-btn {
+    -fx-min-width: 84;
+    -fx-pref-width: 84;
+    -fx-max-width: 84;
+    -fx-alignment: center;
+}
+
+.more-action-btn {
+    -fx-min-width: 42;
+    -fx-pref-width: 42;
+    -fx-max-width: 42;
+    -fx-alignment: center;
+}
+
+/* Admin DB sync + strict table alignment */
+.data-header,
+.data-row {
+    -fx-hgap: 16;
+    -fx-padding: 12 18 12 18;
+}
+
+.table-header-label,
+.row-metric {
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.status-badge {
+    -fx-min-width: 118;
+    -fx-pref-width: 118;
+    -fx-max-width: 118;
+    -fx-alignment: center;
+}
+
+.mini-action-btn {
+    -fx-min-width: 84;
+    -fx-pref-width: 84;
+    -fx-max-width: 84;
+    -fx-alignment: center;
+}
+
+.more-action-btn {
+    -fx-min-width: 42;
+    -fx-pref-width: 42;
+    -fx-max-width: 42;
+    -fx-alignment: center;
+}
+
+/* Quick responsive admin table patch: keep every column inside the card when the window is narrowed. */
+.content-scroll {
+    -fx-padding: 0 8 0 0;
+}
+
+.content-shell {
+    -fx-padding: 14 18 14 16;
+}
+
+.table-card {
+    -fx-padding: 10;
+}
+
+.data-header,
+.data-row {
+    -fx-hgap: 10;
+    -fx-padding: 10 12 10 12;
+}
+
+.table-header-label,
+.row-metric {
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.row-link {
+    -fx-padding: 0;
+}
+
+.row-meta {
+    -fx-wrap-text: false;
+}
+
+.status-badge {
+    -fx-min-width: 0;
+    -fx-pref-width: 88;
+    -fx-max-width: 96;
+    -fx-padding: 5 5 5 5;
+}
+
+.mini-action-btn {
+    -fx-min-width: 58;
+    -fx-pref-width: 58;
+    -fx-max-width: 58;
+    -fx-padding: 5 4 5 4;
+}
+
+.more-action-btn {
+    -fx-min-width: 26;
+    -fx-pref-width: 26;
+    -fx-max-width: 26;
+    -fx-padding: 4 2 4 2;
+}

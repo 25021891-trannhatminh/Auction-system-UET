@@ -6,13 +6,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import client.SceneNavigator;
 import client.model.User;
 import client.service.SessionManager;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
@@ -146,13 +146,13 @@ public abstract class BaseDashboardController {
 
     @FXML
     protected void initialize() {
-        bindUserMeta();
+        refreshUserMeta();
         collectDisplayLabels();
         registerNavigationButtons();
         showSection(getDefaultSectionKey());
     }
 
-    private void bindUserMeta() {
+    protected void refreshUserMeta() {
         User user = SessionManager.getCurrentUser();
 
         String username = user != null && user.getUsername() != null
@@ -163,9 +163,13 @@ public abstract class BaseDashboardController {
                 ? user.getEmail()
                 : username.toLowerCase().replace(" ", ".") + "@auction.local";
 
+        String role = user != null && user.getSystemRole() != null
+                ? user.getSystemRole().name()
+                : getRoleTitle();
+
         setText(usernameLabel, username);
         setText(emailLabel, email);
-        setText(roleLabel, getRoleTitle());
+        setText(roleLabel, role);
         setText(avatarInitialsLabel, buildInitials(username));
     }
 
@@ -273,7 +277,11 @@ public abstract class BaseDashboardController {
 
     private void setText(Label label, String value) {
         if (label != null) {
-            label.setText(value == null ? "" : value);
+            String safeValue = value == null ? "" : value;
+            label.setText(safeValue);
+            boolean visible = !safeValue.isBlank();
+            label.setVisible(visible);
+            label.setManaged(visible);
         }
     }
 
@@ -302,9 +310,7 @@ public abstract class BaseDashboardController {
             Parent root = loader.load();
 
             Stage stage = (Stage) usernameLabel.getScene().getWindow();
-            stage.setScene(new Scene(root));
-            stage.setTitle("Auction System - Sign In");
-            stage.show();
+            SceneNavigator.switchSceneKeepingWindow(stage, root, "Auction System - Sign In");
         } catch (IOException exception) {
             exception.printStackTrace();
         }
