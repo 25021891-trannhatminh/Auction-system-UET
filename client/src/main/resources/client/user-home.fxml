@@ -93,7 +93,6 @@
                                         <VBox spacing="3.0" HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Label fx:id="headerTitleLabel" styleClass="top-title" text="Dashboard" />
-                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Track bids, browse live auctions, manage listings, and follow transactions." wrapText="true" />
                                             </children>
                                         </VBox>
 
@@ -102,40 +101,38 @@
                                     </children>
                                 </HBox>
 
-                                <HBox spacing="8.0">
+                                <FlowPane hgap="8.0" vgap="8.0" styleClass="stat-grid">
                                     <children>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue1" styleClass="stat-value" text="12" />
                                                 <Label fx:id="statLabel1" styleClass="stat-label" text="Active Bids" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue2" styleClass="stat-value" text="04" />
                                                 <Label fx:id="statLabel2" styleClass="stat-label" text="Winning Now" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue3" styleClass="stat-value" text="03" />
                                                 <Label fx:id="statLabel3" styleClass="stat-label" text="Outbid" />
                                             </children>
                                         </VBox>
-                                        <VBox spacing="5.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
                                                 <Label fx:id="statValue4" styleClass="stat-value" text="08" />
                                                 <Label fx:id="statLabel4" styleClass="stat-label" text="Ending Soon" />
                                             </children>
                                         </VBox>
                                     </children>
-                                </HBox>
+                                </FlowPane>
 
                                 <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
                                         <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="User Auction Workspace" />
-                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="Action-first workspace for bidding, auto bid rules, seller listings, and post-auction transactions." wrapText="true" />
-
                                         <FlowPane fx:id="userActionBar" hgap="7.0" vgap="7.0" />
 
                                         <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">

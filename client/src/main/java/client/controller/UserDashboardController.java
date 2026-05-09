@@ -7,11 +7,15 @@ import java.util.List;
 import java.util.Map;
 
 import javafx.fxml.FXML;
+import javafx.geometry.HPos;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
@@ -32,6 +36,9 @@ public class UserDashboardController extends BaseDashboardController {
     @FXML private Button primaryActionButton;
 
     private static final int AUCTIONS_PER_PAGE = 6;
+    private static final double USER_ACTION_PRIMARY_WIDTH = 84;
+    private static final double USER_ACTION_MORE_WIDTH = 28;
+    private static final double USER_ACTION_GAP = 6;
     private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
     private static final double PRODUCT_IMAGE_HEIGHT = 155;
 
@@ -80,7 +87,7 @@ public class UserDashboardController extends BaseDashboardController {
         auctionPage = 1;
 
         super.showSection(sectionKey);
-        hideSurfaceDescription();
+        hidePageDescriptions();
         updatePrimaryAction(sectionKey);
         renderWorkspace(sectionKey, activeFilter);
     }
@@ -819,32 +826,63 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     private void addHeader(String main, String first, String second) {
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.getStyleClass().add("data-header");
+        GridPane header = createTableGrid("data-header");
 
-        header.getChildren().addAll(
-                headerLabel(main, 330, true),
-                headerLabel(first, 135, false),
-                headerLabel(second, 130, false),
-                headerLabel("Status", 115, false),
-                headerLabel("Actions", 240, false)
-        );
+        Label mainHeader = headerLabel(main, HPos.LEFT);
+        Label firstHeader = headerLabel(first, HPos.CENTER);
+        Label secondHeader = headerLabel(second, HPos.CENTER);
+        Label statusHeader = headerLabel("Status", HPos.CENTER);
+        Label actionHeader = headerLabel("Action", HPos.CENTER);
+
+        header.add(mainHeader, 0, 0);
+        header.add(firstHeader, 1, 0);
+        header.add(secondHeader, 2, 0);
+        header.add(statusHeader, 3, 0);
+        header.add(actionHeader, 4, 0);
 
         workspaceBox.getChildren().add(header);
     }
 
-    private Label headerLabel(String text, double width, boolean grow) {
+    private Label headerLabel(String text, HPos alignment) {
         Label label = new Label(text);
         label.getStyleClass().add("table-header-label");
-        label.setMinWidth(width);
-        label.setPrefWidth(width);
-
-        if (grow) {
-            HBox.setHgrow(label, Priority.ALWAYS);
-        }
-
+        label.setMaxWidth(Double.MAX_VALUE);
+        label.setMinWidth(0);
+        label.setTextOverrun(OverrunStyle.ELLIPSIS);
+        GridPane.setHalignment(label, alignment);
         return label;
+    }
+
+    private GridPane createTableGrid(String styleClass) {
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setAlignment(Pos.CENTER_LEFT);
+        grid.getStyleClass().add(styleClass);
+        grid.setMaxWidth(Double.MAX_VALUE);
+        grid.setMinWidth(0);
+
+        ColumnConstraints mainColumn = percentColumn(42);
+        ColumnConstraints firstColumn = percentColumn(13);
+        ColumnConstraints secondColumn = percentColumn(15);
+        ColumnConstraints statusColumn = percentColumn(14);
+        ColumnConstraints actionColumn = percentColumn(16);
+
+        grid.getColumnConstraints().addAll(mainColumn, firstColumn, secondColumn, statusColumn, actionColumn);
+        return grid;
+    }
+
+    private ColumnConstraints percentColumn(double percent) {
+        ColumnConstraints constraints = new ColumnConstraints();
+        constraints.setPercentWidth(percent);
+        constraints.setMinWidth(0);
+        constraints.setHgrow(Priority.ALWAYS);
+        return constraints;
+    }
+
+    private ColumnConstraints fixedColumn(double width) {
+        ColumnConstraints constraints = new ColumnConstraints(width, width, width);
+        constraints.setHgrow(Priority.NEVER);
+        return constraints;
     }
 
     private UserRow row(String title, String meta, String firstValue, String secondValue, String status, String detail, String thumbnail, String... actions) {
@@ -925,69 +963,130 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     private void addEmptyRow(String filter) {
-        HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
-        row.getStyleClass().add("data-row");
+        GridPane row = createTableGrid("data-row");
 
         Label empty = new Label("No records found for filter: " + filter);
         empty.getStyleClass().add("row-meta");
         empty.setWrapText(true);
-        HBox.setHgrow(empty, Priority.ALWAYS);
+        empty.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setColumnSpan(empty, 5);
 
-        row.getChildren().add(empty);
+        row.add(empty, 0, 0);
         workspaceBox.getChildren().add(row);
     }
 
     private void addRow(UserRow data) {
-        HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
-        row.getStyleClass().add("data-row");
+        GridPane row = createTableGrid("data-row");
+        row.setOnMouseClicked(event -> showTemporaryDetail(data.title, data.detail));
 
         HBox mainCell = new HBox(9);
         mainCell.setAlignment(Pos.CENTER_LEFT);
-        mainCell.setMinWidth(330);
-        mainCell.setPrefWidth(330);
-        HBox.setHgrow(mainCell, Priority.ALWAYS);
+        mainCell.setMinWidth(0);
+        mainCell.setMaxWidth(Double.MAX_VALUE);
+        mainCell.getStyleClass().add("row-main-cell");
+        GridPane.setHgrow(mainCell, Priority.ALWAYS);
 
         StackPane thumbnail = buildThumbnail(data.thumbnail);
 
         VBox textCell = new VBox(2);
+        textCell.setMinWidth(0);
+        textCell.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(textCell, Priority.ALWAYS);
 
         Button link = new Button(data.title);
         link.setMnemonicParsing(false);
         link.getStyleClass().add("row-link");
+        link.setMinWidth(0);
         link.setMaxWidth(Double.MAX_VALUE);
-        link.setOnAction(event -> showTemporaryDetail(data.title, data.detail));
+        link.setTextOverrun(OverrunStyle.ELLIPSIS);
+        link.setOnAction(event -> handleRowAction(resolvePrimaryAction(data), data));
 
         Label meta = new Label(data.meta);
         meta.getStyleClass().add("row-meta");
-        meta.setWrapText(true);
+        meta.setWrapText(false);
+        meta.setMinWidth(0);
+        meta.setMaxWidth(Double.MAX_VALUE);
+        meta.setTextOverrun(OverrunStyle.ELLIPSIS);
 
         textCell.getChildren().addAll(link, meta);
         mainCell.getChildren().addAll(thumbnail, textCell);
 
-        Label firstMetric = rowMetric(data.firstValue, 135);
-        Label secondMetric = rowMetric(data.secondValue, 130);
+        Label firstMetric = rowMetric(data.firstValue);
+        Label secondMetric = rowMetric(data.secondValue);
         Label status = statusBadge(data.status);
+        GridPane actions = rowActions(data);
 
-        HBox actions = new HBox(7);
-        actions.setAlignment(Pos.CENTER_LEFT);
-        actions.setMinWidth(240);
-        actions.setPrefWidth(240);
+        row.add(mainCell, 0, 0);
+        row.add(firstMetric, 1, 0);
+        row.add(secondMetric, 2, 0);
+        row.add(status, 3, 0);
+        row.add(actions, 4, 0);
 
-        for (String action : data.actions) {
-            Button button = new Button(action);
-            button.setMnemonicParsing(false);
-            button.getStyleClass().add("mini-action-btn");
-            button.setMinWidth(calculateActionButtonWidth(action));
-            button.setPrefWidth(calculateActionButtonWidth(action));
-            button.setOnAction(event -> showTemporaryDetail(action + " - " + data.title, data.detail));
-            actions.getChildren().add(button);
+        GridPane.setHalignment(firstMetric, HPos.CENTER);
+        GridPane.setHalignment(secondMetric, HPos.CENTER);
+        GridPane.setHalignment(status, HPos.CENTER);
+        GridPane.setHalignment(actions, HPos.CENTER);
+
+        workspaceBox.getChildren().add(row);
+    }
+
+    private String resolvePrimaryAction(UserRow data) {
+        return data.actions.length > 0 ? data.actions[0] : "View";
+    }
+
+    private GridPane rowActions(UserRow data) {
+        GridPane actions = new GridPane();
+        actions.setHgap(USER_ACTION_GAP);
+        actions.setAlignment(Pos.CENTER);
+        actions.setMinWidth(0);
+        actions.setMaxWidth(Double.MAX_VALUE);
+        actions.getStyleClass().add("user-row-actions");
+        actions.getColumnConstraints().addAll(fixedColumn(USER_ACTION_PRIMARY_WIDTH), fixedColumn(USER_ACTION_MORE_WIDTH));
+
+        String primaryAction = resolvePrimaryAction(data);
+        Button primary = new Button(primaryAction);
+        primary.setMnemonicParsing(false);
+        primary.getStyleClass().addAll("mini-action-btn", "user-primary-action-btn");
+        primary.setMinWidth(USER_ACTION_PRIMARY_WIDTH);
+        primary.setPrefWidth(USER_ACTION_PRIMARY_WIDTH);
+        primary.setMaxWidth(USER_ACTION_PRIMARY_WIDTH);
+        primary.setTextOverrun(OverrunStyle.ELLIPSIS);
+        primary.setOnAction(event -> handleRowAction(primaryAction, data));
+
+        actions.add(primary, 0, 0);
+        GridPane.setHalignment(primary, HPos.CENTER);
+
+        if (data.actions.length > 1) {
+            MenuButton more = new MenuButton("...");
+            more.setMnemonicParsing(false);
+            more.getStyleClass().add("more-action-btn");
+            more.setMinWidth(USER_ACTION_MORE_WIDTH);
+            more.setPrefWidth(USER_ACTION_MORE_WIDTH);
+            more.setMaxWidth(USER_ACTION_MORE_WIDTH);
+
+            for (int i = 1; i < data.actions.length; i++) {
+                String action = data.actions[i];
+                MenuItem item = new MenuItem(action);
+                item.setOnAction(event -> handleRowAction(action, data));
+                more.getItems().add(item);
+            }
+
+            actions.add(more, 1, 0);
+            GridPane.setHalignment(more, HPos.CENTER);
+        } else {
+            Region placeholder = new Region();
+            placeholder.setMinWidth(USER_ACTION_MORE_WIDTH);
+            placeholder.setPrefWidth(USER_ACTION_MORE_WIDTH);
+            placeholder.setMaxWidth(USER_ACTION_MORE_WIDTH);
+            placeholder.setOpacity(0);
+            actions.add(placeholder, 1, 0);
         }
 
-        row.getChildren().addAll(mainCell, firstMetric, secondMetric, status, actions);
-        workspaceBox.getChildren().add(row);
+        return actions;
+    }
+
+    private void handleRowAction(String action, UserRow data) {
+        showTemporaryDetail(action + " - " + data.title, data.detail);
     }
 
     private StackPane buildThumbnail(String text) {
@@ -1004,28 +1103,22 @@ public class UserDashboardController extends BaseDashboardController {
         return thumbnail;
     }
 
-    private double calculateActionButtonWidth(String text) {
-        if (text == null) {
-            return 74;
-        }
-
-        return Math.max(74, text.length() * 8.5 + 26);
-    }
-
-    private Label rowMetric(String text, double width) {
+    private Label rowMetric(String text) {
         Label label = new Label(text);
         label.getStyleClass().add("row-metric");
-        label.setMinWidth(width);
-        label.setPrefWidth(width);
-        label.setWrapText(true);
+        label.setMinWidth(0);
+        label.setMaxWidth(Double.MAX_VALUE);
+        label.setTextOverrun(OverrunStyle.ELLIPSIS);
+        label.setWrapText(false);
         return label;
     }
 
     private Label statusBadge(String status) {
         Label label = new Label(status);
         label.getStyleClass().add("status-badge");
-        label.setMinWidth(115);
-        label.setPrefWidth(115);
+        label.setMinWidth(0);
+        label.setMaxWidth(Double.MAX_VALUE);
+        label.setTextOverrun(OverrunStyle.ELLIPSIS);
         label.getStyleClass().add(statusStyle(status));
         return label;
     }
@@ -1064,7 +1157,13 @@ public class UserDashboardController extends BaseDashboardController {
         return "status-neutral";
     }
 
-    private void hideSurfaceDescription() {
+    private void hidePageDescriptions() {
+        if (headerSubtitleLabel != null) {
+            headerSubtitleLabel.setText("");
+            headerSubtitleLabel.setVisible(false);
+            headerSubtitleLabel.setManaged(false);
+        }
+
         if (surfaceDescriptionLabel != null) {
             surfaceDescriptionLabel.setText("");
             surfaceDescriptionLabel.setVisible(false);

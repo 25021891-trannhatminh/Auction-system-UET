@@ -1158,3 +1158,27 @@
     -fx-max-width: 26;
     -fx-padding: 4 2 4 2;
 }
+
+/* User-home sync with admin compact dashboard */
+.row-main-cell {
+    -fx-min-width: 0;
+}
+
+.user-row-actions {
+    -fx-min-width: 0;
+}
+
+.user-primary-action-btn {
+    -fx-min-width: 84;
+    -fx-pref-width: 84;
+    -fx-max-width: 84;
+    -fx-padding: 5 6 5 6;
+}
+
+.product-title,
+.category-title,
+.row-link,
+.row-meta,
+.row-metric {
+    -fx-text-overrun: ellipsis;
+}

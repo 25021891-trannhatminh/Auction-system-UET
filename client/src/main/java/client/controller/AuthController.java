@@ -282,9 +282,9 @@ public class AuthController {
                     SessionManager.setCurrentUser(user);
 
                     if (user.getSystemRole() == SystemRole.ADMIN) {
-                        switchScene("/client/admin-home.fxml", "Admin Dashboard");
+                        switchScene("/client/admin-home.fxml", "Admin Dashboard", user);
                     } else {
-                        switchScene("/client/user-home.fxml", "User Dashboard");
+                        switchScene("/client/user-home.fxml", "User Dashboard", user);
                     }
                 } catch (IllegalArgumentException e) {
                     showError(signInMessageLabel, "Role hoặc trạng thái tài khoản không khớp client.");
@@ -421,13 +421,13 @@ public class AuthController {
         return value == null || value.isBlank() ? fallbackValue : value;
     }
 
-    private void switchScene(String fxmlPath, String title) throws Exception {
+    private void switchScene(String fxmlPath, String title, User user) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();
 
         Object controller = loader.getController();
         if (controller instanceof BaseDashboardController dashboardController) {
-            dashboardController.refreshUserMeta();
+            dashboardController.applyLoggedInUser(user);
         }
 
         Stage stage = (Stage) signInIdentityField.getScene().getWindow();

@@ -63,9 +63,9 @@ public class LoginController {
                 SessionManager.setCurrentUser(user);
 
                 if (user.getSystemRole() == SystemRole.ADMIN) {
-                    switchScene("/client/admin-home.fxml", "Admin Home");
+                    switchScene("/client/admin-home.fxml", "Admin Home", user);
                 } else {
-                    switchScene("/client/user-home.fxml", "User Home");
+                    switchScene("/client/user-home.fxml", "User Home", user);
                 }
             } catch (Exception e) {
                 messageLabel.setText("Không thể chuyển màn hình.");
@@ -167,13 +167,13 @@ public class LoginController {
         return value == null || value.isBlank() ? fallbackValue : value;
     }
 
-    private void switchScene(String fxmlPath, String title) throws Exception {
+    private void switchScene(String fxmlPath, String title, User user) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();
 
         Object controller = loader.getController();
         if (controller instanceof BaseDashboardController dashboardController) {
-            dashboardController.refreshUserMeta();
+            dashboardController.applyLoggedInUser(user);
         }
 
         Stage stage = (Stage) usernameField.getScene().getWindow();

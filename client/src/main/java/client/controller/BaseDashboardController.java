@@ -138,6 +138,8 @@ public abstract class BaseDashboardController {
     private final List<Label> insightTitleLabels = new ArrayList<>();
     private final List<Label> insightValueLabels = new ArrayList<>();
 
+    private User dashboardUser;
+
     protected abstract Map<String, SectionContent> createSections();
 
     protected abstract String getDefaultSectionKey();
@@ -152,20 +154,33 @@ public abstract class BaseDashboardController {
         showSection(getDefaultSectionKey());
     }
 
+    public void applyLoggedInUser(User user) {
+        if (user != null) {
+            dashboardUser = user;
+            SessionManager.setCurrentUser(user);
+        }
+        refreshUserMeta();
+    }
+
     protected void refreshUserMeta() {
         User user = SessionManager.getCurrentUser();
+        if (user == null) {
+            user = dashboardUser;
+        } else {
+            dashboardUser = user;
+        }
 
-        String username = user != null && user.getUsername() != null
-                ? user.getUsername()
-                : "Guest User";
+        String username = hasText(user == null ? null : user.getUsername())
+                ? user.getUsername().trim()
+                : "";
 
-        String email = user != null && user.getEmail() != null
-                ? user.getEmail()
-                : username.toLowerCase().replace(" ", ".") + "@auction.local";
+        String email = hasText(user == null ? null : user.getEmail())
+                ? user.getEmail().trim()
+                : "";
 
         String role = user != null && user.getSystemRole() != null
                 ? user.getSystemRole().name()
-                : getRoleTitle();
+                : "";
 
         setText(usernameLabel, username);
         setText(emailLabel, email);
@@ -275,6 +290,10 @@ public abstract class BaseDashboardController {
         }
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     private void setText(Label label, String value) {
         if (label != null) {
             String safeValue = value == null ? "" : value;
@@ -289,7 +308,7 @@ public abstract class BaseDashboardController {
         String[] parts = username == null ? new String[0] : username.trim().split("\\s+");
 
         if (parts.length == 0 || parts[0].isBlank()) {
-            return "AU";
+            return "U";
         }
 
         if (parts.length == 1) {
