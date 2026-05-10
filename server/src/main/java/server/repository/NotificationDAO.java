@@ -53,6 +53,11 @@ public class NotificationDAO {
   private static final String SQL_MARK_AS_READ =
       "UPDATE NOTIFICATIONS SET is_read = TRUE WHERE notif_id = ?";
 
+  private static final String SQL_DELETE_BY_USER =
+      "DELETE FROM NOTIFICATIONS WHERE user_id = ?";
+
+  private static final String SQL_MARK_ALL_READ =
+      "UPDATE NOTIFICATIONS SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE";
   // ============================================================
   // SELECT Methods
   // ============================================================
@@ -233,6 +238,28 @@ public class NotificationDAO {
       logger.error("markAsRead failed for notifId={}", notifId, e);
     }
     return false;
+  }
+
+  public boolean deleteByUserId(int userId) {
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_DELETE_BY_USER)) {
+      ps.setInt(1, userId);
+      return ps.executeUpdate() > 0;
+    } catch (SQLException e) {
+      logger.error("deleteByUserId failed for userId={}", userId, e);
+      return false;
+    }
+  }
+
+  public int markAllAsRead(int userId) {
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_MARK_ALL_READ)) {
+      ps.setInt(1, userId);
+      return ps.executeUpdate(); // Trả về số lượng thông báo đã cập nhật
+    } catch (SQLException e) {
+      logger.error("markAllAsRead failed for userId={}", userId, e);
+      return 0;
+    }
   }
 
   // ============================================================

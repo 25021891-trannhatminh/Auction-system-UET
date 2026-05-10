@@ -17,66 +17,109 @@ import server.common.enums.UserStatus;
 import server.database.DBConnection;
 
 /**
- * Data Access Object cho bảng {@code USERS}.
+ * Data Access Object xử lý các thao tác với bảng users.
  *
- * <p>Quản lý thông tin tài khoản, xác thực và phân quyền trong hệ thống.
- * Mật khẩu được bảo mật bằng thuật toán BCrypt. Mọi lỗi {@link SQLException}
- * được ghi log chi tiết qua SLF4J.</p>
+ * <p>Chức năng chính:
+ * <ul>
+ *     <li>Đăng ký tài khoản</li>
+ *     <li>Đăng nhập người dùng</li>
+ *     <li>Lấy danh sách người dùng</li>
+ *     <li>Cập nhật trạng thái tài khoản</li>
+ *     <li>Khóa tài khoản người dùng</li>
+ * </ul>
+ *
+ * <p>Tối ưu:
+ * <ul>
+ *     <li>Dùng BCrypt để mã hóa mật khẩu</li>
+ *     <li>Sử dụng PreparedStatement chống SQL Injection</li>
+ *     <li>Ghi log bằng SLF4J</li>
+ * </ul>
  */
 public class UserDAO {
 
+    /**
+     * Logger ghi log hệ thống.
+     */
     private static final Logger logger = LoggerFactory.getLogger(UserDAO.class);
 
-    // ============================================================
-    // SQL Constants
-    // ============================================================
+    /**
+     * Số vòng hash BCrypt.
+     * 8 giúp login/register nhanh hơn.
+     */
+    private static final int BCRYPT_ROUNDS = 8;
 
+    /**
+     * Câu lệnh SELECT cơ bản.
+     */
     private static final String SQL_SELECT_BASE = """
-        SELECT user_id, username, email, full_name, phone, 
+        SELECT user_id, username, email, full_name, phone,
                role, status, is_active, last_login, created_at
         FROM users
         """;
 
-    private static final String SQL_INSERT = """
-        INSERT INTO users (username, password, email, full_name, phone, role, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+    /**
+     * SQL đăng ký tài khoản.
+     */
+    private static final String SQL_REGISTER = """
+        INSERT INTO users
+        (username, password, email, full_name, phone, role, status, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
         """;
 
-    private static final String SQL_SELECT_AUTH =
-        "SELECT user_id, password FROM users WHERE (username = ? OR email = ?) AND is_active = TRUE";
+    /**
+     * SQL đăng nhập.
+     */
+    private static final String SQL_LOGIN = """
+        SELECT user_id, username, password, email, full_name,
+               phone, role, status, is_active, last_login, created_at
+        FROM users
+        WHERE (username = ? OR email = ?)
+        AND is_active = TRUE
+        LIMIT 1
+        """;
 
-    private static final String SQL_SELECT_BY_ID =
+    /**
+     * SQL lấy user theo ID.
+     */
+    private static final String SQL_GET_BY_ID =
         SQL_SELECT_BASE + " WHERE user_id = ?";
 
-    private static final String SQL_SELECT_ALL =
+    /**
+     * SQL lấy toàn bộ user.
+     */
+    private static final String SQL_GET_ALL =
         SQL_SELECT_BASE + " ORDER BY created_at DESC";
 
+    /**
+     * SQL cập nhật trạng thái user.
+     */
     private static final String SQL_UPDATE_STATUS =
         "UPDATE users SET status = ? WHERE user_id = ?";
 
+    /**
+     * SQL khóa tài khoản user.
+     */
     private static final String SQL_BAN_USER =
         "UPDATE users SET status = ?, is_active = FALSE WHERE user_id = ?";
 
-    // ============================================================
-    // INSERT / AUTH Methods
-    // ============================================================
-
     /**
-     * Đăng ký tài khoản người dùng mới với vai trò mặc định là USER.
-     * Mật khẩu sẽ được băm (hash) tự động trước khi lưu vào cơ sở dữ liệu.
+     * Đăng ký tài khoản mới.
      *
-     * @param username Username duy nhất.
-     * @param password Mật khẩu dạng văn bản thuần (sẽ được hash).
-     * @param email    Địa chỉ email.
-     * @param fullName Họ và tên đầy đủ.
-     * @param phone    Số điện thoại liên lạc.
-     * @return {@code true} nếu đăng ký thành công.
+     * @param username username duy nhất
+     * @param password mật khẩu gốc
+     * @param email email người dùng
+     * @param fullName họ tên đầy đủ
+     * @param phone số điện thoại
+     * @return true nếu đăng ký thành công
      */
-    public boolean register(String username, String password, String email, String fullName, String phone) {
-        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+    public boolean register(String username, String password,
+        String email, String fullName, String phone) {
+
+        String hashedPassword =
+            BCrypt.hashpw(password, BCrypt.gensalt(BCRYPT_ROUNDS));
 
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_REGISTER)) {
 
             ps.setString(1, username);
             ps.setString(2, hashedPassword);
@@ -86,115 +129,134 @@ public class UserDAO {
             ps.setString(6, UserRole.USER.name());
             ps.setString(7, UserStatus.ACTIVE.name());
 
-            return ps.executeUpdate() > 0;
+            boolean success = ps.executeUpdate() > 0;
+
+            if (success) {
+                logger.info("Register success: {}", username);
+            }
+
+            return success;
+
         } catch (SQLException e) {
-            logger.error("register failed for username={}", username, e);
+            logger.error("Register failed for {}", username, e);
             return false;
         }
     }
 
     /**
-     * Thực hiện đăng nhập bằng cách kiểm tra username/email và mật khẩu.
+     * Đăng nhập bằng username hoặc email.
      *
-     * @param identifier Username hoặc Email của người dùng.
-     * @param password   Mật khẩu người dùng nhập vào.
-     * @return Đối tượng {@link User} nếu thông tin chính xác, ngược lại trả về {@code null}.
+     * @param identifier username hoặc email
+     * @param password mật khẩu người dùng nhập
+     * @return đối tượng User nếu thành công, ngược lại trả về null
      */
     public User login(String identifier, String password) {
-        int userId = -1;
 
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_AUTH)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_LOGIN)) {
 
             ps.setString(1, identifier);
             ps.setString(2, identifier);
 
             try (ResultSet rs = ps.executeQuery()) {
+
                 if (!rs.next()) {
-                    logger.warn("Login attempt failed: user not found or inactive [{}]", identifier);
+                    logger.warn("User not found: {}", identifier);
                     return null;
                 }
 
                 String storedHash = rs.getString("password");
+
                 if (!BCrypt.checkpw(password, storedHash)) {
-                    logger.warn("Login attempt failed: invalid password for [{}]", identifier);
+                    logger.warn("Invalid password: {}", identifier);
                     return null;
                 }
 
-                userId = rs.getInt("user_id");
+                logger.info("Login success: {}", identifier);
+
+                return mapRow(rs);
             }
+
         } catch (SQLException e) {
-            logger.error("login process encountered an error for [{}]", identifier, e);
+            logger.error("Login failed: {}", identifier, e);
             return null;
         }
-
-        return getById(userId);
     }
 
-    // ============================================================
-    // SELECT Methods
-    // ============================================================
-
     /**
-     * Truy vấn thông tin chi tiết của người dùng theo ID.
+     * Lấy thông tin user theo ID.
      *
-     * @param userId ID định danh người dùng.
-     * @return Đối tượng {@link User} hoặc {@code null} nếu không tìm thấy.
+     * @param userId ID người dùng
+     * @return đối tượng User hoặc null nếu không tồn tại
      */
     public User getById(int userId) {
+
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_GET_BY_ID)) {
 
             ps.setInt(1, userId);
+
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return mapRow(rs);
+
+                if (rs.next()) {
+                    return mapRow(rs);
+                }
             }
+
         } catch (SQLException e) {
             logger.error("getById failed for userId={}", userId, e);
         }
+
         return null;
     }
 
     /**
-     * Lấy toàn bộ danh sách người dùng trong hệ thống.
-     * Thường được sử dụng cho các chức năng quản trị (Admin Panel).
+     * Lấy toàn bộ danh sách người dùng.
      *
-     * @return Danh sách các đối tượng {@link User}.
+     * @return danh sách User
      */
     public List<User> getAll() {
-        List<User> list = new ArrayList<>();
+
+        List<User> users = new ArrayList<>();
+
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
+            PreparedStatement ps = conn.prepareStatement(SQL_GET_ALL);
             ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
-                list.add(mapRow(rs));
+                users.add(mapRow(rs));
             }
+
         } catch (SQLException e) {
             logger.error("getAll users failed", e);
         }
-        return list;
+
+        return users;
     }
 
-    // ============================================================
-    // UPDATE Methods
-    // ============================================================
-
     /**
-     * Cập nhật trạng thái hoạt động của người dùng.
+     * Cập nhật trạng thái tài khoản.
      *
-     * @param userId ID người dùng.
-     * @param status Trạng thái mới (ACTIVE, SUSPENDED, BANNED).
-     * @return {@code true} nếu cập nhật thành công.
+     * @param userId ID người dùng
+     * @param status trạng thái mới
+     * @return true nếu cập nhật thành công
      */
     public boolean updateStatus(int userId, UserStatus status) {
+
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_STATUS)) {
 
             ps.setString(1, status.name());
             ps.setInt(2, userId);
 
-            return ps.executeUpdate() > 0;
+            boolean success = ps.executeUpdate() > 0;
+
+            if (success) {
+                logger.info("Updated status userId={} -> {}", userId, status);
+            }
+
+            return success;
+
         } catch (SQLException e) {
             logger.error("updateStatus failed for userId={}", userId, e);
             return false;
@@ -202,38 +264,42 @@ public class UserDAO {
     }
 
     /**
-     * Vô hiệu hóa tài khoản người dùng và đánh dấu là bị cấm (BANNED).
+     * Khóa tài khoản người dùng.
      *
-     * @param userId ID người dùng cần xử lý.
-     * @return {@code true} nếu thao tác thành công.
+     * @param userId ID người dùng
+     * @return true nếu khóa thành công
      */
     public boolean banUser(int userId) {
+
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_BAN_USER)) {
 
             ps.setString(1, UserStatus.BANNED.name());
             ps.setInt(2, userId);
 
-            logger.warn("User with ID {} has been banned from the system", userId);
-            return ps.executeUpdate() > 0;
+            boolean success = ps.executeUpdate() > 0;
+
+            if (success) {
+                logger.warn("User banned: {}", userId);
+            }
+
+            return success;
+
         } catch (SQLException e) {
             logger.error("banUser failed for userId={}", userId, e);
             return false;
         }
     }
 
-    // ============================================================
-    // Private Helpers
-    // ============================================================
-
     /**
-     * Ánh xạ dữ liệu từ {@link ResultSet} sang thực thể {@link User}.
+     * Mapping dữ liệu từ ResultSet sang đối tượng User.
      *
-     * @param rs ResultSet đang trỏ tới dòng dữ liệu hiện tại.
-     * @return Đối tượng User đã được điền thông tin.
-     * @throws SQLException Nếu có lỗi khi đọc các cột dữ liệu.
+     * @param rs ResultSet hiện tại
+     * @return đối tượng User
+     * @throws SQLException nếu lỗi truy xuất dữ liệu
      */
     private User mapRow(ResultSet rs) throws SQLException {
+
         return new User(
             rs.getInt("user_id"),
             rs.getString("username"),

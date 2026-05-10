@@ -1,21 +1,35 @@
 package server.network;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientManager {
-    private static final List<ClientHandler> clients = new ArrayList<>();
+    private static final Map<Integer, ClientHandler> clients = new ConcurrentHashMap<>();
 
-    public static synchronized void add(ClientHandler c) {
-        clients.add(c);
+    public static void add(int userId, ClientHandler handler) {
+        clients.put(userId, handler);
     }
 
-    public static synchronized void remove(ClientHandler c) {
-        clients.remove(c);
+    public static void remove(int userId) {
+        clients.remove(userId);
+    }
+    public static ClientHandler getHandler(int userId) {
+        return clients.get(userId);
     }
 
-    public static synchronized void broadcast(String msg) {
-        for (ClientHandler c : clients) {
-            c.send(msg);
+    public static boolean sendToUser(int userId, String msg) {
+        ClientHandler handler = clients.get(userId);
+        if (handler != null) {
+            handler.send(msg);
+            return true;
         }
+        return false; // Người dùng không online
+    }
+
+    public static void broadcast(String msg) {
+        clients.values().forEach(handler -> handler.send(msg));
+    }
+    public static boolean isOnline(int userId) {
+        return clients.containsKey(userId);
     }
 }

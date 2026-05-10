@@ -11,9 +11,7 @@ import java.sql.Timestamp;
  * <p>Dùng để truyền dữ liệu thông báo giữa các tầng trong hệ thống
  * (DAO → Service → Controller → Client).</p>
  */
-public class NotificationDTO implements Serializable {
-
-  private static final long serialVersionUID = 1L;
+public class NotificationDTO {
 
   /** ID thông báo (Primary Key) */
   private int notifId;
