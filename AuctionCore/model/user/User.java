@@ -1,92 +1,112 @@
 package model.user;
 
-import enums.UserRole;
+import enums.AccountRole;
 import enums.UserStatus;
-import model.Entity;
-import org.mindrot.jbcrypt.BCrypt;
+import exception.InsufficientBalanceException;
+import model.AutoBidConfig;
+
 import java.time.LocalDateTime;
+import java.util.*;
 
 /*
-    User
-    Mọi user đều phải là Bidder, Seller hoặc Admin.
-    password dưới dạng hash (bcrypt) — KHÔNG lưu plaintext.
-
-    UI: UserRole được map sang cột role (ENUM) trong DB.
-    Tầng DAO sẽ gọi UserFactory để tạo đúng subclass khi load từ DB.
+    User: Bidder, Seller nói chung
+        DB: listedItemIds ánh xạ sang items.seller_id.
+        DAO sẽ lazy-load danh sách item khi cần.
+        UI: hiển thị trên profile trang Seller.
  */
-public abstract class User extends Entity {
+public class User extends Account {
+    private double balance;
+    private final Map<String, AutoBidConfig> autoBidMap;    // <AuctionID, AutoBidConfig>
+    private double rating;            // 0.0 – 5.0
+    private final List<String> itemIDs; // FK sang items.item_id
 
-    private String   username;
-    private String   email;
-    private String   passwordHash;  // bcrypt hash — không bao giờ lưu plaintext
-    private String   fullName;
-    private String   phone;
-    private UserRole role;
-    private UserStatus  status;
-    private LocalDateTime lastLogin;
-
-    protected User(String username, String email, String passwordHash,
-                   String fullName, String phone, UserRole role) {
-        super();
-        this.username     = username;
-        this.email        = email;
-        this.passwordHash = passwordHash;
-        this.fullName     = fullName;
-        this.phone        = phone;
-        this.role         = role;
-        this.status     = UserStatus.ACTIVE;
-        this.lastLogin    = null;
+    public User(String username, String email, String passwordHash,
+                   String fullName, String phone) {
+        super(username, email, passwordHash, fullName, phone, AccountRole.USER);
+        this.rating        = 0.0;
+        this.itemIDs = new ArrayList<>();
+        this.balance    = 0.0;
+        this.autoBidMap = new HashMap<>();
     }
 
     /* Constructor dùng khi load từ DB */
-    protected User(String id, LocalDateTime createdAt,
+    public User(String id, LocalDateTime createdAt,
                    String username, String email, String passwordHash,
-                   String fullName, String phone, UserRole role,
-                   UserStatus status, LocalDateTime lastLogin) {
-        super(id, createdAt);
-        this.username     = username;
-        this.email        = email;
-        this.passwordHash = passwordHash;
-        this.fullName     = fullName;
-        this.phone        = phone;
-        this.role         = role;
-        this.status     = status;
-        this.lastLogin    = lastLogin;
+                   String fullName, String phone,
+                   UserStatus status, LocalDateTime lastLogin,double rating, double balance) {
+        super(id, createdAt, username, email, passwordHash, fullName, phone,
+            AccountRole.USER, status, lastLogin);
+        this.rating        = rating;
+        this.itemIDs = new ArrayList<>();
+        this.balance    = balance;
+        this.autoBidMap = new HashMap<>();
     }
 
+
+    // == ITEM ==
+    public void addItem(String itemId)    { itemIDs.add(itemId); }
+    public void removeItem(String itemId) { itemIDs.remove(itemId); }
+
+    public double          getRating()       { return rating; }
+    public List<String>    getItemIds(){ return Collections.unmodifiableList(itemIDs); }    // Return 1 tham chiếu (view) đến List (nhưng đã Override các phương thức để không thể sửa đổi)
+
+    public void updateRating(double newRating) {
+        if (newRating < 0 || newRating > 5)
+            throw new IllegalArgumentException("Rating must be between 0 and 5");
+        this.rating = newRating;
+    }
+
+
+    // == BID, BALANCE ==
+    public double getBalance() { return balance; }
+
+    // Nạp tiền
+    public void deposit(double amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Deposit amount must be positive");
+        this.balance += amount;
+    }
+
+    // Thanh toán
+    //Ném InsufficientBalanceException nếu không đủ số dư.
+
+    public void debit(double amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Debit amount must be positive");
+        if (this.balance < amount)
+            throw new InsufficientBalanceException(amount, this.balance);
+        this.balance -= amount;
+    }
+
+    /* Kiểm tra nhanh mà không thay đổi state */
+    public boolean canAfford(double amount) {
+        return this.balance >= amount;
+    }
+
+    // __ Auto-Bid __
 
     /*
-         Kiểm tra mật khẩu người dùng nhập có khớp hash không.
-         Tầng thực tế sẽ dùng BCrypt.checkpw(rawPassword, passwordHash).
+        Add hoặc update AutoBidConfig cho 1 Auction.
+        Nếu đã có config cũ cho auctionId này → ghi đè .
      */
-    public boolean verifyPassword(String plainPassword) {
-        return BCrypt.checkpw(plainPassword, passwordHash);
+    public void setAutoBid(AutoBidConfig config) {
+        autoBidMap.put(config.getAuctionId(), config);
     }
 
-    public void recordLogin() {
-        this.lastLogin = LocalDateTime.now();
+    /* Hủy auto-bid cho một phiên cụ thể */
+    public void cancelAutoBid(String auctionId) {
+        AutoBidConfig config = autoBidMap.get(auctionId);
+        if (config != null) {
+            config.cancel();
+            autoBidMap.remove(auctionId);
+        }
     }
 
-    // ── Getters / Setters ────────────────────────────────────────────────────
-
-    public String      getUsername()     { return username; }
-    public String      getEmail()        { return email; }
-    public String      getPasswordHash() { return passwordHash; }
-    public String      getFullName()     { return fullName; }
-    public String      getPhone()        { return phone; }
-    public UserRole    getRole()         { return role; }
-    public UserStatus     getStatus()        { return status; }
-    public LocalDateTime getLastLogin()  { return lastLogin; }
-
-    public void setActive()   { this.status = UserStatus.ACTIVE; }
-    public void setFullName(String name)    { this.fullName = name; }
-    public void setPhone(String phone)      { this.phone = phone; }
-    public void setEmail(String email)      { this.email = email; }
-    public void setPasswordHash(String h)   { this.passwordHash = h; }
-
-    @Override
-    public void printInfo() {
-        System.out.printf("[%s] %s (%s) | email: %s | active: %s%n",
-            role, username, fullName != null ? fullName : "—", email, status);
+    /* Lấy config auto-bid đang active trong 1 auction */
+    public AutoBidConfig getAutoBidConfig(String auctionId) {
+        return autoBidMap.getOrDefault(auctionId, null);
     }
+
+    public boolean hasAutoBid(String auctionId) {
+        return autoBidMap.containsKey(auctionId);
+    }
+
 }

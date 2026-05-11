@@ -33,8 +33,8 @@ public abstract class Item extends Entity {
 
     /* Constructor load từ DB */
     protected Item(String id, LocalDateTime createdAt,
-        String sellerId, String name, String description,
-        double startingPrice) {
+                   String sellerId, String name, String description,
+                   double startingPrice) {
         super(id, createdAt);
         this.sellerId      = sellerId;
         this.name          = name;

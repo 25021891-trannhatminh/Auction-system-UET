@@ -1,0 +1,48 @@
+name: CI/CD for Auction System
+
+on:
+  push:
+    branches: [ main, dev ]
+#  pull_request:
+#    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    # strategy:
+    #   matrix:
+    #     os: [ubuntu-latest, windows-latest]
+    # runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+#      - name: Build with Maven (skip docs)
+#        run: mvn clean install -DskipTests   # Build toàn bộ module, bỏ qua test để kiểm tra compile
+
+      - name: Run tests
+        run: mvn test
+
+#      # JAR file cho client và server
+#      - name: Package application
+#        run: mvn package
+#
+#      - name: Upload client JAR
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: client-jar
+#          path: client/target/*.jar
+#
+#      - name: Upload server JAR
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: server-jar
+#          path: server/target/*.jar

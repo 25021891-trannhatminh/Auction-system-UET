@@ -9,5 +9,7 @@ public enum NotificationType {
   AUCTION_ENDED,
   PAYMENT_RECEIVED,
   PAYMENT_DUE,
-  SYSTEM
+  SYSTEM,
+  ITEM_APPROVED,
+  ITEM_REJECTED
 }

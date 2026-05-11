@@ -15,14 +15,14 @@ import java.time.format.DateTimeFormatter;
  *       - DatabaseObserver      : lưu notification vào DB (DAO layer)
  *       - JavaFXObserver        : cập nhật UI trên JavaFX thread (UI layer)
  *
- * ⚠️  Kết nối UI (JavaFX):
+ * Kết nối UI (JavaFX):
  *   Khi tích hợp JavaFX, tạo JavaFXObserver implements AuctionObserver:
  *
  *   @Override
  *   public void onBidUpdated(Auction auction, BidTransaction tx) {
  *       Platform.runLater(() -> {
  *           // Cập nhật Label giá hiện tại
- *         +  currentPriceLabel.setText(String.format("%.2f", auction.getCurrentPrice()));
+ *           currentPriceLabel.setText(String.format("%.2f", auction.getCurrentPrice()));
  *           // Thêm row vào TableView lịch sử bid
  *           bidHistoryTable.getItems().add(0, tx);
  *           // Highlight người dẫn đầu
@@ -30,7 +30,7 @@ import java.time.format.DateTimeFormatter;
  *       });
  *   }
  *
- * ⚠️  Kết nối Server (Socket):
+ * Kết nối Server (Socket):
  *   ClientSocketObserver implements AuctionObserver:
  *
  *   @Override

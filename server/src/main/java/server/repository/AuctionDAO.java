@@ -79,6 +79,9 @@ public class AuctionDAO {
     private static final String SQL_DELETE =
         "DELETE FROM auctions WHERE auction_id = ?";
 
+    private static final String SQL_CHECK_ITEM_AVAILABLE =
+        "SELECT status FROM items WHERE item_id = ? AND status = 'AVAILABLE'";
+
     // ============================================================
     // Public methods
     // ============================================================
@@ -90,6 +93,11 @@ public class AuctionDAO {
      * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
      */
     public boolean create(AuctionDTO dto) {
+        if (!isItemAvailable(dto.getItemId())) {
+            logger.warn("create() – itemId={} is not AVAILABLE", dto.getItemId());
+            return false;
+        }
+
         logger.debug("create() – itemId={}, sellerId={}, status={}",
             dto.getItemId(), dto.getSellerId(), dto.getStatus());
 
@@ -122,6 +130,29 @@ public class AuctionDAO {
         }
     }
 
+    /**
+     * Kiểm tra xem một sản phẩm có đang ở trạng thái sẵn sàng để bắt đầu đấu giá hay không.
+     * * <p>Một sản phẩm được coi là "Available" khi nó tồn tại trong hệ thống và có
+     * {@code status = 'AVAILABLE'}. Chỉ những sản phẩm ở trạng thái này mới có thể
+     * được gán vào một phiên đấu giá (Auction) mới.</p>
+     *
+     * @param itemId ID của sản phẩm cần kiểm tra.
+     * @return {@code true} nếu sản phẩm tồn tại và sẵn sàng cho đấu giá;
+     * {@code false} nếu sản phẩm không tồn tại, đang trong phiên đấu giá khác,
+     * hoặc đã bị xóa/đang chờ duyệt.
+     */
+    private boolean isItemAvailable(int itemId) {
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_CHECK_ITEM_AVAILABLE)) {
+            ps.setInt(1, itemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next(); // có row → AVAILABLE
+            }
+        } catch (SQLException e) {
+            logger.error("isItemAvailable() – DB error for itemId={}", itemId, e);
+            return false;
+        }
+    }
     /**
      * Lấy thông tin phiên đấu giá theo ID.
      *

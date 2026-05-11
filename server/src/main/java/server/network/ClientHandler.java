@@ -29,7 +29,7 @@ public class ClientHandler implements Runnable {
     private String username = "Guest"; // Tên hiển thị mặc định
 
     private UserDAO userDAO = new UserDAO();
-
+    private int userId;
     // Giả sử AuctionItem là một class hỗ trợ lưu thông tin vật phẩm
     private static Map<String, AuctionItem> items = new HashMap<>();
 
@@ -62,8 +62,16 @@ public class ClientHandler implements Runnable {
         } catch (Exception e) {
             System.out.println("Client " + username + " disconnected");
         } finally {
-            ClientManager.remove(this);
-            try { socket.close(); } catch (IOException e) { e.printStackTrace(); }
+            if(this.userId != 0){
+                ClientManager.remove(this.userId);
+            }
+            try {
+                if(socket != null && !socket.isClosed()){
+                    socket.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -91,7 +99,9 @@ public class ClientHandler implements Runnable {
                     User u = userDAO.login(identifier, pass);
                     if (u != null) {
                         // Cập nhật username của session này từ DB
+                        this.userId = u.getUserId();
                         this.username = u.getUsername();
+                        ClientManager.add(this.userId,this);
                         send("LOGIN_SUCCESS " + fields(
                                 u.getUserId(),
                                 u.getUsername(),
