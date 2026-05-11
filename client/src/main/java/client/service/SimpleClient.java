@@ -5,7 +5,7 @@ import java.util.Scanner;
 public class SimpleClient {
     public static void main(String[] args) {
         NetworkManager net = new NetworkManager();
-        NotificationHandler notifHandler = new NotificationHandler();
+        NotificationUIHandler notifHandler = new NotificationUIHandler();
 
         net.setMessageHandler(msg -> {
             if (msg.startsWith("PUSH_NOTIF|")) {

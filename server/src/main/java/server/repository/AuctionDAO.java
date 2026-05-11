@@ -82,6 +82,9 @@ public class AuctionDAO {
     private static final String SQL_CHECK_ITEM_AVAILABLE =
         "SELECT status FROM items WHERE item_id = ? AND status = 'AVAILABLE'";
 
+    private static final String SQL_UPDATE_PAYMENT_STATUS =
+        "UPDATE auctions SET is_paid = ? WHERE auction_id = ?";
+
     // ============================================================
     // Public methods
     // ============================================================
@@ -126,6 +129,27 @@ public class AuctionDAO {
 
         } catch (SQLException e) {
             logger.error("create() – DB error for itemId={}", dto.getItemId(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Cập nhật trạng thái thanh toán cho phiên đấu giá.
+     * * @param auctionId ID phiên đấu giá
+     * @param isPaid true nếu đã thanh toán
+     * @return true nếu cập nhật thành công
+     */
+    public boolean updatePaymentStatus(int auctionId, boolean isPaid) {
+        logger.debug("updatePaymentStatus() – auctionId={}, isPaid={}", auctionId, isPaid);
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_PAYMENT_STATUS)) {
+
+            ps.setBoolean(1, isPaid);
+            ps.setInt(2, auctionId);
+
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            logger.error("updatePaymentStatus() – DB error for auctionId={}", auctionId, e);
             return false;
         }
     }

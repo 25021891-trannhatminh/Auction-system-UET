@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 
 import server.common.entity.User;
-import server.common.util.AccountValidator;
 import server.database.DBConnection;
 import server.repository.UserDAO;
 
@@ -130,18 +129,9 @@ public class ClientHandler implements Runnable {
 
                 String regUser = p[1];
                 String regPass = p[2];
-                String regEmail = AccountValidator.normalizeEmail(p[3]);
-                String regFullName = decodeProtocolSpaces(p[4]);
-                String regPhone = AccountValidator.normalizePhone(p[5]);
-
-                if (regUser.isBlank() || regPass.isBlank() || regFullName.isBlank()
-                        || containsWhitespace(regUser) || containsWhitespace(regPass)
-                        || regPass.length() < 6
-                        || !AccountValidator.isValidGmailAddress(regEmail)
-                        || !AccountValidator.isValidVietnamesePhone(regPhone)) {
-                    send("REGISTER_FAIL INVALID_FORMAT");
-                    return;
-                }
+                String regEmail = p[3];
+                String regFullName = p[4];
+                String regPhone = p[5];
 
                 try {
                     // Gọi đúng hàm register đã sửa trong UserDAO (5 tham số)
@@ -205,14 +195,6 @@ public class ClientHandler implements Runnable {
                 send("UNKNOWN_COMMAND");
                 break;
         }
-    }
-
-    private String decodeProtocolSpaces(String value) {
-        return value == null ? "" : value.replace('\u00A0', ' ').trim();
-    }
-
-    private boolean containsWhitespace(String value) {
-        return value != null && value.matches(".*\\s+.*");
     }
 
     private void sendAdminUsers() {

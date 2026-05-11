@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory;
 import server.common.entity.User;
 import server.common.enums.UserRole;
 import server.common.enums.UserStatus;
-import server.common.util.AccountValidator;
 import server.database.DBConnection;
 
 /**
@@ -113,29 +112,20 @@ public class UserDAO {
      * @param phone số điện thoại
      * @return true nếu đăng ký thành công
      */
-    public boolean register(String username, String password, String email, String fullName, String phone) {
-        String normalizedEmail = AccountValidator.normalizeEmail(email);
-        String normalizedPhone = AccountValidator.normalizePhone(phone);
+    public boolean register(String username, String password,
+        String email, String fullName, String phone) {
 
-        if (isBlank(username) || isBlank(password) || isBlank(fullName)
-                || containsWhitespace(username) || containsWhitespace(password)
-                || password.length() < 6
-                || !AccountValidator.isValidGmailAddress(normalizedEmail)
-                || !AccountValidator.isValidVietnamesePhone(normalizedPhone)) {
-            logger.warn("register rejected because account data has invalid format: username={}", username);
-            return false;
-        }
-
-        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+        String hashedPassword =
+            BCrypt.hashpw(password, BCrypt.gensalt(BCRYPT_ROUNDS));
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_REGISTER)) {
 
             ps.setString(1, username);
             ps.setString(2, hashedPassword);
-            ps.setString(3, normalizedEmail);
-            ps.setString(4, fullName == null ? "" : fullName.trim());
-            ps.setString(5, normalizedPhone);
+            ps.setString(3, email);
+            ps.setString(4, fullName);
+            ps.setString(5, phone);
             ps.setString(6, UserRole.USER.name());
             ps.setString(7, UserStatus.ACTIVE.name());
 
@@ -300,19 +290,6 @@ public class UserDAO {
             return false;
         }
     }
-
-    // ============================================================
-    // Private Helpers
-    // ============================================================
-
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private boolean containsWhitespace(String value) {
-        return value != null && value.matches(".*\\s+.*");
-    }
-
 
     /**
      * Mapping dữ liệu từ ResultSet sang đối tượng User.

@@ -11,7 +11,6 @@ import client.model.User;
 import client.service.AuthService;
 import client.service.NetworkManager;
 import client.service.SessionManager;
-import client.util.AccountValidator;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -195,9 +194,9 @@ public class AuthController {
     @FXML
     private void handleSignUp() {
         String username = signUpUsernameField.getText().trim();
-        String email = AccountValidator.normalizeEmail(signUpEmailField.getText());
+        String email = signUpEmailField.getText().trim();
         String fullName = signUpFullNameField.getText().trim();
-        String phone = AccountValidator.normalizePhone(signUpPhoneField.getText());
+        String phone = signUpPhoneField.getText().trim();
         String password = signUpPasswordField.getText().trim();
         String confirmPassword = signUpConfirmPasswordField.getText().trim();
 
@@ -214,13 +213,13 @@ public class AuthController {
             return;
         }
 
-        if (!AccountValidator.isValidGmailAddress(email)) {
-            showError(signUpMessageLabel, "Email phải là Gmail hợp lệ, ví dụ: tennguoidung@gmail.com.");
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
+            showError(signUpMessageLabel, "Email không hợp lệ.");
             return;
         }
 
-        if (!AccountValidator.isValidVietnamesePhone(phone)) {
-            showError(signUpMessageLabel, "Số điện thoại phải là số di động VN, ví dụ: 0912345678 hoặc +84912345678.");
+        if (!phone.matches("^[0-9+()\\-. ]{8,20}$")) {
+            showError(signUpMessageLabel, "Số điện thoại không hợp lệ.");
             return;
         }
 
@@ -239,7 +238,7 @@ public class AuthController {
                 password,
                 email,
                 normalizeFullNameForProtocol(fullName),
-                phone
+                normalizePhoneForProtocol(phone)
         );
 
         showSuccess(signUpMessageLabel, "Đang đăng ký...");
@@ -303,7 +302,7 @@ public class AuthController {
             }
 
             if (p[0].equals("REGISTER_SUCCESS")) {
-                String email = AccountValidator.normalizeEmail(signUpEmailField.getText());
+                String email = signUpEmailField.getText().trim();
                 String password = signUpPasswordField.getText().trim();
 
                 clearSignUpFields();
@@ -455,6 +454,10 @@ public class AuthController {
 
     private String normalizeFullNameForProtocol(String fullName) {
         return fullName.trim().replaceAll("\\s+", "\u00A0");
+    }
+
+    private String normalizePhoneForProtocol(String phone) {
+        return phone.trim().replaceAll("\\s+", "");
     }
 
     private void showError(Label label, String message) {

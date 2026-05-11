@@ -5,7 +5,7 @@ import java.net.Socket;
 import java.net.InetAddress;
 import server.service.AuctionService;
 import server.service.NotificationService;
-import server.service.listeners.NotificationHandler;
+import server.service.listeners.NotificationEventHandler;
 
 public class AuctionServer {
     public static void main(String[] args) {
@@ -18,7 +18,7 @@ public class AuctionServer {
             AuctionService auctionService = new AuctionService();
 
             // Đăng ký "Người nghe": Khi AuctionService có tin mới, nó sẽ tự báo cho NotificationHandler
-            NotificationHandler notifHandler = new NotificationHandler(notifService);
+            NotificationEventHandler notifHandler = new NotificationEventHandler(notifService);
             auctionService.addListener(notifHandler);
 
             // Chạy luồng gửi tin nhắn ngầm (Dispatcher)
