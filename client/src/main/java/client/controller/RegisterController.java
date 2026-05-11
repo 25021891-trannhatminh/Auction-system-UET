@@ -3,7 +3,6 @@ package client.controller;
 import client.SceneNavigator;
 import client.service.AuthService;
 import client.service.NetworkManager;
-import client.util.AccountValidator;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -38,9 +37,9 @@ public class RegisterController {
     @FXML
     public void handleRegister() {
         String username = usernameField.getText().trim();
-        String email = AccountValidator.normalizeEmail(emailField.getText());
+        String email = emailField.getText().trim();
         String fullName = fullNameField.getText().trim();
-        String phone = AccountValidator.normalizePhone(phoneField.getText());
+        String phone = phoneField.getText().trim();
         String password = passwordField.getText().trim();
         String confirmPassword = confirmPasswordField.getText().trim();
 
@@ -55,13 +54,13 @@ public class RegisterController {
             return;
         }
 
-        if (!AccountValidator.isValidGmailAddress(email)) {
-            showError("Email phải là Gmail hợp lệ, ví dụ: tennguoidung@gmail.com.");
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
+            showError("Email không hợp lệ.");
             return;
         }
 
-        if (!AccountValidator.isValidVietnamesePhone(phone)) {
-            showError("Số điện thoại phải là số di động VN");
+        if (!phone.matches("^[0-9+()\\-. ]{8,20}$")) {
+            showError("Số điện thoại không hợp lệ.");
             return;
         }
 
@@ -80,7 +79,7 @@ public class RegisterController {
                 password,
                 email,
                 normalizeFullNameForProtocol(fullName),
-                phone
+                normalizePhoneForProtocol(phone)
         );
 
         showSuccess("Đang đăng ký...");
@@ -144,6 +143,10 @@ public class RegisterController {
 
     private String normalizeFullNameForProtocol(String fullName) {
         return fullName.trim().replaceAll("\\s+", "\u00A0");
+    }
+
+    private String normalizePhoneForProtocol(String phone) {
+        return phone.trim().replaceAll("\\s+", "");
     }
 
     private void showError(String message) {

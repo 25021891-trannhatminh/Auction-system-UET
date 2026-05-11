@@ -12,7 +12,6 @@ client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
 client\controller\RegisterController.class
 client\model\AccountStatus.class
-client\util\AccountValidator.class
 client\controller\LoginController.class
 client\controller\BaseDashboardController.class
 client\model\SystemRole.class

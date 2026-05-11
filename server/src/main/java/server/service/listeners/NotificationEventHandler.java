@@ -3,10 +3,10 @@ package server.service.listeners;
 import server.service.NotificationService;
 import server.common.enums.NotificationType;
 
-public class NotificationHandler implements AuctionEventListener {
+public class NotificationEventHandler implements AuctionEventListener {
   private final NotificationService notificationService;
 
-  public NotificationHandler(NotificationService notificationService) {
+  public NotificationEventHandler(NotificationService notificationService) {
     this.notificationService = notificationService;
   }
 
