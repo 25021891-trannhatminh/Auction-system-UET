@@ -56,6 +56,7 @@ public class NotificationHandler implements AuctionEventListener {
   public void onPaymentDue(int buyerId, int auctionId, String itemName, double amount) {
     notificationService.push(buyerId, "Payment Required",
         "Please pay $" + amount + " for your won item: [" + itemName + "].",
+
         NotificationType.PAYMENT_DUE, auctionId);
   }
 
