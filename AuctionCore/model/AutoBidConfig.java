@@ -104,17 +104,17 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
     public AutoBidStatus getStatus()       { return status; }
     public LocalDateTime getRegisteredAt() { return registeredAt; }
 
-    public void setMaxBid(double maxBid) {
-        if (maxBid < this.increment)
-            throw new IllegalArgumentException("maxBid must be >= increment");
-        this.maxBid = maxBid;
-    }
+//    public void setMaxBid(double maxBid) {  // set MaxBid làm thay đổi AutoBidEngine
+//        if (maxBid < this.increment)
+//            throw new IllegalArgumentException("maxBid must be >= increment");
+//        this.maxBid = maxBid;
+//    }
 
-    public void setIncrement(double increment) {
-        if (increment <= 0)
-            throw new IllegalArgumentException("increment must be positive");
-        this.increment = increment;
-    }
+//    public void setIncrement(double increment) {  // set Increment làm thay đổi AutoBidEngine
+//        if (increment <= 0)
+//            throw new IllegalArgumentException("increment must be positive");
+//        this.increment = increment;
+//    }
 
     @Override
     public String toString() {

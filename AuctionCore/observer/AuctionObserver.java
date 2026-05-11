@@ -14,7 +14,7 @@ import model.BidTransaction;
  * Mỗi khi có sự kiện trong Auction, auction gọi notifyObservers()
  * → lần lượt gọi các method này trên tất cả observer đã đăng ký.
  *
- * ⚠️  Kết nối UI/Server:
+ * Kết nối UI/Server:
  *   ClientHandler (tầng network) sẽ implement interface này.
  *   Khi onBidUpdated() được gọi, ClientHandler serialize Auction state
  *   thành JSON và push qua Socket đến đúng client.
