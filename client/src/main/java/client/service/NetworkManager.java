@@ -1,7 +1,10 @@
 package client.service;
 
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
@@ -26,7 +29,7 @@ public class NetworkManager {
     private volatile boolean shouldReconnect = true;
     private volatile boolean isConnecting = false;
 
-    // 🔥 Queue để giữ message khi mất mạng
+    // Queue để giữ message khi mất mạng
     private final Queue<String> messageQueue = new ConcurrentLinkedQueue<>();
 
     public NetworkManager() {
@@ -69,7 +72,7 @@ public class NetworkManager {
 
                     System.out.println("✅ Connected");
 
-                    // 🔥 gửi lại message bị pending
+                    // gửi lại message bị pending
                     flushQueue();
 
                     listen();
@@ -96,7 +99,7 @@ public class NetworkManager {
             String msg;
             while ((msg = in.readLine()) != null) {
 
-                // 🔥 xử lý heartbeat response
+                // xử lý heartbeat response
                 if ("PONG".equals(msg)) continue;
 
                 if (messageHandler != null) {

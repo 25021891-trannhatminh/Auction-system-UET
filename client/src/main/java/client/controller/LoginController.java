@@ -102,8 +102,8 @@ public class LoginController {
 
         User user = new User(
                 legacy[0],
-                SystemRole.valueOf(legacy[1]),
-                AccountStatus.valueOf(legacy[2])
+                SystemRole.valueOf(legacy[1].toUpperCase()),
+                AccountStatus.valueOf(legacy[2].toUpperCase())
         );
 
         String identity = usernameField.getText().trim();
