@@ -4,37 +4,17 @@ public class User {
     private int userId;
     private String username;
     private String email;
-    private String passwordHash;
     private String fullName;
     private String phone;
     private SystemRole systemRole;
     private AccountStatus accountStatus;
-    private boolean active = true;
+    private boolean active;
 
     public User() {
     }
 
     public User(String username, SystemRole systemRole, AccountStatus accountStatus) {
         this.username = username;
-        this.systemRole = systemRole;
-        this.accountStatus = accountStatus;
-    }
-
-    public User(String username, String email, String passwordHash,
-                SystemRole systemRole, AccountStatus accountStatus) {
-        this.username = username;
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.systemRole = systemRole;
-        this.accountStatus = accountStatus;
-    }
-
-    public User(String username, String email, String fullName, String phone,
-                SystemRole systemRole, AccountStatus accountStatus) {
-        this.username = username;
-        this.email = email;
-        this.fullName = fullName;
-        this.phone = phone;
         this.systemRole = systemRole;
         this.accountStatus = accountStatus;
     }
@@ -67,43 +47,7 @@ public class User {
         this.username = username;
     }
 
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
-
-    public String getFullName() {
-        return fullName;
-    }
-
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
     public SystemRole getSystemRole() {
-        return systemRole;
-    }
-
-    public SystemRole getRole() {
         return systemRole;
     }
 
@@ -111,15 +55,7 @@ public class User {
         this.systemRole = systemRole;
     }
 
-    public void setRole(SystemRole systemRole) {
-        this.systemRole = systemRole;
-    }
-
     public AccountStatus getAccountStatus() {
-        return accountStatus;
-    }
-
-    public AccountStatus getStatus() {
         return accountStatus;
     }
 
@@ -127,14 +63,79 @@ public class User {
         this.accountStatus = accountStatus;
     }
 
-    public void setStatus(AccountStatus accountStatus) {
-        this.accountStatus = accountStatus;
+    public String getRole() {
+        return systemRole != null ? systemRole.name() : null;
     }
 
+    public String getStatus() {
+        return accountStatus != null ? accountStatus.name() : null;
+    }
+
+    public boolean isAdmin() {
+        return systemRole == SystemRole.ADMIN;
+    }
+
+    public boolean canLogin() {
+        return accountStatus == AccountStatus.ACTIVE;
+    }
+
+    public boolean canBid() {
+        return accountStatus == AccountStatus.ACTIVE;
+    }
+
+    public boolean canSell() {
+        return accountStatus == AccountStatus.ACTIVE;
+    }
+
+    public String getDisplayName() {
+        if (fullName != null && !fullName.isBlank()) {
+            return fullName;
+        }
+        return username;
+    }
+
+    public String getInitials() {
+        String source = getDisplayName();
+        if (source == null || source.isBlank()) {
+            return "U";
+        }
+
+        String[] parts = source.trim().split("\\s+");
+        if (parts.length == 1) {
+            return parts[0].substring(0, 1).toUpperCase();
+        }
+
+        return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+    
+    public String getFullName() {
+        return fullName;
+    }
+    
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+    
+    public String getPhone() {
+        return phone;
+    }
+    
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+    
     public boolean isActive() {
         return active;
     }
-
+    
     public void setActive(boolean active) {
         this.active = active;
     }
