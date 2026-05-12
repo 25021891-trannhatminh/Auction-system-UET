@@ -11,7 +11,10 @@ client\controller\UserDashboardController$AuctionCardData.class
 client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
 client\controller\RegisterController.class
+client\model\NotificationModel.class
 client\model\AccountStatus.class
+client\service\NotificationHandler.class
+client\util\AccountValidator.class
 client\controller\LoginController.class
 client\controller\BaseDashboardController.class
 client\model\SystemRole.class

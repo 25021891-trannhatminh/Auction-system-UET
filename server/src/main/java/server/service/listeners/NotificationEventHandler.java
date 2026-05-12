@@ -3,10 +3,10 @@ package server.service.listeners;
 import server.service.NotificationService;
 import server.common.enums.NotificationType;
 
-public class NotificationHandler implements AuctionEventListener {
+public class NotificationEventHandler implements AuctionEventListener {
   private final NotificationService notificationService;
 
-  public NotificationHandler(NotificationService notificationService) {
+  public NotificationEventHandler(NotificationService notificationService) {
     this.notificationService = notificationService;
   }
 
@@ -56,6 +56,7 @@ public class NotificationHandler implements AuctionEventListener {
   public void onPaymentDue(int buyerId, int auctionId, String itemName, double amount) {
     notificationService.push(buyerId, "Payment Required",
         "Please pay $" + amount + " for your won item: [" + itemName + "].",
+
         NotificationType.PAYMENT_DUE, auctionId);
   }
 

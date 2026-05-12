@@ -142,6 +142,53 @@ public class ItemCategoryDAO {
     return roots;
   }
 
+  public List<ItemCategoryDTO> getRootCategories() {
+    List<ItemCategoryDTO> list = new ArrayList<>();
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ROOTS);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        list.add(mapRow(rs));
+      }
+    } catch (SQLException e) {
+      logger.error("getRootCategories failed", e);
+    }
+    return list;
+  }
+
+  public List<ItemCategoryDTO> getSubCategories(int parentId) {
+    List<ItemCategoryDTO> list = new ArrayList<>();
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_SELECT_SUBS)) {
+      ps.setInt(1, parentId);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          list.add(mapRow(rs));
+        }
+      }
+    } catch (SQLException e) {
+      logger.error("getSubCategories failed for parentId={}", parentId, e);
+    }
+    return list;
+  }
+
+  public List<ItemCategoryDTO> searchCategories(String keyword) {
+    List<ItemCategoryDTO> list = new ArrayList<>();
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_SEARCH)) {
+      // Thêm dấu % để tìm kiếm theo kiểu "chứa ký tự này"
+      ps.setString(1, "%" + keyword + "%");
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          list.add(mapRow(rs));
+        }
+      }
+    } catch (SQLException e) {
+      logger.error("searchCategories failed for keyword={}", keyword, e);
+    }
+    return list;
+  }
+
   // ==========================================================
   // INSERT / UPDATE / DELETE
   // ==========================================================

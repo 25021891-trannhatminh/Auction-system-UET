@@ -179,6 +179,56 @@ public class AuctionService {
   }
 
   /**
+   * Xác nhận thanh toán thành công và thông báo cho các bên liên quan.
+   * @param auctionId ID của phiên đấu giá
+   * @return true nếu xử lý thành công
+   */
+  public boolean confirmPayment(int auctionId) {
+    try {
+      // 1. Lấy thông tin phiên đấu giá
+      AuctionDTO auction = auctionDAO.getById(auctionId);
+      if (auction == null) {
+        logger.warn("confirmPayment() - Auction {} not found", auctionId);
+        return false;
+      }
+
+      // 2. Kiểm tra trạng thái (Chỉ cho phép thanh toán khi phiên đã kết thúc và có người thắng)
+      if (auction.getStatus() != AuctionStatus.FINISHED || auction.getCurrentWinnerId() == null) {
+        logger.warn("confirmPayment() - Auction {} is not in a payable state", auctionId);
+        return false;
+      }
+
+      // 3. Cập nhật trạng thái thanh toán trong Database (giả sử qua auctionDAO)
+      // Lưu ý: Bạn nên có thêm trường paymentStatus trong DB
+      boolean isUpdated = auctionDAO.updatePaymentStatus(auctionId, true);
+
+      if (isUpdated) {
+        int sellerId = auction.getSellerId();
+        int buyerId = auction.getCurrentWinnerId();
+        String itemName = "Auction #" + auctionId;
+        double finalPrice = auction.getCurrentPrice().doubleValue();
+
+        logger.info("confirmPayment() - Payment SUCCESS [Auction:{}, Buyer:{}, Seller:{}]",
+            auctionId, buyerId, sellerId);
+
+        // 4. Thông báo cho người bán: "Tiền đã về, hãy giao hàng"
+        notifyPaymentReceived(sellerId, auctionId, itemName, finalPrice);
+
+        // 5. Thông báo cho người mua: "Xác nhận bạn đã thanh toán thành công"
+        notifySystemNotification(buyerId, "Thanh toán thành công",
+            String.format("Bạn đã thanh toán thành công %.2f cho vật phẩm: %s", finalPrice, itemName));
+
+        return true;
+      }
+
+      return false;
+    } catch (Exception e) {
+      logger.error("confirmPayment() - Critical error during payment confirmation", e);
+      return false;
+    }
+  }
+
+  /**
    * Duyệt vật phẩm (Gọi từ Admin)
    */
   public void approveItem(int sellerId, int itemId, String itemName) {
