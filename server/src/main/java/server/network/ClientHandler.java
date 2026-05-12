@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -12,12 +13,17 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import server.common.entity.User;
+import server.common.enums.AuctionStatus;
+import server.common.model.AuctionDTO;
 import server.database.DBConnection;
+import server.repository.AuctionDAO;
+import server.repository.BidDAO;
 import server.repository.UserDAO;
 
 public class ClientHandler implements Runnable {
@@ -28,14 +34,10 @@ public class ClientHandler implements Runnable {
     private String username = "Guest"; // Tên hiển thị mặc định
 
     private UserDAO userDAO = new UserDAO();
-    private int userId;
-    // Giả sử AuctionItem là một class hỗ trợ lưu thông tin vật phẩm
-    private static Map<String, AuctionItem> items = new HashMap<>();
-
-    static {
-        items.put("1", new AuctionItem("1", "Item-1"));
-        items.put("2", new AuctionItem("2", "Item-2"));
-    }
+    private int userId = -1 ;
+    
+    private BidDAO bidDAO = new BidDAO();
+    private AuctionDAO auctionDAO = new AuctionDAO();
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -61,7 +63,7 @@ public class ClientHandler implements Runnable {
         } catch (Exception e) {
             System.out.println("Client " + username + " disconnected");
         } finally {
-            if(this.userId != 0){
+            if(this.userId != -1){
                 ClientManager.remove(this.userId);
             }
             try {
@@ -160,34 +162,39 @@ public class ClientHandler implements Runnable {
                 break;
 
             case "LIST":
-                for (AuctionItem item : items.values()) {
-                    send("ITEM " + item.getInfo());
+                //✅ Lấy từ DB thay vì RAM
+                List<AuctionDTO> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
+                for (AuctionDTO a : auctions){
+                    send("ITEM "+ a.getAuctionId()+ " "+ a.getCurrentPrice());
                 }
                 break;
-
+            
             case "BID":
                 if (p.length < 3) {
                     send("FAIL INVALID_BID_FORMAT");
                     return;
-                }
-                String itemId = p[1];
+                }   
                 try {
-                    int price = Integer.parseInt(p[2]);
-                    AuctionItem itemObj = items.get(itemId);
+                    int auctionId = Integer.parseInt(p[1]);
+                    BigDecimal amount = new BigDecimal(p[2]);
 
-                    if (itemObj != null && itemObj.bid(this.username, price)) {
-                        ClientManager.broadcast("NEW_BID " + this.username + " " + itemObj.getInfo());
+                    // ✅ Gọi BidDAO.placeBid() — có Transaction + Row Locking sẵn!
+                    // Không cần synchronized nữa vì BidDAO đã xử lý bằng SELECT FOR UPDATE
+                    boolean ok = bidDAO.placeBid(auctionId, this.userId, amount, false);
+                    if (ok) {
+                        ClientManager.broadcast("NEW_BID " + this.username + " " + auctionId + " " + amount);
                     } else {
-                        send("FAIL Bid too low or item not found");
+                        send("FAIL BID_TOO_LOW_OR_NOT_RUNNING");
                     }
                 } catch (NumberFormatException e) {
-                    send("FAIL PRICE_MUST_BE_NUMBER");
+                    send("FAIL INVALID_FORMAT");
                 }
                 break;
 
             case "MSG":
                 if (msg.length() > 4) {
-                    ClientManager.broadcast("MSG " + this.username + ": " + msg.substring(4).trim());
+                    String content = String.join(" ",Arrays.copyOfRange(p,1,p.length));
+                    ClientManager.broadcast("MSG " + this.username + ": " + content);
                 }
                 break;
 
