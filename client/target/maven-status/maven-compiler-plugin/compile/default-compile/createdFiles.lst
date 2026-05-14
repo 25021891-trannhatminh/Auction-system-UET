@@ -1,3 +1,4 @@
+client\service\NotificationUIHandler.class
 client\service\SessionManager.class
 client\controller\UserDashboardController$CategoryData.class
 client\controller\BaseDashboardController$SectionContent.class
@@ -10,12 +11,10 @@ client\SceneNavigator.class
 client\controller\UserDashboardController$AuctionCardData.class
 client\controller\AdminDashboardController$AdminRow.class
 client\model\User.class
-client\controller\RegisterController.class
 client\model\NotificationModel.class
 client\model\AccountStatus.class
-client\service\NotificationHandler.class
+client\controller\CreateItemController.class
 client\util\AccountValidator.class
-client\controller\LoginController.class
 client\controller\BaseDashboardController.class
 client\model\SystemRole.class
 client\MainApp.class

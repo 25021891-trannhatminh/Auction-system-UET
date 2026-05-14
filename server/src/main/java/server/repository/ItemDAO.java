@@ -113,23 +113,63 @@ public class ItemDAO {
      */
     public boolean addItem(int sellerId, int categoryId, String name,
         String description, BigDecimal startingPrice) {
+        return addItem(sellerId, categoryId, name, description, startingPrice, ItemStatus.PENDING_REVIEW) > 0;
+    }
 
-        if (isInvalidItemData(name, startingPrice)) return false;
+    /**
+     * Adds a new item and returns the generated {@code item_id}.
+     *
+     * <p>This overload is used by item creation flows that need to insert related rows
+     * into {@code item_images} and {@code item_attributes} immediately after the core
+     * item row is created.</p>
+     */
+    public int addItem(int sellerId, Integer categoryId, String name,
+        String description, BigDecimal startingPrice, ItemStatus status) {
 
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+        if (isInvalidItemData(name, startingPrice)) return -1;
+
+        try (Connection conn = DBConnection.getConnection()) {
+            return addItem(conn, sellerId, categoryId, name, description, startingPrice, status);
+        } catch (SQLException e) {
+            logger.error("addItem failed for sellerId={}", sellerId, e);
+            return -1;
+        }
+    }
+
+    /**
+     * Adds a new item using an existing transaction connection.
+     *
+     * <p>Callers such as {@code ItemService} pass their own connection so the item row,
+     * image rows, attribute rows, and admin notifications can commit or rollback together.</p>
+     */
+    public int addItem(Connection conn, int sellerId, Integer categoryId, String name,
+        String description, BigDecimal startingPrice, ItemStatus status) throws SQLException {
+
+        if (isInvalidItemData(name, startingPrice)) return -1;
+
+        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
 
             ps.setInt(1, sellerId);
-            ps.setInt(2, categoryId);
+            if (categoryId == null || categoryId <= 0) {
+                ps.setNull(2, Types.INTEGER);
+            } else {
+                ps.setInt(2, categoryId);
+            }
             ps.setString(3, name);
             ps.setString(4, description);
             ps.setBigDecimal(5, startingPrice);
-            ps.setString(6, ItemStatus.PENDING_REVIEW.name());
+            ps.setString(6, status == null ? ItemStatus.PENDING_REVIEW.name() : status.name());
 
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            logger.error("addItem failed for sellerId={}", sellerId, e);
-            return false;
+            if (ps.executeUpdate() <= 0) {
+                return -1;
+            }
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getInt(1);
+                }
+            }
+            return -1;
         }
     }
 

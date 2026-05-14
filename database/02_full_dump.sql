@@ -218,7 +218,7 @@ CREATE TABLE `items` (
                          `name` varchar(255) NOT NULL,
                          `description` text,
                          `starting_price` decimal(15,2) NOT NULL,
-                         `status` enum('DRAFT','AVAILABLE','IN_AUCTION','SOLD','REMOVED') NOT NULL DEFAULT 'DRAFT',
+                         `status` enum('DRAFT','PENDING_REVIEW','AVAILABLE','IN_AUCTION','SOLD','REMOVED') NOT NULL DEFAULT 'DRAFT',
                          `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
                          PRIMARY KEY (`item_id`),
                          KEY `seller_id` (`seller_id`),

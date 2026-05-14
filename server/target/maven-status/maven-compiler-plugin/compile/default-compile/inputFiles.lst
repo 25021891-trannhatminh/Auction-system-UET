@@ -1,3 +1,4 @@
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\entity\Notification.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\entity\User.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\enums\AuctionStatus.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\enums\AutoBidStatus.java
@@ -16,15 +17,18 @@ C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\I
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\ItemDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\ItemImageDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\NotificationDTO.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\NotificationEvent.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\PaymentDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\UserDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\WalletDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\WalletTransactionDTO.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\util\AccountValidator.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\database\DBConnection.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\AuctionItem.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\AuctionServer.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\ClientHandler.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\ClientManager.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\NotificationDispatcher.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\network\ServerDiscovery.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\AuctionDAO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\AutoBidDAO.java
@@ -38,3 +42,8 @@ C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\Pay
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\UserDAO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\WalletDAO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\repository\WalletTransactionDAO.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\AuctionService.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\ItemService.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\AuctionEventListener.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\NotificationEventHandler.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\NotificationService.java

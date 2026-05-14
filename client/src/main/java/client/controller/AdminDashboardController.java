@@ -225,6 +225,12 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
+        if (msg.equals("ADMIN_ITEMS_DIRTY")) {
+            // CREATE_ITEM broadcast from server: refresh items so Pending Approval updates live.
+            adminNetworkManager.send("ADMIN_LIST_ITEMS");
+            return;
+        }
+
         if (msg.startsWith("ADMIN_DATA_ERROR ")) {
             handleAdminDataError(msg.substring("ADMIN_DATA_ERROR ".length()));
         }
@@ -418,7 +424,12 @@ public class AdminDashboardController extends BaseDashboardController {
                 + (auctionId.isBlank() ? "." : " - current price " + currentPrice + ".")
                 + " Item Review đang đọc từ bảng items/auctions của cloud database.";
 
+        String normalizedStatus = normalize(status);
+
         if (auctionId.isBlank()) {
+            if (normalizedStatus.equals("pending review")) {
+                return row("ITEM-" + itemId + " - " + itemName, meta, category, auctionLink, status, detail, "Review");
+            }
             return row("ITEM-" + itemId + " - " + itemName, meta, category, auctionLink, status, detail, "View", "Create Auction");
         }
 
@@ -690,6 +701,7 @@ public class AdminDashboardController extends BaseDashboardController {
         return switch (sectionKey) {
             case "dashboard" -> "Overview";
             case "reports" -> "Last 7 days";
+            case "items" -> "Pending Approval";
             case "settings" -> "General";
             default -> "All";
         };
@@ -798,18 +810,18 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderItems(String filter) {
         setTableTitle("Item Review Queue");
-        renderChips(filter, "All", "DRAFT", "AVAILABLE", "IN_AUCTION", "SOLD", "REMOVED", "No auction");
+        renderChips(filter, "Pending Approval", "All", "DRAFT", "AVAILABLE", "IN_AUCTION", "SOLD", "REMOVED", "No auction");
 
         List<AdminRow> rows = currentItemRows();
         updateStats(
-                new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "AVAILABLE")), String.valueOf(countStatus(rows, "IN_AUCTION")), String.valueOf(countStatus(rows, "SOLD") + countStatus(rows, "REMOVED"))},
-                new String[]{"Items", "Available", "In Auction", "Sold/Removed"}
+                new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "PENDING_REVIEW")), String.valueOf(countStatus(rows, "AVAILABLE")), String.valueOf(countStatus(rows, "IN_AUCTION"))},
+                new String[]{"Items", "Pending", "Available", "In Auction"}
         );
 
         addHeader("Item", "Category", "Auction Link");
         addFilteredRows(rows, filter);
 
-        showDetail("Item review", dataSourceNote(itemsLoaded) + " Item Review quản lý listing trước/sau auction, còn Auctions quản lý phiên đấu giá.");
+        showDetail("Item review", dataSourceNote(itemsLoaded) + " Pending Approval đọc status PENDING_REVIEW từ items. AVAILABLE mới là hàng sẵn sàng tạo auction.");
     }
 
     private void renderReports(String filter) {
@@ -1099,6 +1111,12 @@ public class AdminDashboardController extends BaseDashboardController {
                     || normalize(row.meta).contains("no auction");
         }
 
+        if (normalizedFilter.equals("pending approval")) {
+            return normalize(row.status).contains("pending review")
+                    || normalize(row.meta).contains("pending review")
+                    || normalize(row.detail).contains("pending review");
+        }
+
         return normalize(row.title).contains(normalizedFilter)
                 || normalize(row.meta).contains(normalizedFilter)
                 || normalize(row.firstValue).contains(normalizedFilter)
@@ -1249,7 +1267,7 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
-        if ("items".equals(currentSectionKey) && normalizedAction.equals("view")) {
+        if ("items".equals(currentSectionKey) && (normalizedAction.equals("view") || normalizedAction.equals("review"))) {
             openItemDetail(data);
             return;
         }

@@ -1,6 +1,8 @@
 package server.network;
 
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 
 public class ServerDiscovery {
     public static void start() {

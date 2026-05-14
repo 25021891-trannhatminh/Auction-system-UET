@@ -97,7 +97,6 @@
                                         </VBox>
 
                                         <TextField fx:id="searchField" promptText="Search..." styleClass="search-field" />
-                                        <Button fx:id="primaryActionButton" mnemonicParsing="false" styleClass="action-btn" text="Browse Auctions" />
                                     </children>
                                 </HBox>
 
@@ -142,15 +141,6 @@
                                             </children>
                                         </VBox>
 
-                                        <VBox spacing="5.0" styleClass="activity-card">
-                                            <children>
-                                                <Label styleClass="placeholder-title" text="Recent Activity" />
-                                                <Label fx:id="activityLine1" styleClass="activity-line" text="You were outbid on Vintage Camera." wrapText="true" />
-                                                <Label fx:id="activityLine2" styleClass="activity-line" text="MacBook Pro M3 ends in 42 minutes." wrapText="true" />
-                                                <Label fx:id="activityLine3" styleClass="activity-line" text="Mechanical Keyboard sale is ready to ship." wrapText="true" />
-                                                <Label fx:id="activityLine4" styleClass="activity-line" text="Auto bid reached 80% of max limit." wrapText="true" />
-                                            </children>
-                                        </VBox>
                                     </children>
                                 </VBox>
                             </children>
@@ -163,5 +153,13 @@
                 </ScrollPane>
             </children>
         </HBox>
+
+        <!-- Bottom-right floating action; visible only on My Items so the top search area stays clean. -->
+        <Button fx:id="primaryActionButton"
+                mnemonicParsing="false"
+                styleClass="floating-create-btn"
+                text="Create Listing"
+                AnchorPane.bottomAnchor="28.0"
+                AnchorPane.rightAnchor="76.0" />
     </children>
 </AnchorPane>

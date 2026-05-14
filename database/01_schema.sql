@@ -29,7 +29,7 @@ create table items (
     name varchar(255) not null,
     description text,
     starting_price decimal(15, 2) not null,
-    status enum('DRAFT', 'AVAILABLE', 'IN_AUCTION', 'SOLD', 'REMOVED') not null default 'DRAFT',
+    status enum('DRAFT', 'PENDING_REVIEW', 'AVAILABLE', 'IN_AUCTION', 'SOLD', 'REMOVED') not null default 'DRAFT',
     created_at timestamp default current_timestamp,
     foreign key (seller_id) references users(user_id) on delete restrict,
     foreign key (category_id) references item_categories(category_id) on delete set null
