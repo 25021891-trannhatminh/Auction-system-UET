@@ -33,7 +33,7 @@ public class AuctionServer {
             System.out.println("Port: " + port);
 
             ServerSocket server = new ServerSocket(port);
-            new Thread(NotificationDispatcher.getInstance()).start();
+//            new Thread(NotificationDispatcher.getInstance()).start();
             while (true) {
                 Socket socket = server.accept();
                 System.out.println("Client connected");
