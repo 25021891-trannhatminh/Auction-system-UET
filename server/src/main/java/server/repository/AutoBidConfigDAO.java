@@ -302,7 +302,7 @@
 package server.repository;
 
 import server.common.enums.AutoBidStatus;
-import server.common.model.AutoBidDTO;
+import server.common.model.AutoBidConfigDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -357,9 +357,9 @@ import java.util.List;
  * }</pre>
  * </p>
  */
-public class AutoBidDAO {
+public class AutoBidConfigDAO {
 
-  private static final Logger logger = LoggerFactory.getLogger(AutoBidDAO.class);
+  private static final Logger logger = LoggerFactory.getLogger(AutoBidConfigDAO.class);
 
   // ============================================================
   // SQL constants
@@ -445,7 +445,7 @@ public class AutoBidDAO {
    * @param dto thông tin auto bid cần tạo; không được {@code null}
    * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
    */
-  public boolean create(AutoBidDTO dto) {
+  public boolean create(AutoBidConfigDTO dto) {
     logger.debug("create() – auctionId={}, bidderId={}, maxBid={}, increment={}",
         dto.getAuctionId(), dto.getBidderId(), dto.getMaxBid(), dto.getIncrement());
 
@@ -469,7 +469,7 @@ public class AutoBidDAO {
    * @return {@code true} nếu insert thành công
    * @throws SQLException để Service layer có thể rollback
    */
-  public boolean create(Connection conn, AutoBidDTO dto) throws SQLException {
+  public boolean create(Connection conn, AutoBidConfigDTO dto) throws SQLException {
     try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
       return executeCreate(ps, dto);
     }
@@ -483,9 +483,9 @@ public class AutoBidDAO {
    * Lấy thông tin auto bid theo ID.
    *
    * @param autoBidId id auto bid cần tìm
-   * @return {@link AutoBidDTO} tương ứng, hoặc {@code null} nếu không tìm thấy
+   * @return {@link AutoBidConfigDTO} tương ứng, hoặc {@code null} nếu không tìm thấy
    */
-  public AutoBidDTO getById(int autoBidId) {
+  public AutoBidConfigDTO getById(int autoBidId) {
     logger.debug("getById() – autoBidId={}", autoBidId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -507,11 +507,11 @@ public class AutoBidDAO {
    * sắp xếp theo {@code max_bid} giảm dần.
    *
    * @param auctionId id phiên đấu giá cần truy vấn
-   * @return danh sách {@link AutoBidDTO} đang active; list rỗng nếu không có hoặc lỗi
+   * @return danh sách {@link AutoBidConfigDTO} đang active; list rỗng nếu không có hoặc lỗi
    */
-  public List<AutoBidDTO> getByAuction(int auctionId) {
+  public List<AutoBidConfigDTO> getByAuction(int auctionId) {
     logger.debug("getByAuction() – auctionId={}", auctionId);
-    List<AutoBidDTO> results = new ArrayList<>();
+    List<AutoBidConfigDTO> results = new ArrayList<>();
 
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_AUCTION)) {
@@ -536,11 +536,11 @@ public class AutoBidDAO {
    * <p>Dùng để hiển thị lịch sử đặt giá tự động trong trang cá nhân.</p>
    *
    * @param bidderId id người dùng cần truy vấn
-   * @return danh sách {@link AutoBidDTO} của người dùng đó
+   * @return danh sách {@link AutoBidConfigDTO} của người dùng đó
    */
-  public List<AutoBidDTO> getByBidder(int bidderId) {
+  public List<AutoBidConfigDTO> getByBidder(int bidderId) {
     logger.debug("getByBidder() – bidderId={}", bidderId);
-    List<AutoBidDTO> results = new ArrayList<>();
+    List<AutoBidConfigDTO> results = new ArrayList<>();
 
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_BIDDER)) {
@@ -567,9 +567,9 @@ public class AutoBidDAO {
    *
    * @param auctionId id phiên đấu giá
    * @param bidderId  id người dùng
-   * @return {@link AutoBidDTO} nếu tồn tại, hoặc {@code null}
+   * @return {@link AutoBidConfigDTO} nếu tồn tại, hoặc {@code null}
    */
-  public AutoBidDTO getByAuctionAndBidder(int auctionId, int bidderId) {
+  public AutoBidConfigDTO getByAuctionAndBidder(int auctionId, int bidderId) {
     logger.debug("getByAuctionAndBidder() – auctionId={}, bidderId={}", auctionId, bidderId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -595,9 +595,9 @@ public class AutoBidDAO {
    * mỗi khi có bid mới để xác định xem có auto bid nào cần kích hoạt không.</p>
    *
    * @param auctionId id phiên đấu giá
-   * @return {@link AutoBidDTO} có max_bid cao nhất, hoặc {@code null} nếu không có
+   * @return {@link AutoBidConfigDTO} có max_bid cao nhất, hoặc {@code null} nếu không có
    */
-  public AutoBidDTO getHighestAutoBid(int auctionId) {
+  public AutoBidConfigDTO getHighestAutoBid(int auctionId) {
     logger.debug("getHighestAutoBid() – auctionId={}", auctionId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -606,7 +606,7 @@ public class AutoBidDAO {
       ps.setInt(1, auctionId);
       try (ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          AutoBidDTO dto = mapRow(rs);
+          AutoBidConfigDTO dto = mapRow(rs);
           logger.debug("getHighestAutoBid() – Found autoBidId={}, maxBid={} for auctionId={}",
               dto.getAutoBidId(), dto.getMaxBid(), auctionId);
           return dto;
@@ -800,7 +800,7 @@ public class AutoBidDAO {
   /**
    * Tách logic insert ra helper để tái sử dụng giữa 2 overload {@code create()}.
    */
-  private boolean executeCreate(PreparedStatement ps, AutoBidDTO dto) throws SQLException {
+  private boolean executeCreate(PreparedStatement ps, AutoBidConfigDTO dto) throws SQLException {
     ps.setInt(1, dto.getAuctionId());
     ps.setInt(2, dto.getBidderId());
     ps.setBigDecimal(3, dto.getMaxBid());
@@ -844,14 +844,14 @@ public class AutoBidDAO {
   }
 
   /**
-   * Map một hàng {@link ResultSet} thành {@link AutoBidDTO}.
+   * Map một hàng {@link ResultSet} thành {@link AutoBidConfigDTO}.
    *
    * @param rs result set đã được định vị tại hàng cần đọc
-   * @return {@link AutoBidDTO} được điền đầy đủ
+   * @return {@link AutoBidConfigDTO} được điền đầy đủ
    * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
    */
-  private AutoBidDTO mapRow(ResultSet rs) throws SQLException {
-    return new AutoBidDTO(
+  private AutoBidConfigDTO mapRow(ResultSet rs) throws SQLException {
+    return new AutoBidConfigDTO(
         rs.getInt("auto_bid_id"),
         rs.getInt("auction_id"),
         rs.getInt("bidder_id"),

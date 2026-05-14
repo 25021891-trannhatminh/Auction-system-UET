@@ -2,17 +2,16 @@ package server.common.model;
 
 import server.common.enums.AutoBidStatus;
 
-import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 /**
- * DTO cho bảng AUTO_BIDS.
+ * DTO cho bảng AUTO_BID_CONFIGS.
  *
  * <p>Dùng để lưu và truyền cấu hình auto bid của người dùng trong một phiên đấu giá.
  * Hệ thống sẽ tự động đặt giá dựa trên maxBid và increment.</p>
  */
-public class AutoBidDTO{
+public class AutoBidConfigDTO {
 
 
     /** ID cấu hình auto bid (Primary Key) */
@@ -41,12 +40,12 @@ public class AutoBidDTO{
 
     // ========================== Constructors ==========================
 
-    public AutoBidDTO() {}
+    public AutoBidConfigDTO() {}
 
-    public AutoBidDTO(int autoBidId, int auctionId, int bidderId,
-        BigDecimal maxBid, BigDecimal increment,
-        AutoBidStatus status,
-        Timestamp createdAt, Timestamp updatedAt) {
+    public AutoBidConfigDTO(int autoBidId, int auctionId, int bidderId,
+                            BigDecimal maxBid, BigDecimal increment,
+                            AutoBidStatus status,
+                            Timestamp createdAt, Timestamp updatedAt) {
 
         this.autoBidId = autoBidId;
         this.auctionId = auctionId;

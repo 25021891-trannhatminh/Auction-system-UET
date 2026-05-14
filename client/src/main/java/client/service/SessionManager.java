@@ -3,8 +3,8 @@ package client.service;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 
-import client.model.AccountStatus;
-import client.model.SystemRole;
+import client.enums.AccountStatus;
+import client.enums.SystemRole;
 import client.model.User;
 
 public class SessionManager {

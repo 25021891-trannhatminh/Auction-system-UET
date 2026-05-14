@@ -10,12 +10,6 @@ import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Class quản lý kết nối Database.
- *
- * - Load cấu hình từ db.properties
- * - Tạo Connection cho DAO sử dụng
- */
 public class DBConnection {
 
     private static final Logger LOGGER = Logger.getLogger(DBConnection.class.getName());
@@ -36,13 +30,33 @@ public class DBConnection {
                 config.setJdbcUrl(props.getProperty("db.url"));
                 config.setUsername(props.getProperty("db.user"));
                 config.setPassword(props.getProperty("db.password"));
-                config.setMaximumPoolSize(4);
+
+                // TiDB Cloud — 400 connections limit, không còn bị giới hạn như filess
+                config.setMaximumPoolSize(10);
                 config.setMinimumIdle(2);
                 config.setConnectionTimeout(30000);
                 config.setIdleTimeout(600000);
 
+                // TiDB Cloud tự đóng connection idle quá 5 phút trên public endpoint
+                // → keepalive ping mỗi 2 phút để giữ connection sống
+                config.setKeepaliveTime(120000);
+
+                // Recycle connection sau 10 phút, tránh stale connection
+                config.setMaxLifetime(600000);
+
+                // Test connection trước khi lấy từ pool
+                config.setConnectionTestQuery("SELECT 1");
+
                 dataSource = new HikariDataSource(config);
                 LOGGER.info("Load DB config thành công");
+
+                // Đóng pool khi JVM tắt → tránh leak connection
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    if (dataSource != null && !dataSource.isClosed()) {
+                        dataSource.close();
+                        LOGGER.info("HikariCP pool đã đóng");
+                    }
+                }));
             }
 
         } catch (Exception e) {
@@ -50,14 +64,10 @@ public class DBConnection {
         }
     }
 
-    /**
-     * Lấy connection tới database.
-     */
     public static Connection getConnection() throws SQLException {
         return dataSource.getConnection();
     }
 
-    // Test nhanh
     public static void main(String[] args) {
         try (Connection conn = getConnection()) {
             if (conn != null) {

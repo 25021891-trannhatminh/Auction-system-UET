@@ -4,8 +4,6 @@ import java.util.List;
 import server.common.model.NotificationEvent;
 import server.network.NotificationDispatcher;
 import server.repository.NotificationDAO;
-import server.network.ClientManager;
-import server.network.ClientHandler;
 import server.common.enums.NotificationType;
 import server.common.model.NotificationDTO;
 

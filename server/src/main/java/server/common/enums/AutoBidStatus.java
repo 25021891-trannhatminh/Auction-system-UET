@@ -1,7 +1,7 @@
 package server.common.enums;
 
 public enum AutoBidStatus {
-    ACTIVE,
-    COMPLETED,
-    CANCELED
+    ACTIVE,     /* Đăng ký thành công, đang chạy */
+    COMPLETED,  /* Chạy xong (Hết Auction hoặc > maxAutoBid) */
+    CANCELED    /* Bidder hủy */
 }

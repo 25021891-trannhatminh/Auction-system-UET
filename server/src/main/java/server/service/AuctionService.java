@@ -6,6 +6,7 @@ import server.common.enums.AuctionStatus;
 import server.common.model.AuctionDTO;
 import server.repository.AuctionDAO;
 import server.repository.BidDAO;
+import server.repository.ItemDAO;
 import server.service.listeners.AuctionEventListener;
 
 import java.math.BigDecimal;

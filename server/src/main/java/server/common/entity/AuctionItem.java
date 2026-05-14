@@ -1,4 +1,4 @@
-package server.network;
+package server.common.entity;
 
 public class AuctionItem {
     private String id;

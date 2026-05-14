@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import server.common.entity.User;
-import server.common.enums.UserRole;
+import server.common.enums.AccountRole;
 import server.common.enums.UserStatus;
 import server.database.DBConnection;
 
@@ -35,12 +35,12 @@ import server.database.DBConnection;
  *     <li>Ghi log bằng SLF4J</li>
  * </ul>
  */
-public class UserDAO {
+public class AccountDAO {
 
     /**
      * Logger ghi log hệ thống.
      */
-    private static final Logger logger = LoggerFactory.getLogger(UserDAO.class);
+    private static final Logger logger = LoggerFactory.getLogger(AccountDAO.class);
 
     /**
      * Số vòng hash BCrypt.
@@ -126,7 +126,7 @@ public class UserDAO {
             ps.setString(3, email);
             ps.setString(4, fullName);
             ps.setString(5, phone);
-            ps.setString(6, UserRole.USER.name());
+            ps.setString(6, AccountRole.USER.name());
             ps.setString(7, UserStatus.ACTIVE.name());
 
             boolean success = ps.executeUpdate() > 0;
@@ -306,7 +306,7 @@ public class UserDAO {
             rs.getString("email"),
             rs.getString("full_name"),
             rs.getString("phone"),
-            UserRole.valueOf(rs.getString("role")),
+            AccountRole.valueOf(rs.getString("role")),
             UserStatus.valueOf(rs.getString("status")),
             rs.getBoolean("is_active"),
             rs.getTimestamp("last_login"),

@@ -63,6 +63,26 @@ public class NotificationUIHandler {
         alert.setTitle("❌ Notice");
         break;
 
+      case "BID_PLACED":
+        alert.setAlertType(AlertType.INFORMATION);
+        alert.setTitle("Bid Placed");
+        break;
+
+      case "AUCTION_STARTED":
+        alert.setAlertType(AlertType.INFORMATION);
+        alert.setTitle("Live Now! 🚀");
+        break;
+
+      case "AUCTION_ENDED":
+        alert.setAlertType(AlertType.INFORMATION);
+        alert.setTitle("Auction Closed");
+        break;
+
+      case "PAYMENT_RECEIVED":
+        alert.setAlertType(AlertType.INFORMATION);
+        alert.setTitle("Money Received! 💰");
+        break;
+
       case "SYSTEM":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("💻 System Message");

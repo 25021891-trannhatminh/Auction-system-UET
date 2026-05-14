@@ -1,11 +1,11 @@
 package server.common.model;
 
 import server.common.entity.User;
-import server.common.enums.UserRole;
+import server.common.enums.AccountRole;
 import server.common.enums.UserStatus;
 
-import java.io.Serializable;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
+
 
 /**
  * DTO cho bảng USERS
@@ -52,16 +52,16 @@ public class UserDTO{
   private String phone;
 
   /** Vai trò (USER / ADMIN) */
-  private UserRole role;
+  private AccountRole role;
 
   /** Trạng thái tài khoản */
   private UserStatus status;
 
   /** Thời điểm đăng nhập gần nhất */
-  private Timestamp lastLogin;
+  private LocalDateTime lastLogin;
 
   /** Thời điểm tạo tài khoản */
-  private Timestamp createdAt;
+  private LocalDateTime createdAt;
 
   // ========================== Constructors ==========================
 
@@ -69,8 +69,8 @@ public class UserDTO{
 
   public UserDTO(int userId, String username, String email,
       String fullName, String phone,
-      UserRole role, UserStatus status,
-      Timestamp lastLogin, Timestamp createdAt) {
+      AccountRole role, UserStatus status,
+      LocalDateTime lastLogin, LocalDateTime createdAt) {
 
     this.userId    = userId;
     this.username  = username;
@@ -92,7 +92,7 @@ public class UserDTO{
     if (user == null) return null;
 
     return new UserDTO(
-        user.getUserId(),
+        Integer.parseInt(user.getId()),
         user.getUsername(),
         user.getEmail(),
         user.getFullName(),
@@ -121,17 +121,17 @@ public class UserDTO{
   public String getPhone() { return phone; }
   public void setPhone(String phone) { this.phone = phone; }
 
-  public UserRole getRole() { return role; }
-  public void setRole(UserRole role) { this.role = role; }
+  public AccountRole getRole() { return role; }
+  public void setRole(AccountRole role) { this.role = role; }
 
   public UserStatus getStatus() { return status; }
   public void setStatus(UserStatus status) { this.status = status; }
 
-  public Timestamp getLastLogin() { return lastLogin; }
-  public void setLastLogin(Timestamp lastLogin) { this.lastLogin = lastLogin; }
+  public LocalDateTime getLastLogin() { return lastLogin; }
+  public void setLastLogin(LocalDateTime lastLogin) { this.lastLogin = lastLogin; }
 
-  public Timestamp getCreatedAt() { return createdAt; }
-  public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
+  public LocalDateTime getCreatedAt() { return createdAt; }
+  public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
   // ========================== Helper ==========================
 

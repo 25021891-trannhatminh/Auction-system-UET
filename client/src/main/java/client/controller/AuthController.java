@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import client.SceneNavigator;
-import client.model.AccountStatus;
-import client.model.SystemRole;
+import client.enums.AccountStatus;
+import client.enums.SystemRole;
 import client.model.User;
 import client.service.AuthService;
 import client.service.NetworkManager;

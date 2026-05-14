@@ -1,6 +1,6 @@
 package server.common.enums;
 
-public enum UserRole {
+public enum AccountRole {
     USER,
     ADMIN
 }

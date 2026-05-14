@@ -112,24 +112,64 @@ public class ItemDAO {
      * @return {@code true} nếu thêm thành công, {@code false} nếu dữ liệu không hợp lệ hoặc lỗi DB
      */
     public boolean addItem(int sellerId, int categoryId, String name,
-        String description, BigDecimal startingPrice) {
+                           String description, BigDecimal startingPrice) {
+        return addItem(sellerId, categoryId, name, description, startingPrice, ItemStatus.PENDING_REVIEW) > 0;
+    }
 
-        if (isInvalidItemData(name, startingPrice)) return false;
+    /**
+     * Adds a new item and returns the generated {@code item_id}.
+     *
+     * <p>This overload is used by item creation flows that need to insert related rows
+     * into {@code item_images} and {@code item_attributes} immediately after the core
+     * item row is created.</p>
+     */
+    public int addItem(int sellerId, Integer categoryId, String name,
+                       String description, BigDecimal startingPrice, ItemStatus status) {
 
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+        if (isInvalidItemData(name, startingPrice)) return -1;
+
+        try (Connection conn = DBConnection.getConnection()) {
+            return addItem(conn, sellerId, categoryId, name, description, startingPrice, status);
+        } catch (SQLException e) {
+            logger.error("addItem failed for sellerId={}", sellerId, e);
+            return -1;
+        }
+    }
+
+    /**
+     * Adds a new item using an existing transaction connection.
+     *
+     * <p>Callers such as {@code ItemService} pass their own connection so the item row,
+     * image rows, attribute rows, and admin notifications can commit or rollback together.</p>
+     */
+    public int addItem(Connection conn, int sellerId, Integer categoryId, String name,
+                       String description, BigDecimal startingPrice, ItemStatus status) throws SQLException {
+
+        if (isInvalidItemData(name, startingPrice)) return -1;
+
+        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
 
             ps.setInt(1, sellerId);
-            ps.setInt(2, categoryId);
+            if (categoryId == null || categoryId <= 0) {
+                ps.setNull(2, Types.INTEGER);
+            } else {
+                ps.setInt(2, categoryId);
+            }
             ps.setString(3, name);
             ps.setString(4, description);
             ps.setBigDecimal(5, startingPrice);
-            ps.setString(6, ItemStatus.PENDING_REVIEW.name());
+            ps.setString(6, status == null ? ItemStatus.PENDING_REVIEW.name() : status.name());
 
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            logger.error("addItem failed for sellerId={}", sellerId, e);
-            return false;
+            if (ps.executeUpdate() <= 0) {
+                return -1;
+            }
+
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getInt(1);
+                }
+            }
+            return -1;
         }
     }
 
@@ -142,8 +182,8 @@ public class ItemDAO {
     public List<ItemDTO> getPendingReviewItems() {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING_REVIEW);
-            ResultSet rs = ps.executeQuery()) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING_REVIEW);
+             ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) list.add(mapRow(rs));
             logger.debug("getPendingReviewItems() – Found {} item(s) pending review", list.size());
@@ -168,7 +208,7 @@ public class ItemDAO {
         logger.debug("approveItem() – itemId={}", itemId);
 
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_APPROVE_ITEM)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_APPROVE_ITEM)) {
 
             ps.setInt(1, itemId);
 
@@ -200,7 +240,7 @@ public class ItemDAO {
         logger.debug("rejectItem() – itemId={}", itemId);
 
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_REJECT_ITEM)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_REJECT_ITEM)) {
 
             ps.setInt(1, itemId);
 
@@ -229,12 +269,12 @@ public class ItemDAO {
      * @return {@code true} nếu cập nhật thành công ít nhất một hàng
      */
     public boolean updateItem(int itemId, int categoryId, String name,
-        String description, BigDecimal startingPrice) {
+                              String description, BigDecimal startingPrice) {
 
         if (name == null || name.isBlank()) return false;
 
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_UPDATE)) {
 
             ps.setInt(1, categoryId);
             ps.setString(2, name);
@@ -262,7 +302,7 @@ public class ItemDAO {
      */
     public boolean updateStatus(int itemId, ItemStatus status) {
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_STATUS)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_STATUS)) {
 
             ps.setString(1, status.name());
             ps.setInt(2, itemId);
@@ -320,7 +360,7 @@ public class ItemDAO {
      */
     public ItemDTO getById(int itemId) {
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
             ps.setInt(1, itemId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return mapRow(rs);
@@ -340,7 +380,7 @@ public class ItemDAO {
     public List<ItemDTO> getBySeller(int sellerId) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER)) {
             ps.setInt(1, sellerId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) list.add(mapRow(rs));
@@ -364,7 +404,7 @@ public class ItemDAO {
     public List<ItemDTO> getBySellerAndStatus(int sellerId, ItemStatus status) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER_STATUS)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER_STATUS)) {
             ps.setInt(1, sellerId);
             ps.setString(2, status.name());
             try (ResultSet rs = ps.executeQuery()) {
@@ -389,7 +429,7 @@ public class ItemDAO {
     public List<ItemDTO> getAll(int page, int pageSize) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL_PAGED)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL_PAGED)) {
             ps.setInt(1, pageSize);
             ps.setInt(2, page * pageSize);
             try (ResultSet rs = ps.executeQuery()) {
@@ -409,8 +449,8 @@ public class ItemDAO {
     public List<ItemDTO> getAll() {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
-            ResultSet rs = ps.executeQuery()) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
+             ResultSet rs = ps.executeQuery()) {
             while (rs.next()) list.add(mapRow(rs));
         } catch (SQLException e) {
             logger.error("getAll failed", e);
@@ -425,8 +465,8 @@ public class ItemDAO {
      */
     public int countAll() {
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_COUNT_ALL);
-            ResultSet rs = ps.executeQuery()) {
+             PreparedStatement ps = conn.prepareStatement(SQL_COUNT_ALL);
+             ResultSet rs = ps.executeQuery()) {
             if (rs.next()) return rs.getInt(1);
         } catch (SQLException e) {
             logger.error("countAll failed", e);
@@ -443,7 +483,7 @@ public class ItemDAO {
     public List<ItemDTO> getByCategory(int categoryId) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY)) {
             ps.setInt(1, categoryId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) list.add(mapRow(rs));
@@ -466,7 +506,7 @@ public class ItemDAO {
     public List<ItemDTO> getByCategoryIncludeSubs(int categoryId) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS)) {
             ps.setInt(1, categoryId);
             ps.setInt(2, categoryId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -490,7 +530,7 @@ public class ItemDAO {
     public List<ItemDTO> getByStatus(ItemStatus status) {
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
             ps.setString(1, status.name());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) list.add(mapRow(rs));
@@ -515,7 +555,7 @@ public class ItemDAO {
 
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME)) {
             ps.setString(1, "%" + keyword.trim() + "%");
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) list.add(mapRow(rs));
@@ -541,7 +581,7 @@ public class ItemDAO {
 
         List<ItemDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME_AND_STATUS)) {
+             PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME_AND_STATUS)) {
             ps.setString(1, "%" + keyword.trim() + "%");
             ps.setString(2, status.name());
             try (ResultSet rs = ps.executeQuery()) {

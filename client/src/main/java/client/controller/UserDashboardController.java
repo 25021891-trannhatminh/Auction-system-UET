@@ -1,17 +1,31 @@
 package client.controller;
 
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import client.model.User;
+import client.service.NetworkManager;
+import client.service.SessionManager;
+import javafx.application.Platform;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.stage.FileChooser;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -46,6 +60,20 @@ public class UserDashboardController extends BaseDashboardController {
     private final List<AuctionCardData> auctionCards = buildAuctionCards();
     private final List<CategoryData> categories = buildCategories();
     private final Map<String, Image> imageCache = new HashMap<>();
+    /**
+     * Reused connection for the inline Create Listing form.
+     *
+     * <p>Note: this dashboard controller opens its own socket, so CREATE_ITEM still sends the
+     * persisted session user id in the payload. The server prefers the authenticated socket user
+     * when available and falls back to this id only for this dashboard-created connection.</p>
+     */
+    private NetworkManager createItemNetworkManager;
+    private final List<String> pendingCreateItemImageUris = new ArrayList<>();
+    private boolean sellerItemStatsLoaded;
+    private int sellerItemTotal;
+    private int sellerItemDrafts;
+    private int sellerItemActiveSales;
+    private int sellerItemSold;
 
     private String currentSectionKey = "dashboard";
     private String activeFilter = "Overview";
@@ -56,6 +84,7 @@ public class UserDashboardController extends BaseDashboardController {
     @FXML
     protected void initialize() {
         preloadAuctionImages();
+        setupCreateItemNetwork();
         super.initialize();
     }
 
@@ -63,6 +92,37 @@ public class UserDashboardController extends BaseDashboardController {
         for (AuctionCardData card : auctionCards) {
             getCachedImage(card.imagePath);
         }
+    }
+
+    private void setupCreateItemNetwork() {
+        createItemNetworkManager = new NetworkManager();
+        createItemNetworkManager.setMessageHandler(message -> Platform.runLater(() -> handleCreateItemServerMessage(message)));
+        requestCreateListingMetadata();
+    }
+
+    /**
+     * Loads data needed by the inline Create Listing form.
+     *
+     * <p>The dashboard uses a lightweight socket, so the current user id is included in
+     * seller-specific requests. The server still prefers the authenticated socket user when it has one.</p>
+     */
+    private void requestCreateListingMetadata() {
+        if (createItemNetworkManager == null) {
+            return;
+        }
+
+        User currentUser = SessionManager.getCurrentUser();
+        if (currentUser != null && currentUser.getUserId() > 0) {
+            createItemNetworkManager.send("USER_ITEM_STATS " + currentUser.getUserId());
+        }
+    }
+
+    @Override
+    protected void handleLogout() {
+        if (createItemNetworkManager != null) {
+            createItemNetworkManager.disconnect();
+        }
+        super.handleLogout();
     }
 
     @Override
@@ -86,190 +146,207 @@ public class UserDashboardController extends BaseDashboardController {
         activeFilter = getDefaultFilter(sectionKey);
         auctionPage = 1;
 
+        if (workspaceTitleLabel != null) {
+            workspaceTitleLabel.setVisible(true);
+            workspaceTitleLabel.setManaged(true);
+        }
+        if (surfaceTitleLabel != null) {
+            surfaceTitleLabel.setVisible(true);
+            surfaceTitleLabel.setManaged(true);
+        }
+        if (userActionBar != null) {
+            userActionBar.setVisible(true);
+            userActionBar.setManaged(true);
+        }
+
         super.showSection(sectionKey);
         hidePageDescriptions();
         updatePrimaryAction(sectionKey);
         renderWorkspace(sectionKey, activeFilter);
+        if ("myItems".equals(sectionKey)) {
+            requestCreateListingMetadata();
+            applySellerItemStatsIfAvailable();
+        }
     }
 
     private Map<String, SectionContent> buildSections() {
         Map<String, SectionContent> map = new LinkedHashMap<>();
 
         map.put("dashboard", page(
-                "Dashboard",
-                "Track bids, browse live auctions, manage listings, and follow transactions.",
-                "User Auction Workspace",
-                "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller tasks, and auto-bid warnings.",
-                new String[]{"12", "04", "03", "08"},
-                new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
-                new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
-                new String[]{
-                        "Outbid rows and ending-soon auctions are pushed to the top.",
-                        "My Bids keeps current price, your bid, status, and next action visible.",
-                        "Sold items and won auctions move into Transactions after bidding ends."
-                },
-                new String[]{
-                        "You were outbid on Vintage Camera.",
-                        "MacBook Pro M3 ends in 42 minutes.",
-                        "Mechanical Keyboard sale is ready to ship.",
-                        "Auto bid reached 80% of max limit."
-                }
+            "Dashboard",
+            "Track bids, browse live auctions, manage listings, and follow transactions.",
+            "User Auction Workspace",
+            "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller tasks, and auto-bid warnings.",
+            new String[]{"12", "04", "03", "08"},
+            new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
+            new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
+            new String[]{
+                "Outbid rows and ending-soon auctions are pushed to the top.",
+                "My Bids keeps current price, your bid, status, and next action visible.",
+                "Sold items and won auctions move into Transactions after bidding ends."
+            },
+            new String[]{
+                "You were outbid on Vintage Camera.",
+                "MacBook Pro M3 ends in 42 minutes.",
+                "Mechanical Keyboard sale is ready to ship.",
+                "Auto bid reached 80% of max limit."
+            }
         ));
 
         map.put("auctions", page(
-                "Auctions",
-                "Browse by category, filter live auctions, preview items, and place bids quickly.",
-                "Auction Browse",
-                "Marketplace-style browsing with product images, category cards, status filters, and paginated auction cards.",
-                new String[]{"32", "10", "08", "06"},
-                new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
-                new String[]{"Shop by Category", "Auction cards", "Pagination"},
-                new String[]{
-                        "Category cards work as practical browse shortcuts instead of decorative sections.",
-                        "Each auction card shows image, category, current bid, bid count, countdown, badge, and actions.",
-                        "Large result sets stay manageable with page 1, page 2, and Next/Previous controls."
-                },
-                new String[]{
-                        "Vintage Camera is ending soon with high demand.",
-                        "MacBook Pro M3 is the most watched Electronics auction.",
-                        "Signed Art Print is a no-reserve auction.",
-                        "Use category cards before opening advanced filters."
-                }
+            "Auctions",
+            "Browse by category, filter live auctions, preview items, and place bids quickly.",
+            "Auction Browse",
+            "Marketplace-style browsing with product images, category cards, status filters, and paginated auction cards.",
+            new String[]{"32", "10", "08", "06"},
+            new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
+            new String[]{"Shop by Category", "Auction cards", "Pagination"},
+            new String[]{
+                "Category cards work as practical browse shortcuts instead of decorative sections.",
+                "Each auction card shows image, category, current bid, bid count, countdown, badge, and actions.",
+                "Large result sets stay manageable with page 1, page 2, and Next/Previous controls."
+            },
+            new String[]{
+                "Vintage Camera is ending soon with high demand.",
+                "MacBook Pro M3 is the most watched Electronics auction.",
+                "Signed Art Print is a no-reserve auction.",
+                "Use category cards before opening advanced filters."
+            }
         ));
 
         map.put("myBids", page(
-                "My Bids",
-                "Track every bid you placed and act when you are winning, outbid, won, or lost.",
-                "Bid Tracking Board",
-                "A management table is best here: item thumbnail, current price, your bid, status, countdown, and quick action.",
-                new String[]{"18", "07", "05", "06"},
-                new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
-                new String[]{"Bid history", "Status badges", "Quick re-bid"},
-                new String[]{
-                        "Rows should compare current price, your latest bid, and closing pressure.",
-                        "Winning, Outbid, Won, and Lost statuses stay visible as badges.",
-                        "Outbid rows expose Bid Again without forcing a full detail page first."
-                },
-                new String[]{
-                        "You are winning 7 auctions right now.",
-                        "5 bids are outbid and need action.",
-                        "2 auctions end within the next hour.",
-                        "Completed bids move to Transactions."
-                }
+            "My Bids",
+            "Track every bid you placed and act when you are winning, outbid, won, or lost.",
+            "Bid Tracking Board",
+            "A management table is best here: item thumbnail, current price, your bid, status, countdown, and quick action.",
+            new String[]{"18", "07", "05", "06"},
+            new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
+            new String[]{"Bid history", "Status badges", "Quick re-bid"},
+            new String[]{
+                "Rows should compare current price, your latest bid, and closing pressure.",
+                "Winning, Outbid, Won, and Lost statuses stay visible as badges.",
+                "Outbid rows expose Bid Again without forcing a full detail page first."
+            },
+            new String[]{
+                "You are winning 7 auctions right now.",
+                "5 bids are outbid and need action.",
+                "2 auctions end within the next hour.",
+                "Completed bids move to Transactions."
+            }
         ));
 
         map.put("autoBids", page(
-                "Auto Bids",
-                "Manage automated bidding rules, maximum limits, increments, and pause or resume controls.",
-                "Auto Bid Controls",
-                "Auto bids are bidding rules, not just history. Keep max limit, current price, increment, warning threshold, and controls visible.",
-                new String[]{"03", "01", "02", "01"},
-                new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
-                new String[]{"Rule table", "Limit safety", "Pause / resume"},
-                new String[]{
-                        "Show each automated rule beside the related auction item.",
-                        "Warn when current price approaches the configured max bid.",
-                        "Allow quick Edit, Pause, Resume, or Delete actions."
-                },
-                new String[]{
-                        "MacBook Pro M3 auto bid is near its max limit.",
-                        "Vintage Camera auto bid is paused by user.",
-                        "Mechanical Keyboard auto bid ended with a winning result.",
-                        "Safety warning threshold is currently 80% of max limit."
-                }
+            "Auto Bids",
+            "Manage automated bidding rules, maximum limits, increments, and pause or resume controls.",
+            "Auto Bid Controls",
+            "Auto bids are bidding rules, not just history. Keep max limit, current price, increment, warning threshold, and controls visible.",
+            new String[]{"03", "01", "02", "01"},
+            new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
+            new String[]{"Rule table", "Limit safety", "Pause / resume"},
+            new String[]{
+                "Show each automated rule beside the related auction item.",
+                "Warn when current price approaches the configured max bid.",
+                "Allow quick Edit, Pause, Resume, or Delete actions."
+            },
+            new String[]{
+                "MacBook Pro M3 auto bid is near its max limit.",
+                "Vintage Camera auto bid is paused by user.",
+                "Mechanical Keyboard auto bid ended with a winning result.",
+                "Safety warning threshold is currently 80% of max limit."
+            }
         ));
 
         map.put("myItems", page(
-                "My Items",
-                "Manage seller listings, drafts, active auctions, sold items, and relist actions.",
-                "Seller Workspace",
-                "Seller management stays practical with item thumbnails, listing status, bids, watchers, countdown, winner, and context actions.",
-                new String[]{"14", "05", "03", "06"},
-                new String[]{"Items", "Drafts", "Active Sales", "Sold"},
-                new String[]{"Listing status", "Auction linkage", "Seller actions"},
-                new String[]{
-                        "Draft, Pending, Active, Sold, and Unsold items are separated by filter chips.",
-                        "Each item shows whether it has bids, watchers, or a winner follow-up task.",
-                        "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, or Relist."
-                },
-                new String[]{
-                        "Leather Backpack draft needs image and starting price.",
-                        "Mechanical Keyboard is sold and ready to ship.",
-                        "Wireless Mouse has 11 watchers but no bids yet.",
-                        "Abstract Painting can be relisted after no winning bid."
-                }
+            "My Items",
+            "Manage seller listings, drafts, active auctions, sold items, and relist actions.",
+            "Seller Workspace",
+            "Seller management stays practical with item thumbnails, listing status, bids, watchers, countdown, winner, and context actions.",
+            new String[]{"14", "05", "03", "06"},
+            new String[]{"Items", "Drafts", "Active Sales", "Sold"},
+            new String[]{"Listing status", "Auction linkage", "Seller actions"},
+            new String[]{
+                "Draft, Pending, Active, Sold, and Unsold items are separated by filter chips.",
+                "Each item shows whether it has bids, watchers, or a winner follow-up task.",
+                "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, or Relist."
+            },
+            new String[]{
+                "Leather Backpack draft needs image and starting price.",
+                "Mechanical Keyboard is sold and ready to ship.",
+                "Wireless Mouse has 11 watchers but no bids yet.",
+                "Abstract Painting can be relisted after no winning bid."
+            }
         ));
 
         map.put("winners", page(
-                "Transactions",
-                "Follow auctions you won and auctions you sold after bidding ends.",
-                "Post-Auction Transactions",
-                "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold Auctions for winners of your listings.",
-                new String[]{"06", "02", "03", "01"},
-                new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
-                new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
-                new String[]{
-                        "Won Auctions track final price, seller, payment, and pickup or shipping status.",
-                        "Sold Auctions track winner, winning bid, payment status, and seller fulfilment.",
-                        "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or Leave Review."
-                },
-                new String[]{
-                        "Canon EOS M50 is waiting for payment.",
-                        "Mechanical Keyboard winner has paid and needs shipping.",
-                        "Signed Art Print transaction is completed.",
-                        "Vintage Camera invoice is ready to download."
-                }
+            "Transactions",
+            "Follow auctions you won and auctions you sold after bidding ends.",
+            "Post-Auction Transactions",
+            "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold Auctions for winners of your listings.",
+            new String[]{"06", "02", "03", "01"},
+            new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
+            new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
+            new String[]{
+                "Won Auctions track final price, seller, payment, and pickup or shipping status.",
+                "Sold Auctions track winner, winning bid, payment status, and seller fulfilment.",
+                "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or Leave Review."
+            },
+            new String[]{
+                "Canon EOS M50 is waiting for payment.",
+                "Mechanical Keyboard winner has paid and needs shipping.",
+                "Signed Art Print transaction is completed.",
+                "Vintage Camera invoice is ready to download."
+            }
         ));
 
         map.put("settings", page(
-                "Settings",
-                "Manage account details, notifications, bidding preferences, seller profile, payments, and app preferences.",
-                "Settings Workspace",
-                "Settings should be grouped forms, not auction tables: account, notifications, bidding, seller profile, payment, privacy, and preferences.",
-                new String[]{"07", "08", "04", "03"},
-                new String[]{"Groups", "Alerts", "Bid Rules", "Preferences"},
-                new String[]{"Account", "Notifications", "Bidding preferences"},
-                new String[]{
-                        "Profile, email, phone number, avatar, and password change belong in Account.",
-                        "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts belong in Notifications.",
-                        "Default increment, quick bid confirmation, auto-bid threshold, currency, timezone, and default view belong in Preferences."
-                },
-                new String[]{
-                        "Outbid and ending-soon alerts are enabled.",
-                        "Confirm before placing bid is enabled.",
-                        "Default auction view is Grid/List hybrid.",
-                        "Currency is set to VND."
-                }
+            "Settings",
+            "Manage account details, notifications, bidding preferences, seller profile, payments, and app preferences.",
+            "Settings Workspace",
+            "Settings should be grouped forms, not auction tables: account, notifications, bidding, seller profile, payment, privacy, and preferences.",
+            new String[]{"07", "08", "04", "03"},
+            new String[]{"Groups", "Alerts", "Bid Rules", "Preferences"},
+            new String[]{"Account", "Notifications", "Bidding preferences"},
+            new String[]{
+                "Profile, email, phone number, avatar, and password change belong in Account.",
+                "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts belong in Notifications.",
+                "Default increment, quick bid confirmation, auto-bid threshold, currency, timezone, and default view belong in Preferences."
+            },
+            new String[]{
+                "Outbid and ending-soon alerts are enabled.",
+                "Confirm before placing bid is enabled.",
+                "Default auction view is Grid/List hybrid.",
+                "Currency is set to VND."
+            }
         ));
 
         return map;
     }
 
     private SectionContent page(
-            String title,
-            String subtitle,
-            String surfaceTitle,
-            String surfaceDescription,
-            String[] statValues,
-            String[] statLabels,
-            String[] featureTitles,
-            String[] featureDescriptions,
-            String[] activityLines) {
+        String title,
+        String subtitle,
+        String surfaceTitle,
+        String surfaceDescription,
+        String[] statValues,
+        String[] statLabels,
+        String[] featureTitles,
+        String[] featureDescriptions,
+        String[] activityLines) {
         return new SectionContent(
-                title,
-                subtitle,
-                surfaceTitle,
-                surfaceDescription,
-                "",
-                "",
-                statValues,
-                statLabels,
-                featureTitles,
-                featureDescriptions,
-                activityLines,
-                new String[0],
-                new String[0],
-                new String[0]
+            title,
+            subtitle,
+            surfaceTitle,
+            surfaceDescription,
+            "",
+            "",
+            statValues,
+            statLabels,
+            featureTitles,
+            featureDescriptions,
+            activityLines,
+            new String[0],
+            new String[0],
+            new String[0]
         );
     }
 
@@ -319,14 +396,12 @@ public class UserDashboardController extends BaseDashboardController {
             return;
         }
 
-        switch (sectionKey) {
-            case "auctions" -> configurePrimaryAction("Advanced Filter", () -> showTemporaryDetail("Advanced Filter", "Open category, status, price range, ending time, condition, and sort controls."));
-            case "myBids" -> configurePrimaryAction("Bid Again", () -> applyFilter("Outbid"));
-            case "autoBids" -> configurePrimaryAction("Create Auto Bid", () -> showTemporaryDetail("Create Auto Bid", "Create a rule with max bid, increment, and warning threshold for a selected auction."));
-            case "myItems" -> configurePrimaryAction("Create Listing", () -> showTemporaryDetail("Create Listing", "Start a draft item listing before publishing or submitting it for approval."));
-            case "winners" -> configurePrimaryAction("Open Transactions", () -> applyFilter("Payment Due"));
-            case "settings" -> configurePrimaryAction("Save Settings", () -> showTemporaryDetail("Save Settings", "Persist account, notification, bidding, seller, payment, and preference changes."));
-            default -> configurePrimaryAction("Browse Auctions", () -> showSection("auctions"));
+        boolean showCreateListing = "myItems".equals(sectionKey);
+        primaryActionButton.setVisible(showCreateListing);
+        primaryActionButton.setManaged(showCreateListing);
+
+        if (showCreateListing) {
+            configurePrimaryAction("Create Listing", this::renderCreateItemForm);
         }
     }
 
@@ -788,8 +863,8 @@ public class UserDashboardController extends BaseDashboardController {
             String haystack = normalize(card.title + " " + card.category + " " + card.badge + " " + card.detail);
 
             if (isAllLikeFilter(filter)
-                    || haystack.contains(normalizedFilter)
-                    || normalize(card.category).equals(normalizedFilter)) {
+                || haystack.contains(normalizedFilter)
+                || normalize(card.category).equals(normalizedFilter)) {
                 filtered.add(card);
             }
         }
@@ -911,41 +986,41 @@ public class UserDashboardController extends BaseDashboardController {
 
         String normalizedFilter = normalize(filter);
         String haystack = normalize(String.join(" ",
-                row.title,
-                row.meta,
-                row.firstValue,
-                row.secondValue,
-                row.status,
-                row.detail,
-                String.join(" ", row.actions)
+            row.title,
+            row.meta,
+            row.firstValue,
+            row.secondValue,
+            row.status,
+            row.detail,
+            String.join(" ", row.actions)
         ));
 
         if (normalizedFilter.equals("needs action")) {
             return haystack.contains("outbid")
-                    || haystack.contains("payment due")
-                    || haystack.contains("to ship")
-                    || haystack.contains("near limit")
-                    || haystack.contains("limit reached");
+                || haystack.contains("payment due")
+                || haystack.contains("to ship")
+                || haystack.contains("near limit")
+                || haystack.contains("limit reached");
         }
 
         if (normalizedFilter.equals("ending soon")) {
             return haystack.contains("ending soon")
-                    || haystack.contains("ends in")
-                    || haystack.contains("42m")
-                    || haystack.contains("38m");
+                || haystack.contains("ends in")
+                || haystack.contains("42m")
+                || haystack.contains("38m");
         }
 
         if (normalizedFilter.equals("won auctions")) {
             return normalize(row.title).startsWith("won")
-                    || haystack.contains("won auction")
-                    || normalize(row.status).equals("won");
+                || haystack.contains("won auction")
+                || normalize(row.status).equals("won");
         }
 
         if (normalizedFilter.equals("sold auctions")) {
             return normalize(row.title).startsWith("sold")
-                    || haystack.contains("sold auction")
-                    || normalize(row.status).equals("sold")
-                    || normalize(row.status).equals("to ship");
+                || haystack.contains("sold auction")
+                || normalize(row.status).equals("sold")
+                || normalize(row.status).equals("to ship");
         }
 
         return haystack.contains(normalizedFilter);
@@ -955,7 +1030,7 @@ public class UserDashboardController extends BaseDashboardController {
         String normalized = normalize(filter);
 
         return normalized.equals("all")
-                || normalized.equals("overview");
+            || normalized.equals("overview");
     }
 
     private String normalize(String value) {
@@ -1127,30 +1202,30 @@ public class UserDashboardController extends BaseDashboardController {
         String normalized = normalize(status);
 
         if (normalized.contains("winning")
-                || normalized.contains("running")
-                || normalized.contains("active")
-                || normalized.contains("won")
-                || normalized.contains("sold")
-                || normalized.contains("completed")
-                || normalized.contains("ready")
-                || normalized.contains("hot")
-                || normalized.contains("watched")) {
+            || normalized.contains("running")
+            || normalized.contains("active")
+            || normalized.contains("won")
+            || normalized.contains("sold")
+            || normalized.contains("completed")
+            || normalized.contains("ready")
+            || normalized.contains("hot")
+            || normalized.contains("watched")) {
             return "status-good";
         }
 
         if (normalized.contains("outbid")
-                || normalized.contains("payment due")
-                || normalized.contains("near limit")
-                || normalized.contains("pending")
-                || normalized.contains("to ship")
-                || normalized.contains("ending soon")
-                || normalized.contains("no reserve")) {
+            || normalized.contains("payment due")
+            || normalized.contains("near limit")
+            || normalized.contains("pending")
+            || normalized.contains("to ship")
+            || normalized.contains("ending soon")
+            || normalized.contains("no reserve")) {
             return "status-warn";
         }
 
         if (normalized.contains("lost")
-                || normalized.contains("limit reached")
-                || normalized.contains("unsold")) {
+            || normalized.contains("limit reached")
+            || normalized.contains("unsold")) {
             return "status-danger";
         }
 
@@ -1169,6 +1244,471 @@ public class UserDashboardController extends BaseDashboardController {
             surfaceDescriptionLabel.setVisible(false);
             surfaceDescriptionLabel.setManaged(false);
         }
+    }
+
+
+    /**
+     * Renders the Create Listing form inside the existing user dashboard workspace.
+     *
+     * <p>This keeps sidebar navigation visible and follows the project flow: seller creates an
+     * item, admin reviews it, then admin creates the auction session from the approved item.</p>
+     */
+    private void renderCreateItemForm() {
+        if (workspaceBox == null) {
+            return;
+        }
+
+        setWorkspaceTitle("");
+        if (workspaceTitleLabel != null) {
+            workspaceTitleLabel.setVisible(false);
+            workspaceTitleLabel.setManaged(false);
+        }
+        if (surfaceTitleLabel != null) {
+            surfaceTitleLabel.setVisible(false);
+            surfaceTitleLabel.setManaged(false);
+        }
+
+        workspaceBox.getChildren().clear();
+        if (userActionBar != null) {
+            userActionBar.getChildren().clear();
+            userActionBar.setVisible(false);
+            userActionBar.setManaged(false);
+        }
+        pendingCreateItemImageUris.clear();
+
+        VBox formShell = new VBox(16);
+        formShell.getStyleClass().add("create-listing-shell");
+        formShell.setMaxWidth(Double.MAX_VALUE);
+
+        Label formTitle = new Label("Create Listing");
+        formTitle.getStyleClass().add("create-listing-title");
+
+        Label formNote = new Label("Submit an item for admin review. Approved items become available for auction creation.");
+        formNote.getStyleClass().add("create-listing-note");
+        formNote.setWrapText(true);
+
+        HBox topRow = new HBox(18);
+        topRow.setAlignment(Pos.TOP_LEFT);
+        topRow.setMaxWidth(Double.MAX_VALUE);
+
+        VBox uploadPanel = new VBox(12);
+        uploadPanel.getStyleClass().add("create-listing-card");
+        uploadPanel.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(uploadPanel, Priority.ALWAYS);
+
+        Label uploadTitle = new Label("Upload File");
+        uploadTitle.getStyleClass().add("create-section-title");
+
+        StackPane uploadZone = new StackPane();
+        uploadZone.getStyleClass().add("create-upload-zone");
+        uploadZone.setMinHeight(190);
+
+        VBox uploadContent = new VBox(10);
+        uploadContent.setAlignment(Pos.CENTER);
+
+        Label uploadHint = new Label("PNG, JPG, JPEG, WEBP");
+        uploadHint.getStyleClass().add("create-muted-text");
+
+        Label selectedFileLabel = new Label("No file selected");
+        selectedFileLabel.getStyleClass().add("create-muted-text");
+
+        Button browseButton = new Button("Browse File");
+        browseButton.setMnemonicParsing(false);
+        browseButton.getStyleClass().add("create-dark-btn");
+
+        ImageView previewImage = new ImageView();
+        previewImage.getStyleClass().add("create-preview-image");
+        previewImage.setPreserveRatio(true);
+        previewImage.setSmooth(true);
+        previewImage.setCache(true);
+
+        uploadContent.getChildren().addAll(uploadHint, browseButton, selectedFileLabel);
+        uploadZone.getChildren().add(uploadContent);
+        uploadPanel.getChildren().addAll(uploadTitle, uploadZone);
+
+        VBox previewPanel = new VBox(12);
+        previewPanel.getStyleClass().add("create-listing-card");
+        // Keep the preview card fixed-width inside the dashboard workspace.
+        // Without max width, VBox/HBox layout may stretch the empty preview frame toward the scrollbar.
+        previewPanel.setPrefWidth(375);
+        previewPanel.setMinWidth(375);
+        previewPanel.setMaxWidth(375);
+
+        Label previewTitle = new Label("Preview File");
+        previewTitle.getStyleClass().add("create-section-title");
+
+        StackPane previewImageWrap = new StackPane();
+        previewImageWrap.getStyleClass().add("create-preview-image-wrap");
+        // Fixed preview viewport: prevents the blank frame from expanding before an image is selected.
+        previewImageWrap.setPrefSize(315, 230);
+        previewImageWrap.setMinSize(315, 230);
+        previewImageWrap.setMaxSize(315, 230);
+        previewImage.setFitWidth(315);
+        previewImage.setFitHeight(230);
+        Rectangle previewClip = new Rectangle(315, 230);
+        previewClip.setArcWidth(28);
+        previewClip.setArcHeight(28);
+        previewImageWrap.setClip(previewClip);
+        previewImageWrap.getChildren().add(previewImage);
+
+        Label previewName = new Label("Untitled listing");
+        previewName.getStyleClass().add("create-preview-title");
+        previewName.setWrapText(true);
+
+        Label previewPrice = new Label("Starting price: 0 VND");
+        previewPrice.getStyleClass().add("create-muted-text");
+
+        Label previewStatus = new Label("Pending review after submit");
+        previewStatus.getStyleClass().add("status-badge");
+        previewStatus.getStyleClass().add("status-warn");
+
+        previewPanel.getChildren().addAll(previewTitle, previewImageWrap, previewName, previewPrice, previewStatus);
+        topRow.getChildren().addAll(uploadPanel, previewPanel);
+
+        VBox detailsPanel = new VBox(12);
+        detailsPanel.getStyleClass().add("create-listing-card");
+
+        Label detailsTitle = new Label("Main Details");
+        detailsTitle.getStyleClass().add("create-section-title");
+
+        TextField titleField = createFormField("Item title");
+        TextField priceField = createFormField("Starting price, e.g. 2500000");
+        TextField sizeField = createFormField("Size / condition");
+
+        ComboBox<String> currencyBox = new ComboBox<>();
+        currencyBox.getStyleClass().add("create-combo-box");
+        currencyBox.setMaxWidth(Double.MAX_VALUE);
+        currencyBox.getItems().setAll("VND", "USD");
+        currencyBox.getSelectionModel().select("VND");
+
+        TextArea descriptionArea = new TextArea();
+        descriptionArea.setPromptText("Description, condition, provenance, and notes for admin review...");
+        descriptionArea.setWrapText(true);
+        descriptionArea.setPrefRowCount(4);
+        descriptionArea.getStyleClass().add("create-text-area");
+
+        HBox rowOne = new HBox(14);
+        rowOne.getChildren().addAll(fieldBox("Title", titleField), fieldBox("Price", priceField));
+        HBox.setHgrow(rowOne.getChildren().get(0), Priority.ALWAYS);
+        HBox.setHgrow(rowOne.getChildren().get(1), Priority.ALWAYS);
+
+        HBox rowTwo = new HBox(14);
+        rowTwo.getChildren().addAll(
+            fieldBox("Size / Condition", sizeField),
+            fieldBox("Currency", currencyBox)
+        );
+        for (Node node : rowTwo.getChildren()) {
+            HBox.setHgrow(node, Priority.ALWAYS);
+        }
+
+        Label messageLabel = new Label("");
+        messageLabel.getStyleClass().add("create-message");
+
+        Button saveDraft = new Button("Save Draft");
+        saveDraft.setMnemonicParsing(false);
+        saveDraft.getStyleClass().add("create-secondary-btn");
+
+        Button submitItem = new Button("Submit Item");
+        submitItem.setMnemonicParsing(false);
+        submitItem.getStyleClass().add("create-primary-btn");
+
+        HBox actions = new HBox(12);
+        actions.setAlignment(Pos.CENTER_LEFT);
+        actions.getChildren().addAll(saveDraft, submitItem, messageLabel);
+        HBox.setHgrow(messageLabel, Priority.ALWAYS);
+
+        titleField.textProperty().addListener((observable, oldValue, newValue) ->
+            previewName.setText(newValue == null || newValue.isBlank() ? "Untitled listing" : newValue.trim()));
+        priceField.textProperty().addListener((observable, oldValue, newValue) ->
+            previewPrice.setText("Starting price: " + (newValue == null || newValue.isBlank() ? "0" : newValue.trim()) + " " + currencyBox.getValue()));
+        currencyBox.valueProperty().addListener((observable, oldValue, newValue) ->
+            previewPrice.setText("Starting price: " + (priceField.getText().isBlank() ? "0" : priceField.getText().trim()) + " " + (newValue == null ? "VND" : newValue)));
+
+        browseButton.setOnAction(event -> chooseItemImages(selectedFileLabel, previewImage, messageLabel));
+
+        saveDraft.setOnAction(event -> submitCreateItem(
+            true, titleField, descriptionArea, priceField,
+            sizeField, currencyBox,
+            saveDraft, submitItem, messageLabel
+        ));
+
+        submitItem.setOnAction(event -> submitCreateItem(
+            false, titleField, descriptionArea, priceField,
+            sizeField, currencyBox,
+            saveDraft, submitItem, messageLabel
+        ));
+
+        detailsPanel.getChildren().addAll(detailsTitle, rowOne, rowTwo, fieldBox("Description", descriptionArea), actions);
+        formShell.getChildren().addAll(formTitle, formNote, topRow, detailsPanel);
+        workspaceBox.getChildren().add(formShell);
+
+        if (primaryActionButton != null) {
+            primaryActionButton.setVisible(false);
+            primaryActionButton.setManaged(false);
+        }
+    }
+
+    private TextField createFormField(String prompt) {
+        TextField field = new TextField();
+        field.setPromptText(prompt);
+        field.getStyleClass().add("create-form-field");
+        field.setMaxWidth(Double.MAX_VALUE);
+        return field;
+    }
+
+    private VBox fieldBox(String labelText, Node input) {
+        VBox box = new VBox(6);
+        box.setMaxWidth(Double.MAX_VALUE);
+        Label label = new Label(labelText);
+        label.getStyleClass().add("create-field-label");
+        box.getChildren().addAll(label, input);
+        return box;
+    }
+
+    private void chooseItemImages(Label selectedFileLabel, ImageView previewImage, Label messageLabel) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Choose item images");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Image files", "*.png", "*.jpg", "*.jpeg", "*.webp"));
+
+        File currentDirectory = new File(System.getProperty("user.home"));
+        if (currentDirectory.exists()) {
+            chooser.setInitialDirectory(currentDirectory);
+        }
+
+        List<File> selectedFiles = chooser.showOpenMultipleDialog(workspaceBox.getScene().getWindow());
+        if (selectedFiles == null || selectedFiles.isEmpty()) {
+            return;
+        }
+
+        try {
+            pendingCreateItemImageUris.clear();
+            Path uploadRoot = Path.of(System.getProperty("user.home"), ".auction-system", "uploads");
+            Files.createDirectories(uploadRoot);
+
+            long batch = System.currentTimeMillis();
+            int index = 0;
+            for (File file : selectedFiles) {
+                String safeName = file.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+                Path target = uploadRoot.resolve(batch + "_" + index + "_" + safeName);
+                Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
+                pendingCreateItemImageUris.add(target.toUri().toString());
+                index++;
+            }
+
+            selectedFileLabel.setText(selectedFiles.size() == 1
+                ? selectedFiles.get(0).getName()
+                : selectedFiles.get(0).getName() + " +" + (selectedFiles.size() - 1) + " more");
+            Image image = new Image(pendingCreateItemImageUris.get(0), true);
+            previewImage.setImage(image);
+            image.progressProperty().addListener((observable, oldValue, newValue) -> {
+                if (newValue.doubleValue() >= 1.0 && previewImage.getParent() instanceof Region region) {
+                    updateCoverViewport(previewImage, region);
+                }
+            });
+            Platform.runLater(() -> {
+                if (previewImage.getParent() instanceof Region region) {
+                    updateCoverViewport(previewImage, region);
+                }
+            });
+            showCreateMessage(messageLabel, "Ảnh item đã được lưu tạm và sẽ gửi cùng listing.", false);
+        } catch (IOException exception) {
+            showCreateMessage(messageLabel, "Không thể lưu ảnh đã chọn.", true);
+            exception.printStackTrace();
+        }
+    }
+
+    private void submitCreateItem(boolean draftMode,
+                                  TextField titleField,
+                                  TextArea descriptionArea,
+                                  TextField priceField,
+                                  TextField sizeField,
+                                  ComboBox<String> currencyBox,
+                                  Button saveDraftButton,
+                                  Button submitItemButton,
+                                  Label messageLabel) {
+        String title = safeTrim(titleField.getText());
+        BigDecimal price = parseCreateItemPrice(priceField.getText());
+
+        if (title.isBlank()) {
+            showCreateMessage(messageLabel, "Vui lòng nhập title cho item.", true);
+            return;
+        }
+
+        if (price == null || price.compareTo(BigDecimal.ZERO) < 0) {
+            showCreateMessage(messageLabel, "Price phải là số hợp lệ và không âm.", true);
+            return;
+        }
+
+        User currentUser = SessionManager.getCurrentUser();
+        int sellerId = currentUser == null ? 0 : currentUser.getUserId();
+        String currency = currencyBox.getValue() == null ? "VND" : currencyBox.getValue();
+
+        String payload = fields(
+            sellerId,
+            title,
+            safeTrim(descriptionArea.getText()),
+            price.toPlainString(),
+            draftMode ? "DRAFT" : "PENDING_REVIEW",
+            "Timed Auction",
+            safeTrim(sizeField.getText()),
+            currency,
+            String.join("\n", pendingCreateItemImageUris)
+        );
+
+        showCreateMessage(messageLabel, draftMode ? "Đang lưu draft item..." : "Đang submit item lên Pending Approval...", false);
+        createItemNetworkManager.send("CREATE_ITEM " + payload);
+    }
+
+    private void handleCreateItemServerMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+
+        if (message.startsWith("USER_ITEM_STATS ")) {
+            List<String> fields = splitPayload(message.substring("USER_ITEM_STATS ".length()));
+            if (fields.size() >= 4) {
+                sellerItemTotal = parseIntOrDefault(fields.get(0), 0);
+                sellerItemDrafts = parseIntOrDefault(fields.get(1), 0);
+                sellerItemActiveSales = parseIntOrDefault(fields.get(2), 0);
+                sellerItemSold = parseIntOrDefault(fields.get(3), 0);
+                sellerItemStatsLoaded = true;
+                applySellerItemStatsIfAvailable();
+            }
+            return;
+        }
+
+        if (message.startsWith("CREATE_ITEM_SUCCESS")) {
+            requestCreateListingMetadata();
+            showTemporaryDetail("Create Listing", "Tạo item thành công. Nếu submit item, admin sẽ thấy nó trong Pending Approval.");
+            if ("myItems".equals(currentSectionKey)) {
+                showSection("myItems");
+            }
+            return;
+        }
+
+        if (message.startsWith("CREATE_ITEM_FAIL")) {
+            showTemporaryDetail("Create Listing failed", message);
+        }
+    }
+
+    private void applySellerItemStatsIfAvailable() {
+        if (!sellerItemStatsLoaded || !"myItems".equals(currentSectionKey)) {
+            return;
+        }
+
+        setLabelText(statValue1, twoDigit(sellerItemTotal));
+        setLabelText(statValue2, twoDigit(sellerItemDrafts));
+        setLabelText(statValue3, twoDigit(sellerItemActiveSales));
+        setLabelText(statValue4, twoDigit(sellerItemSold));
+        setLabelText(statLabel1, "Items");
+        setLabelText(statLabel2, "Drafts");
+        setLabelText(statLabel3, "Active Sales");
+        setLabelText(statLabel4, "Sold");
+    }
+
+    private String twoDigit(int value) {
+        return value < 10 ? "0" + value : String.valueOf(value);
+    }
+
+    private void setLabelText(Label label, String value) {
+        if (label != null) {
+            label.setText(value == null ? "" : value);
+        }
+    }
+
+    private String fields(Object... values) {
+        List<String> encoded = new ArrayList<>();
+        for (Object value : values) {
+            encoded.add(encodeField(value));
+        }
+        return String.join("|", encoded);
+    }
+
+    /**
+     * Escapes values for the simple socket protocol used by ClientHandler.
+     *
+     * <p>Keep this aligned with ClientHandler#splitPayload. It allows descriptions and
+     * image URI lists to contain spaces, pipes, and new lines without breaking parsing.</p>
+     */
+    private String encodeField(Object value) {
+        if (value == null) {
+            return "";
+        }
+
+        return String.valueOf(value)
+            .replace("\\", "\\\\")
+            .replace("|", "\\p")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
+    }
+
+    private List<String> splitPayload(String payload) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean escaped = false;
+
+        for (int i = 0; i < payload.length(); i++) {
+            char character = payload.charAt(i);
+
+            if (escaped) {
+                switch (character) {
+                    case 'p' -> current.append('|');
+                    case 'n' -> current.append('\n');
+                    case 'r' -> current.append('\r');
+                    case '\\' -> current.append('\\');
+                    default -> current.append(character);
+                }
+                escaped = false;
+                continue;
+            }
+
+            if (character == '\\') {
+                escaped = true;
+                continue;
+            }
+
+            if (character == '|') {
+                fields.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+
+            current.append(character);
+        }
+
+        if (escaped) {
+            current.append('\\');
+        }
+
+        fields.add(current.toString());
+        return fields;
+    }
+
+    private int parseIntOrDefault(String value, int fallbackValue) {
+        try {
+            return value == null || value.isBlank() ? fallbackValue : Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            return fallbackValue;
+        }
+    }
+
+    private BigDecimal parseCreateItemPrice(String rawValue) {
+        try {
+            String normalized = rawValue == null ? "" : rawValue.trim().replace(",", "");
+            return normalized.isBlank() ? null : new BigDecimal(normalized);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private void showCreateMessage(Label label, String message, boolean error) {
+        label.setText(message);
+        label.getStyleClass().removeAll("create-message-error", "create-message-info");
+        label.getStyleClass().add(error ? "create-message-error" : "create-message-info");
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private void showTemporaryDetail(String title, String description) {

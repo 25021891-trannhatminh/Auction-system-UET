@@ -1,5 +1,8 @@
 package client.model;
 
+import client.enums.AccountStatus;
+import client.enums.SystemRole;
+
 public class User {
     private int userId;
     private String username;

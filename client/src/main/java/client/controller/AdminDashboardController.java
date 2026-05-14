@@ -5,8 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import client.model.AccountStatus;
-import client.model.SystemRole;
+import client.enums.AccountStatus;
+import client.enums.SystemRole;
 import client.model.User;
 import client.service.NetworkManager;
 import client.service.SessionManager;
@@ -225,6 +225,12 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
+        if (msg.equals("ADMIN_ITEMS_DIRTY")) {
+            // CREATE_ITEM broadcast from server: refresh items so Pending Approval updates live.
+            adminNetworkManager.send("ADMIN_LIST_ITEMS");
+            return;
+        }
+
         if (msg.startsWith("ADMIN_DATA_ERROR ")) {
             handleAdminDataError(msg.substring("ADMIN_DATA_ERROR ".length()));
         }
@@ -235,13 +241,13 @@ public class AdminDashboardController extends BaseDashboardController {
         String scope = fields.isEmpty() ? "DATA" : fields.get(0);
         String message = fields.size() > 1 ? fields.get(1) : decodeJoinedPayload(payload);
         AdminRow errorRow = row(
-                "Cannot load " + scope.toLowerCase() + " from cloud database",
-                message,
-                "DB",
-                "Error",
-                "ERROR",
-                "Server trả ADMIN_DATA_ERROR cho " + scope + ". Kiểm tra server console và db.properties.",
-                "Refresh"
+            "Cannot load " + scope.toLowerCase() + " from cloud database",
+            message,
+            "DB",
+            "Error",
+            "ERROR",
+            "Server trả ADMIN_DATA_ERROR cho " + scope + ". Kiểm tra server console và db.properties.",
+            "Refresh"
         );
 
         switch (scope.toUpperCase()) {
@@ -295,8 +301,8 @@ public class AdminDashboardController extends BaseDashboardController {
         String status = normalizeUserStatus(safeField(fields, 6), safeField(fields, 7));
 
         boolean sameUser = (currentUser.getUserId() > 0 && currentUser.getUserId() == userId)
-                || equalsIgnoreCase(currentUser.getUsername(), username)
-                || (!email.isBlank() && equalsIgnoreCase(currentUser.getEmail(), email));
+            || equalsIgnoreCase(currentUser.getUsername(), username)
+            || (!email.isBlank() && equalsIgnoreCase(currentUser.getEmail(), email));
 
         if (!sameUser) {
             return;
@@ -357,31 +363,31 @@ public class AdminDashboardController extends BaseDashboardController {
         String bidCount = fallback(safeField(fields, 12), "0");
 
         String meta = joinMeta(
-                "ID #" + userId,
-                email,
-                fullName,
-                phone,
-                itemCount + " items",
-                runningCount + " running auctions",
-                bidCount + " bids"
+            "ID #" + userId,
+            email,
+            fullName,
+            phone,
+            itemCount + " items",
+            runningCount + " running auctions",
+            bidCount + " bids"
         );
 
         String detail = "User ID #" + userId
-                + " - username: " + username
-                + " - email: " + fallback(email, "not available")
-                + " - full name: " + fallback(fullName, "not available")
-                + " - phone: " + fallback(phone, "not available")
-                + " - created: " + fallback(createdAt, "not available")
-                + ". Row này lấy trực tiếp từ bảng users trong shared cloud database.";
+            + " - username: " + username
+            + " - email: " + fallback(email, "not available")
+            + " - full name: " + fallback(fullName, "not available")
+            + " - phone: " + fallback(phone, "not available")
+            + " - created: " + fallback(createdAt, "not available")
+            + ". Row này lấy trực tiếp từ bảng users trong shared cloud database.";
 
         return row(
-                username,
-                meta,
-                role,
-                lastLogin,
-                status,
-                detail,
-                actionsForUser(role, status)
+            username,
+            meta,
+            role,
+            lastLogin,
+            status,
+            detail,
+            actionsForUser(role, status)
         );
     }
 
@@ -407,18 +413,23 @@ public class AdminDashboardController extends BaseDashboardController {
         String auctionLink = auctionId.isBlank() ? "No auction" : "AUC-" + auctionId;
 
         String meta = "Seller " + fallback(seller, "#" + sellerId)
-                + " - Starting " + startingPrice
-                + " - Created " + fallback(createdAt, "not available")
-                + (auctionId.isBlank() ? " - No auction" : " - " + auctionLink + " " + auctionStatus + " - " + bidCount + " bids");
+            + " - Starting " + startingPrice
+            + " - Created " + fallback(createdAt, "not available")
+            + (auctionId.isBlank() ? " - No auction" : " - " + auctionLink + " " + auctionStatus + " - " + bidCount + " bids");
 
         String detail = "ITEM-" + itemId
-                + " - " + fallback(description, "no description")
-                + ". Seller ID #" + sellerId
-                + ". Current auction link: " + auctionLink
-                + (auctionId.isBlank() ? "." : " - current price " + currentPrice + ".")
-                + " Item Review đang đọc từ bảng items/auctions của cloud database.";
+            + " - " + fallback(description, "no description")
+            + ". Seller ID #" + sellerId
+            + ". Current auction link: " + auctionLink
+            + (auctionId.isBlank() ? "." : " - current price " + currentPrice + ".")
+            + " Item Review đang đọc từ bảng items/auctions của cloud database.";
+
+        String normalizedStatus = normalize(status);
 
         if (auctionId.isBlank()) {
+            if (normalizedStatus.equals("pending review")) {
+                return row("ITEM-" + itemId + " - " + itemName, meta, category, auctionLink, status, detail, "Review");
+            }
             return row("ITEM-" + itemId + " - " + itemName, meta, category, auctionLink, status, detail, "View", "Create Auction");
         }
 
@@ -444,14 +455,14 @@ public class AdminDashboardController extends BaseDashboardController {
         String winner = fields.get(10);
 
         String meta = "ITEM-" + itemId
-                + " - Seller " + fallback(seller, "#" + sellerId)
-                + " - Starts " + fallback(startTime, "not available")
-                + " - Ends " + fallback(endTime, "not available")
-                + (winner.isBlank() ? "" : " - Winner " + winner);
+            + " - Seller " + fallback(seller, "#" + sellerId)
+            + " - Starts " + fallback(startTime, "not available")
+            + " - Ends " + fallback(endTime, "not available")
+            + (winner.isBlank() ? "" : " - Winner " + winner);
 
         String detail = "Auction AUC-" + auctionId
-                + " is linked to ITEM-" + itemId
-                + " (" + itemName + "). Dữ liệu lấy từ bảng auctions join items/users/bids của cloud database.";
+            + " is linked to ITEM-" + itemId
+            + " (" + itemName + "). Dữ liệu lấy từ bảng auctions join items/users/bids của cloud database.";
 
         if (normalize(status).equals("running") || normalize(status).equals("open")) {
             return row("AUC-" + auctionId + " - " + itemName, meta, currentPrice, bidCount + " bids", status, detail, "View", "Cancel", "Copy ID");
@@ -530,159 +541,159 @@ public class AdminDashboardController extends BaseDashboardController {
         Map<String, SectionContent> map = new LinkedHashMap<>();
 
         map.put("dashboard", page(
-                "Admin Dashboard",
-                "Monitor live auctions, pending item reviews, user accounts, and platform activity.",
-                "Control Center",
-                "A practical admin workspace for auction health, review queues, and recent operational events.",
-                new String[]{"0", "0", "0", "0"},
-                new String[]{"Users", "Running Auctions", "Listed Items", "Total Bids"},
-                new String[]{"Live auction health", "Moderation queue", "Recent activity"},
-                new String[]{
-                        "Track RUNNING auctions, current prices, bid counts, and ending-soon sessions.",
-                        "Review AVAILABLE items, flagged auctions, suspended accounts, and payment follow-ups.",
-                        "Surface audit events, bid events, auction status changes, and item updates."
-                },
-                new String[]{
-                        "Admin tables now prefer shared database data when the server is available.",
-                        "Item Review and Auction Sessions stay linked by ITEM/AUC IDs.",
-                        "User Accounts are requested from the shared cloud database.",
-                        "Fallback demo rows stay available when the server is offline."
-                }
+            "Admin Dashboard",
+            "Monitor live auctions, pending item reviews, user accounts, and platform activity.",
+            "Control Center",
+            "A practical admin workspace for auction health, review queues, and recent operational events.",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Users", "Running Auctions", "Listed Items", "Total Bids"},
+            new String[]{"Live auction health", "Moderation queue", "Recent activity"},
+            new String[]{
+                "Track RUNNING auctions, current prices, bid counts, and ending-soon sessions.",
+                "Review AVAILABLE items, flagged auctions, suspended accounts, and payment follow-ups.",
+                "Surface audit events, bid events, auction status changes, and item updates."
+            },
+            new String[]{
+                "Admin tables now prefer shared database data when the server is available.",
+                "Item Review and Auction Sessions stay linked by ITEM/AUC IDs.",
+                "User Accounts are requested from the shared cloud database.",
+                "Fallback demo rows stay available when the server is offline."
+            }
         ));
 
         map.put("users", page(
-                "Users",
-                "Manage user accounts, role scopes, and status actions from one screen.",
-                "User Management",
-                "Inspect accounts from the shared cloud database with ACTIVE, SUSPENDED, and BANNED states.",
-                new String[]{"0", "0", "0", "0"},
-                new String[]{"Total Users", "Active", "Suspended", "Banned"},
-                new String[]{"Account table", "Role controls", "Risk review"},
-                new String[]{
-                        "Search users by username, email, role, or account status.",
-                        "Rows are populated from the server database instead of static fake accounts.",
-                        "Keep SUSPENDED and BANNED accounts visible for audit and restore workflows."
-                },
-                new String[]{
-                        "Filter by ACTIVE, SUSPENDED, or BANNED before batch review.",
-                        "Open a user row to inspect wallet, auctions, bids, and account history.",
-                        "Use Suspend, Restore, or Ban only after checking recent activity.",
-                        "Role changes stay inside the user detail flow, not as a quick row action."
-                }
+            "Users",
+            "Manage user accounts, role scopes, and status actions from one screen.",
+            "User Management",
+            "Inspect accounts from the shared cloud database with ACTIVE, SUSPENDED, and BANNED states.",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Total Users", "Active", "Suspended", "Banned"},
+            new String[]{"Account table", "Role controls", "Risk review"},
+            new String[]{
+                "Search users by username, email, role, or account status.",
+                "Rows are populated from the server database instead of static fake accounts.",
+                "Keep SUSPENDED and BANNED accounts visible for audit and restore workflows."
+            },
+            new String[]{
+                "Filter by ACTIVE, SUSPENDED, or BANNED before batch review.",
+                "Open a user row to inspect wallet, auctions, bids, and account history.",
+                "Use Suspend, Restore, or Ban only after checking recent activity.",
+                "Role changes stay inside the user detail flow, not as a quick row action."
+            }
         ));
 
         map.put("auctions", page(
-                "Auctions",
-                "Supervise auction sessions, timing, bid activity, and intervention actions.",
-                "Auction Monitoring",
-                "The list is for quick monitoring. Use View to open a focused auction detail screen with edit, payment, bids, and logs.",
-                new String[]{"0", "0", "0", "0"},
-                new String[]{"Auctions", "Running", "Open", "Finished/Paid"},
-                new String[]{"Auction table", "Linked item", "Bid history"},
-                new String[]{
-                        "Auction rows are linked to item rows by ITEM ID.",
-                        "Every auction row keeps item ID and seller visible so admin can trace ownership.",
-                        "Bid count and current price are surfaced for abnormal bidding checks."
-                },
-                new String[]{
-                        "RUNNING auctions show current price, bid count, and end-time pressure.",
-                        "OPEN auctions are scheduled or ready before the bidding window starts.",
-                        "FINISHED and PAID auctions need winner/payment follow-up.",
-                        "CANCELED auctions remain visible for audit and dispute review."
-                }
+            "Auctions",
+            "Supervise auction sessions, timing, bid activity, and intervention actions.",
+            "Auction Monitoring",
+            "The list is for quick monitoring. Use View to open a focused auction detail screen with edit, payment, bids, and logs.",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Auctions", "Running", "Open", "Finished/Paid"},
+            new String[]{"Auction table", "Linked item", "Bid history"},
+            new String[]{
+                "Auction rows are linked to item rows by ITEM ID.",
+                "Every auction row keeps item ID and seller visible so admin can trace ownership.",
+                "Bid count and current price are surfaced for abnormal bidding checks."
+            },
+            new String[]{
+                "RUNNING auctions show current price, bid count, and end-time pressure.",
+                "OPEN auctions are scheduled or ready before the bidding window starts.",
+                "FINISHED and PAID auctions need winner/payment follow-up.",
+                "CANCELED auctions remain visible for audit and dispute review."
+            }
         ));
 
         map.put("items", page(
-                "Item Review",
-                "Review listed items, item statuses, categories, seller links, and auction readiness.",
-                "Item Review & Catalog",
-                "Items are seller listings. Auctions are bidding sessions created from approved items.",
-                new String[]{"0", "0", "0", "0"},
-                new String[]{"Items", "Available", "In Auction", "Sold/Removed"},
-                new String[]{"Item table", "Auction linkage", "Catalog quality"},
-                new String[]{
-                        "Manage DRAFT, AVAILABLE, IN_AUCTION, SOLD, and REMOVED item states.",
-                        "Approved AVAILABLE items can be converted into OPEN auction sessions.",
-                        "Flagged or REMOVED items stay visible for moderation notes and seller review."
-                },
-                new String[]{
-                        "AVAILABLE items are ready for Create Auction after admin inspection.",
-                        "IN_AUCTION items should link back to their active auction session.",
-                        "SOLD items should match a FINISHED or PAID auction record.",
-                        "REMOVED items should keep a reason for audit history."
-                }
+            "Item Review",
+            "Review listed items, item statuses, categories, seller links, and auction readiness.",
+            "Item Review & Catalog",
+            "Items are seller listings. Auctions are bidding sessions created from approved items.",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Items", "Available", "In Auction", "Sold/Removed"},
+            new String[]{"Item table", "Auction linkage", "Catalog quality"},
+            new String[]{
+                "Manage DRAFT, AVAILABLE, IN_AUCTION, SOLD, and REMOVED item states.",
+                "Approved AVAILABLE items can be converted into OPEN auction sessions.",
+                "Flagged or REMOVED items stay visible for moderation notes and seller review."
+            },
+            new String[]{
+                "AVAILABLE items are ready for Create Auction after admin inspection.",
+                "IN_AUCTION items should link back to their active auction session.",
+                "SOLD items should match a FINISHED or PAID auction record.",
+                "REMOVED items should keep a reason for audit history."
+            }
         ));
 
         map.put("reports", page(
-                "Reports",
-                "Track auction KPIs, bidding activity, growth signals, and export-ready summaries.",
-                "Reporting Workspace",
-                "Reports focus on analytics: date range, KPIs, trends, top records, and exports.",
-                new String[]{"7d", "912", "92%", "+14%"},
-                new String[]{"Range", "Bid Volume", "Completion", "Growth"},
-                new String[]{"KPI review", "Trend breakdown", "Export tools"},
-                new String[]{
-                        "Use weekly and monthly ranges to compare auction volume and closing health.",
-                        "Summarize bids, completed auctions, revenue proxy, and flagged cases.",
-                        "Prepare CSV/PDF export hooks once backend report endpoints are available."
-                },
-                new String[]{
-                        "Bid volume increased by 14% compared with the previous 7-day range.",
-                        "92% of ending auctions reached FINISHED, PAID, or payment follow-up states.",
-                        "Top sellers and top categories should sit below KPI cards for quick review.",
-                        "Exports should use the selected date range and current filters."
-                }
+            "Reports",
+            "Track auction KPIs, bidding activity, growth signals, and export-ready summaries.",
+            "Reporting Workspace",
+            "Reports focus on analytics: date range, KPIs, trends, top records, and exports.",
+            new String[]{"7d", "912", "92%", "+14%"},
+            new String[]{"Range", "Bid Volume", "Completion", "Growth"},
+            new String[]{"KPI review", "Trend breakdown", "Export tools"},
+            new String[]{
+                "Use weekly and monthly ranges to compare auction volume and closing health.",
+                "Summarize bids, completed auctions, revenue proxy, and flagged cases.",
+                "Prepare CSV/PDF export hooks once backend report endpoints are available."
+            },
+            new String[]{
+                "Bid volume increased by 14% compared with the previous 7-day range.",
+                "92% of ending auctions reached FINISHED, PAID, or payment follow-up states.",
+                "Top sellers and top categories should sit below KPI cards for quick review.",
+                "Exports should use the selected date range and current filters."
+            }
         ));
 
         map.put("settings", page(
-                "Settings",
-                "Configure auction rules, access controls, item rules, moderation, and admin preferences.",
-                "System Settings",
-                "Settings are configuration groups with clear Edit/Save workflows instead of dashboard-style row menus.",
-                new String[]{"05", "05", "03", "04"},
-                new String[]{"Auction States", "Item States", "User Roles", "Bid States"},
-                new String[]{"Auction rules", "Access control", "Moderation rules"},
-                new String[]{
-                        "Minimum bid increment, reserve price, anti-sniping window, and auto-close behaviour.",
-                        "ADMIN and USER scopes should be explicit and easy to audit.",
-                        "Flag suspicious bidding, removed items, and suspended accounts for review."
-                },
-                new String[]{
-                        "Auction status flow: OPEN -> RUNNING -> FINISHED -> PAID or CANCELED.",
-                        "Item status flow: DRAFT -> AVAILABLE -> IN_AUCTION -> SOLD or REMOVED.",
-                        "User statuses remain ACTIVE, SUSPENDED, and BANNED for account control.",
-                        "Bid statuses remain WINNING, OUTBID, WON, and LOST."
-                }
+            "Settings",
+            "Configure auction rules, access controls, item rules, moderation, and admin preferences.",
+            "System Settings",
+            "Settings are configuration groups with clear Edit/Save workflows instead of dashboard-style row menus.",
+            new String[]{"05", "05", "03", "04"},
+            new String[]{"Auction States", "Item States", "User Roles", "Bid States"},
+            new String[]{"Auction rules", "Access control", "Moderation rules"},
+            new String[]{
+                "Minimum bid increment, reserve price, anti-sniping window, and auto-close behaviour.",
+                "ADMIN and USER scopes should be explicit and easy to audit.",
+                "Flag suspicious bidding, removed items, and suspended accounts for review."
+            },
+            new String[]{
+                "Auction status flow: OPEN -> RUNNING -> FINISHED -> PAID or CANCELED.",
+                "Item status flow: DRAFT -> AVAILABLE -> IN_AUCTION -> SOLD or REMOVED.",
+                "User statuses remain ACTIVE, SUSPENDED, and BANNED for account control.",
+                "Bid statuses remain WINNING, OUTBID, WON, and LOST."
+            }
         ));
 
         return map;
     }
 
     private SectionContent page(
-            String title,
-            String subtitle,
-            String surfaceTitle,
-            String surfaceDescription,
-            String[] statValues,
-            String[] statLabels,
-            String[] featureTitles,
-            String[] featureDescriptions,
-            String[] activityLines) {
+        String title,
+        String subtitle,
+        String surfaceTitle,
+        String surfaceDescription,
+        String[] statValues,
+        String[] statLabels,
+        String[] featureTitles,
+        String[] featureDescriptions,
+        String[] activityLines) {
         return new SectionContent(
-                title,
-                "",
-                surfaceTitle,
-                "",
-                "",
-                "",
-                statValues,
-                statLabels,
-                featureTitles,
-                featureDescriptions,
-                activityLines,
-                new String[0],
-                new String[0],
-                new String[0]
+            title,
+            "",
+            surfaceTitle,
+            "",
+            "",
+            "",
+            statValues,
+            statLabels,
+            featureTitles,
+            featureDescriptions,
+            activityLines,
+            new String[0],
+            new String[0],
+            new String[0]
         );
     }
 
@@ -690,6 +701,7 @@ public class AdminDashboardController extends BaseDashboardController {
         return switch (sectionKey) {
             case "dashboard" -> "Overview";
             case "reports" -> "Last 7 days";
+            case "items" -> "Pending Approval";
             case "settings" -> "General";
             default -> "All";
         };
@@ -770,8 +782,8 @@ public class AdminDashboardController extends BaseDashboardController {
 
         List<AdminRow> rows = currentUserRows();
         updateStats(
-                new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "ACTIVE")), String.valueOf(countStatus(rows, "SUSPENDED")), String.valueOf(countStatus(rows, "BANNED"))},
-                new String[]{"Total Users", "Active", "Suspended", "Banned"}
+            new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "ACTIVE")), String.valueOf(countStatus(rows, "SUSPENDED")), String.valueOf(countStatus(rows, "BANNED"))},
+            new String[]{"Total Users", "Active", "Suspended", "Banned"}
         );
 
         addHeader("Account", "Role", "Last Login");
@@ -786,8 +798,8 @@ public class AdminDashboardController extends BaseDashboardController {
 
         List<AdminRow> rows = currentAuctionRows();
         updateStats(
-                new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "RUNNING")), String.valueOf(countStatus(rows, "OPEN")), String.valueOf(countStatus(rows, "FINISHED") + countStatus(rows, "PAID"))},
-                new String[]{"Auctions", "Running", "Open", "Finished/Paid"}
+            new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "RUNNING")), String.valueOf(countStatus(rows, "OPEN")), String.valueOf(countStatus(rows, "FINISHED") + countStatus(rows, "PAID"))},
+            new String[]{"Auctions", "Running", "Open", "Finished/Paid"}
         );
 
         addHeader("Auction", "Current Price", "Bids");
@@ -798,18 +810,18 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderItems(String filter) {
         setTableTitle("Item Review Queue");
-        renderChips(filter, "All", "DRAFT", "AVAILABLE", "IN_AUCTION", "SOLD", "REMOVED", "No auction");
+        renderChips(filter, "Pending Approval", "All", "DRAFT", "AVAILABLE", "IN_AUCTION", "SOLD", "REMOVED", "No auction");
 
         List<AdminRow> rows = currentItemRows();
         updateStats(
-                new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "AVAILABLE")), String.valueOf(countStatus(rows, "IN_AUCTION")), String.valueOf(countStatus(rows, "SOLD") + countStatus(rows, "REMOVED"))},
-                new String[]{"Items", "Available", "In Auction", "Sold/Removed"}
+            new String[]{String.valueOf(rows.size()), String.valueOf(countStatus(rows, "PENDING_REVIEW")), String.valueOf(countStatus(rows, "AVAILABLE")), String.valueOf(countStatus(rows, "IN_AUCTION"))},
+            new String[]{"Items", "Pending", "Available", "In Auction"}
         );
 
         addHeader("Item", "Category", "Auction Link");
         addFilteredRows(rows, filter);
 
-        showDetail("Item review", dataSourceNote(itemsLoaded) + " Item Review quản lý listing trước/sau auction, còn Auctions quản lý phiên đấu giá.");
+        showDetail("Item review", dataSourceNote(itemsLoaded) + " Pending Approval đọc status PENDING_REVIEW từ items. AVAILABLE mới là hàng sẵn sàng tạo auction.");
     }
 
     private void renderReports(String filter) {
@@ -873,13 +885,13 @@ public class AdminDashboardController extends BaseDashboardController {
     private List<AdminRow> defaultUserRows() {
         List<AdminRow> rows = new ArrayList<>();
         rows.add(row(
-                "Loading users from cloud database...",
-                "Server command ADMIN_LIST_USERS chưa trả dữ liệu. Kiểm tra server đã copy ClientHandler.java mới và restart chưa.",
-                "DB",
-                "Waiting",
-                "LOADING",
-                "Admin-home sẽ không hiển thị user giả nữa. Khi server phản hồi, bảng này sẽ hiện đúng các account trong bảng users như ngoc, môn_lý, siunhangao, chau, my, t1win.",
-                "Refresh"
+            "Loading users from cloud database...",
+            "Server command ADMIN_LIST_USERS chưa trả dữ liệu. Kiểm tra server đã copy ClientHandler.java mới và restart chưa.",
+            "DB",
+            "Waiting",
+            "LOADING",
+            "Admin-home sẽ không hiển thị user giả nữa. Khi server phản hồi, bảng này sẽ hiện đúng các account trong bảng users như ngoc, môn_lý, siunhangao, chau, my, t1win.",
+            "Refresh"
         ));
         return rows;
     }
@@ -887,13 +899,13 @@ public class AdminDashboardController extends BaseDashboardController {
     private List<AdminRow> defaultAuctionRows() {
         List<AdminRow> rows = new ArrayList<>();
         rows.add(row(
-                "Loading auctions from cloud database...",
-                "Server command ADMIN_LIST_AUCTIONS chưa trả dữ liệu. Khi server phản hồi, bảng này join auctions với items/users/bids thật.",
-                "DB",
-                "Waiting",
-                "LOADING",
-                "Không dùng auction giả hard-code nữa. Auction Sessions sẽ lấy từ bảng auctions và liên kết item bằng item_id.",
-                "Refresh"
+            "Loading auctions from cloud database...",
+            "Server command ADMIN_LIST_AUCTIONS chưa trả dữ liệu. Khi server phản hồi, bảng này join auctions với items/users/bids thật.",
+            "DB",
+            "Waiting",
+            "LOADING",
+            "Không dùng auction giả hard-code nữa. Auction Sessions sẽ lấy từ bảng auctions và liên kết item bằng item_id.",
+            "Refresh"
         ));
         return rows;
     }
@@ -901,13 +913,13 @@ public class AdminDashboardController extends BaseDashboardController {
     private List<AdminRow> defaultItemRows() {
         List<AdminRow> rows = new ArrayList<>();
         rows.add(row(
-                "Loading items from cloud database...",
-                "Server command ADMIN_LIST_ITEMS chưa trả dữ liệu. Khi server phản hồi, bảng này đọc trực tiếp items do user tạo và join auction nếu có.",
-                "DB",
-                "Waiting",
-                "LOADING",
-                "Không dùng item giả hard-code nữa. Item Review sẽ lấy từ bảng items và liên kết sang auctions bằng item_id.",
-                "Refresh"
+            "Loading items from cloud database...",
+            "Server command ADMIN_LIST_ITEMS chưa trả dữ liệu. Khi server phản hồi, bảng này đọc trực tiếp items do user tạo và join auction nếu có.",
+            "DB",
+            "Waiting",
+            "LOADING",
+            "Không dùng item giả hard-code nữa. Item Review sẽ lấy từ bảng items và liên kết sang auctions bằng item_id.",
+            "Refresh"
         ));
         return rows;
     }
@@ -917,8 +929,8 @@ public class AdminDashboardController extends BaseDashboardController {
         List<AdminRow> auctions = currentAuctionRows();
         List<AdminRow> items = currentItemRows();
         updateStats(
-                new String[]{String.valueOf(users.size()), String.valueOf(countStatus(auctions, "RUNNING")), String.valueOf(items.size()), String.valueOf(totalBidCount(auctions))},
-                new String[]{"Users", "Running Auctions", "Listed Items", "Total Bids"}
+            new String[]{String.valueOf(users.size()), String.valueOf(countStatus(auctions, "RUNNING")), String.valueOf(items.size()), String.valueOf(totalBidCount(auctions))},
+            new String[]{"Users", "Running Auctions", "Listed Items", "Total Bids"}
         );
     }
 
@@ -961,14 +973,14 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private String dataSourceNote() {
         return usersLoaded || itemsLoaded || auctionsLoaded
-                ? "Đang dùng dữ liệu server/cloud database khi có sẵn."
-                : "Đang dùng fallback demo rows trong lúc chờ server/cloud database.";
+            ? "Đang dùng dữ liệu server/cloud database khi có sẵn."
+            : "Đang dùng fallback demo rows trong lúc chờ server/cloud database.";
     }
 
     private String dataSourceNote(boolean loaded) {
         return loaded
-                ? "Đang dùng dữ liệu từ shared cloud database."
-                : "Đang dùng fallback demo rows trong lúc chờ server/cloud database.";
+            ? "Đang dùng dữ liệu từ shared cloud database."
+            : "Đang dùng fallback demo rows trong lúc chờ server/cloud database.";
     }
 
     private void setTableTitle(String title) {
@@ -1090,31 +1102,37 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (normalizedFilter.equals("ending soon")) {
             return normalize(row.meta).contains("ending soon")
-                    || normalize(row.meta).contains("ends in")
-                    || normalize(row.detail).contains("ending soon");
+                || normalize(row.meta).contains("ends in")
+                || normalize(row.detail).contains("ending soon");
         }
 
         if (normalizedFilter.equals("no auction")) {
             return normalize(row.secondValue).equals("no auction")
-                    || normalize(row.meta).contains("no auction");
+                || normalize(row.meta).contains("no auction");
+        }
+
+        if (normalizedFilter.equals("pending approval")) {
+            return normalize(row.status).contains("pending review")
+                || normalize(row.meta).contains("pending review")
+                || normalize(row.detail).contains("pending review");
         }
 
         return normalize(row.title).contains(normalizedFilter)
-                || normalize(row.meta).contains(normalizedFilter)
-                || normalize(row.firstValue).contains(normalizedFilter)
-                || normalize(row.secondValue).contains(normalizedFilter)
-                || normalize(row.status).contains(normalizedFilter)
-                || normalize(row.detail).contains(normalizedFilter)
-                || normalize(String.join(" ", row.actions)).contains(normalizedFilter);
+            || normalize(row.meta).contains(normalizedFilter)
+            || normalize(row.firstValue).contains(normalizedFilter)
+            || normalize(row.secondValue).contains(normalizedFilter)
+            || normalize(row.status).contains(normalizedFilter)
+            || normalize(row.detail).contains(normalizedFilter)
+            || normalize(String.join(" ", row.actions)).contains(normalizedFilter);
     }
 
     private boolean isAllLikeFilter(String filter) {
         String normalized = normalize(filter);
 
         return normalized.equals("all")
-                || normalized.equals("overview")
-                || normalized.equals("last 7 days")
-                || normalized.equals("general");
+            || normalized.equals("overview")
+            || normalized.equals("last 7 days")
+            || normalized.equals("general");
     }
 
     private String normalize(String value) {
@@ -1249,7 +1267,7 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
-        if ("items".equals(currentSectionKey) && normalizedAction.equals("view")) {
+        if ("items".equals(currentSectionKey) && (normalizedAction.equals("view") || normalizedAction.equals("review"))) {
             openItemDetail(data);
             return;
         }
@@ -1290,25 +1308,25 @@ public class AdminDashboardController extends BaseDashboardController {
         String normalized = status.toLowerCase();
 
         if (normalized.contains("active")
-                || normalized.contains("running")
-                || normalized.contains("available")
-                || normalized.contains("healthy")
-                || normalized.contains("paid")
-                || normalized.contains("ready")
-                || normalized.contains("admin")
-                || normalized.contains("up")) {
+            || normalized.contains("running")
+            || normalized.contains("available")
+            || normalized.contains("healthy")
+            || normalized.contains("paid")
+            || normalized.contains("ready")
+            || normalized.contains("admin")
+            || normalized.contains("up")) {
             label.getStyleClass().add("status-good");
         } else if (normalized.contains("suspended")
-                || normalized.contains("banned")
-                || normalized.contains("removed")
-                || normalized.contains("canceled")
-                || normalized.contains("flagged")
-                || normalized.contains("inactive")) {
+            || normalized.contains("banned")
+            || normalized.contains("removed")
+            || normalized.contains("canceled")
+            || normalized.contains("flagged")
+            || normalized.contains("inactive")) {
             label.getStyleClass().add("status-danger");
         } else if (normalized.contains("open")
-                || normalized.contains("draft")
-                || normalized.contains("loading")
-                || normalized.contains("finished")) {
+            || normalized.contains("draft")
+            || normalized.contains("loading")
+            || normalized.contains("finished")) {
             label.getStyleClass().add("status-warn");
         } else {
             label.getStyleClass().add("status-neutral");
@@ -1339,13 +1357,13 @@ public class AdminDashboardController extends BaseDashboardController {
     private void openLinkedAuctionDetail(AdminRow itemData) {
         String auctionId = itemData.secondValue == null ? "AUC detail" : itemData.secondValue;
         AdminRow linkedAuction = row(
-                auctionId + " - Linked from " + itemData.title,
-                itemData.meta,
-                "From item",
-                "Linked",
-                itemData.status,
-                itemData.detail,
-                "View"
+            auctionId + " - Linked from " + itemData.title,
+            itemData.meta,
+            "From item",
+            "Linked",
+            itemData.status,
+            itemData.detail,
+            "View"
         );
         openAuctionDetail(linkedAuction);
     }

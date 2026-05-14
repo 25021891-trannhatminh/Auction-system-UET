@@ -3,6 +3,8 @@ package server.network;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.InetAddress;
+
+import server.handler.ClientHandler;
 import server.service.AuctionService;
 import server.service.NotificationService;
 import server.service.listeners.NotificationEventHandler;
@@ -33,7 +35,6 @@ public class AuctionServer {
             System.out.println("Port: " + port);
 
             ServerSocket server = new ServerSocket(port);
-            new Thread(NotificationDispatcher.getInstance()).start();
             while (true) {
                 Socket socket = server.accept();
                 System.out.println("Client connected");

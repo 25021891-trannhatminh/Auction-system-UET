@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 /**
- * DTO cho bảng BIDS.
+ * DTO cho bảng BIDTRANSACTIONS.
  *
  * <p>Dùng để lưu và truyền thông tin lịch sử đấu giá của một auction,
  * bao gồm số tiền bid, người bid, và trạng thái của bid.</p>
