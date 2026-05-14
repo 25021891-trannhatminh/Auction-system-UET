@@ -97,6 +97,12 @@ public class UserDAO {
         "UPDATE users SET status = ? WHERE user_id = ?";
 
     /**
+     * SQL cập nhật quyền hạn người dùng.
+     */
+    private static final String SQL_UPDATE_ROLE =
+        "UPDATE users SET role = ? WHERE user_id = ?";
+
+    /**
      * SQL khóa tài khoản user.
      */
     private static final String SQL_BAN_USER =
@@ -259,6 +265,32 @@ public class UserDAO {
 
         } catch (SQLException e) {
             logger.error("updateStatus failed for userId={}", userId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Cấp quyền mới cho người dùng (ví dụ: nâng lên ADMIN).
+     *
+     * @param userId ID người dùng cần nâng cấp
+     * @param role Quyền mới (UserRole.ADMIN)
+     * @return true nếu cập nhật thành công
+     */
+    public boolean updateRole(int userId, UserRole role) {
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_ROLE)) {
+
+            ps.setString(1, role.name());
+            ps.setInt(2, userId);
+
+            boolean success = ps.executeUpdate() > 0;
+            if (success) {
+                logger.info("Updated role userId={} -> {}", userId, role);
+            }
+            return success;
+
+        } catch (SQLException e) {
+            logger.error("updateRole failed for userId={}", userId, e);
             return false;
         }
     }

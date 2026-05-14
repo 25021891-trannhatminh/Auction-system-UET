@@ -33,7 +33,7 @@ import java.sql.Timestamp;
  * - DTO KHÔNG chứa logic nghiệp vụ
  * - Dùng factory method để convert từ Entity
  */
-public class UserDTO{
+public class UserDTO {
 
 
   /** ID người dùng */

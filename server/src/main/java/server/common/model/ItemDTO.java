@@ -12,9 +12,7 @@ import java.sql.Timestamp;
  * <p>Dùng để truyền dữ liệu sản phẩm giữa các layer
  * (DAO, Service, Controller).</p>
  */
-public class ItemDTO implements Serializable {
-
-  private static final long serialVersionUID = 1L;
+public class ItemDTO {
 
   /** ID sản phẩm (Primary Key) */
   private int itemId;
