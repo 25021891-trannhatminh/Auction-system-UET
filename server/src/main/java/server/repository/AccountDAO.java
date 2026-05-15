@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -299,18 +300,17 @@ public class AccountDAO {
      * @throws SQLException nếu lỗi truy xuất dữ liệu
      */
     private User mapRow(ResultSet rs) throws SQLException {
-
-        return new User(
-            rs.getInt("user_id"),
+        return new User(String.valueOf(rs.getInt("user_id")),
+            rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
             rs.getString("email"),
+            rs.getString("password"),
             rs.getString("full_name"),
             rs.getString("phone"),
-            AccountRole.valueOf(rs.getString("role")),
             UserStatus.valueOf(rs.getString("status")),
-            rs.getBoolean("is_active"),
-            rs.getTimestamp("last_login"),
-            rs.getTimestamp("created_at")
+            rs.getTimestamp("last_login").toLocalDateTime(),
+            5.0,
+            0.0
         );
     }
 }

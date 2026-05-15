@@ -30,6 +30,17 @@ public class User extends Account {
 
     /* Constructor dùng khi load từ DB */
     public User(String id, LocalDateTime createdAt,
+                String username, String email, String passwordHash,
+                String fullName, String phone,
+                UserStatus status, LocalDateTime lastLogin) {
+        super(id, createdAt, username, email, passwordHash, fullName, phone,
+            AccountRole.USER, status, lastLogin);
+        this.rating        = 0.0;
+        this.itemIDs = new ArrayList<>();
+        this.balance    = 0.0;
+        this.autoBidMap = new HashMap<>();
+    }
+    public User(String id, LocalDateTime createdAt,
                    String username, String email, String passwordHash,
                    String fullName, String phone,
                    UserStatus status, LocalDateTime lastLogin,double rating, double balance) {

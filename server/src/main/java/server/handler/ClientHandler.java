@@ -29,6 +29,7 @@ import server.repository.AuctionDAO;
 import server.repository.BidDAO;
 import server.repository.AccountDAO;
 import server.service.ItemService;
+import server.service.ServerAuthService;
 
 public class ClientHandler implements Runnable {
 
@@ -36,13 +37,17 @@ public class ClientHandler implements Runnable {
     private BufferedReader in;
     private PrintWriter out;
     private String username = "Guest"; // Tên hiển thị mặc định
-
-    private AccountDAO accountDAO = new AccountDAO();
-    private final ItemService itemService = new ItemService();
     private int userId = -1 ;
 
+
+
+    private AccountDAO accountDAO = new AccountDAO();
     private BidDAO bidDAO = new BidDAO();
     private AuctionDAO auctionDAO = new AuctionDAO();
+    private final ServerAuthService authService = new ServerAuthService();
+    private final ItemService itemService = new ItemService();
+
+
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -85,74 +90,32 @@ public class ClientHandler implements Runnable {
         if (msg == null || msg.trim().isEmpty()) return;
 
         // Dùng giới hạn split để tránh lỗi khi description hoặc name có khoảng trắng
-        String[] p = msg.split(" ", 6);
-        if ("PING".equals(p[0])){
+        String[] request = msg.split(" ", 6);
+
+        // Phản hồi kết nối với Client
+        if ("PING".equals(request[0])){
             send("PONG");
             return;
         }
         System.out.println("MSG FROM CLIENT: " + msg);
 
-        switch (p[0]) {
-            case "LOGIN":
-                if (p.length < 3) {
-                    send("LOGIN_FAIL MISSING_CREDENTIALS");
-                    return;
-                }
-                String identifier = p[1]; // Có thể là username hoặc email theo UserDAO
-                String pass = p[2];
 
-                try {
-                    User user = accountDAO.login(identifier, pass);
-                    if (user != null) {
-                        // Cập nhật username của session này từ DB
-                        this.userId = Integer.parseInt(user.getId());
-                        this.username = user.getUsername();
-                        ClientManager.add(this.userId,this);
-                        send("LOGIN_SUCCESS " + fields(
-                            Integer.parseInt(user.getId()),
-                            user.getUsername(),
-                            user.getEmail(),
-                            user.getFullName(),
-                            user.getPhone(),
-                            user.getRole(),
-                            user.getStatus()
-                        ));
-                    } else {
-                        send("LOGIN_FAIL INVALID_AUTH");
-                    }
-                } catch (Exception e) {
-                    send("LOGIN_FAIL SERVER_ERROR");
-                    e.printStackTrace();
-                }
+        // Xử lý request
+        switch (request[0]) {
+            case "LOGIN":
+                String identifier = request[1]; // Có thể là username hoặc email theo UserDAO
+                String password = request[2];
+                send(authService.login(request));
+
+                // User login -> đăng ký ClientHandler support luồng của User này
+                User loginUser = accountDAO.login(identifier, password);
+                if (loginUser != null) ClientManager.add(Integer.parseInt(identifier),this);
                 break;
 
             case "REGISTER":
                 // Format mong muốn: REGISTER <user> <pass> <email> <fullName> <phone>
-                if (p.length < 6) {
-                    send("REGISTER_FAIL INVALID_FORMAT_REQUIRES_5_FIELDS");
-                    return;
-                }
-
-                String regUser = p[1];
-                String regPass = p[2];
-                String regEmail = p[3];
-                String regFullName = p[4];
-                String regPhone = p[5];
-
-                try {
-                    // Gọi đúng hàm register đã sửa trong UserDAO (5 tham số)
-                    boolean ok = accountDAO.register(regUser, regPass, regEmail, regFullName, regPhone);
-                    if (ok) {
-                        send("REGISTER_SUCCESS");
-                    } else {
-                        send("REGISTER_FAIL_EXIST_OR_ERROR");
-                    }
-                } catch (Exception e) {
-                    send("REGISTER_FAIL_SERVER_ERROR");
-                    e.printStackTrace();
-                }
+                send(authService.register(request));
                 break;
-
             case "CREATE_ITEM":
                 // Format: CREATE_ITEM sellerId|title|description|price|status|listingFlow|size|currency|imageUris
                 // The dashboard opens a separate lightweight socket for this command, so handleCreateItem()
@@ -164,7 +127,7 @@ public class ClientHandler implements Runnable {
                 break;
 
             case "USER_ITEM_STATS":
-                sendUserItemStats(p.length > 1 ? p[1] : "");
+                sendUserItemStats(request.length > 1 ? request[1] : "");
                 break;
 
             case "ADMIN_LIST_USERS":
@@ -188,13 +151,13 @@ public class ClientHandler implements Runnable {
                 break;
 
             case "BID":
-                if (p.length < 3) {
+                if (request.length < 3) {
                     send("FAIL INVALID_BID_FORMAT");
                     return;
                 }
                 try {
-                    int auctionId = Integer.parseInt(p[1]);
-                    BigDecimal amount = new BigDecimal(p[2]);
+                    int auctionId = Integer.parseInt(request[1]);
+                    BigDecimal amount = new BigDecimal(request[2]);
 
                     // ✅ Gọi BidDAO.placeBid() — có Transaction + Row Locking sẵn!
                     // Không cần synchronized nữa vì BidDAO đã xử lý bằng SELECT FOR UPDATE
@@ -211,7 +174,7 @@ public class ClientHandler implements Runnable {
 
             case "MSG":
                 if (msg.length() > 4) {
-                    String content = String.join(" ",Arrays.copyOfRange(p,1,p.length));
+                    String content = String.join(" ",Arrays.copyOfRange(request,1,request.length));
                     ClientManager.broadcast("MSG " + this.username + ": " + content);
                 }
                 break;
