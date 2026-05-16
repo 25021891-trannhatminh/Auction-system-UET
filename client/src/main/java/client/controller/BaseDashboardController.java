@@ -1,14 +1,13 @@
 package client.controller;
 
+import client.SceneNavigator;
+import client.model.User;
+import client.service.SessionManager;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import client.SceneNavigator;
-import client.model.User;
-import client.service.SessionManager;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -18,6 +17,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
+/**
+ * Shared base controller for role-specific dashboards.
+ */
 public abstract class BaseDashboardController {
 
     protected static class SectionContent {
@@ -37,20 +39,20 @@ public abstract class BaseDashboardController {
         protected final String[] insightValues;
 
         protected SectionContent(
-                String title,
-                String subtitle,
-                String surfaceTitle,
-                String surfaceDescription,
-                String rightTitle,
-                String rightDescription,
-                String[] statValues,
-                String[] statLabels,
-                String[] featureTitles,
-                String[] featureDescriptions,
-                String[] activityLines,
-                String[] quickTags,
-                String[] insightTitles,
-                String[] insightValues) {
+            String title,
+            String subtitle,
+            String surfaceTitle,
+            String surfaceDescription,
+            String rightTitle,
+            String rightDescription,
+            String[] statValues,
+            String[] statLabels,
+            String[] featureTitles,
+            String[] featureDescriptions,
+            String[] activityLines,
+            String[] quickTags,
+            String[] insightTitles,
+            String[] insightValues) {
             this.title = title;
             this.subtitle = subtitle;
             this.surfaceTitle = surfaceTitle;
@@ -154,6 +156,11 @@ public abstract class BaseDashboardController {
         showSection(getDefaultSectionKey());
     }
 
+    /**
+     * Applies the authenticated user to the dashboard and persists the session.
+     *
+     * @param user user returned by the authentication flow
+     */
     public void applyLoggedInUser(User user) {
         if (user != null) {
             dashboardUser = user;
@@ -171,16 +178,16 @@ public abstract class BaseDashboardController {
         }
 
         String username = hasText(user == null ? null : user.getUsername())
-                ? user.getUsername().trim()
-                : "";
+            ? user.getUsername().trim()
+            : "";
 
         String email = hasText(user == null ? null : user.getEmail())
-                ? user.getEmail().trim()
-                : "";
+            ? user.getEmail().trim()
+            : "";
 
         String role = user != null && user.getSystemRole() != null
-                ? user.getSystemRole().name()
-                : "";
+            ? user.getSystemRole().name()
+            : "";
 
         setText(usernameLabel, username);
         setText(emailLabel, email);
@@ -192,7 +199,12 @@ public abstract class BaseDashboardController {
         addIfPresent(statValueLabels, statValue1, statValue2, statValue3, statValue4);
         addIfPresent(statTextLabels, statLabel1, statLabel2, statLabel3, statLabel4);
         addIfPresent(featureTitleLabels, featureTitle1, featureTitle2, featureTitle3);
-        addIfPresent(featureDescriptionLabels, featureDescription1, featureDescription2, featureDescription3);
+        addIfPresent(
+            featureDescriptionLabels,
+            featureDescription1,
+            featureDescription2,
+            featureDescription3
+        );
         addIfPresent(activityLabels, activityLine1, activityLine2, activityLine3, activityLine4);
         addIfPresent(quickTagLabels, quickTag1, quickTag2, quickTag3);
         addIfPresent(insightTitleLabels, insightTitle1, insightTitle2, insightTitle3);
@@ -317,7 +329,7 @@ public abstract class BaseDashboardController {
         }
 
         return parts[0].substring(0, 1).toUpperCase()
-                + parts[1].substring(0, 1).toUpperCase();
+            + parts[1].substring(0, 1).toUpperCase();
     }
 
     @FXML

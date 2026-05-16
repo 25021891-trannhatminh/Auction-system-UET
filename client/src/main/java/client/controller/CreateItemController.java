@@ -4,6 +4,16 @@ import client.SceneNavigator;
 import client.model.User;
 import client.service.NetworkManager;
 import client.service.SessionManager;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -18,17 +28,6 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * Controller cho màn Create Item của seller.
@@ -101,10 +100,14 @@ public class CreateItemController {
    * {@link #submitCreateItem(boolean)}.</p>
    */
   private void bindPreview() {
-    titleField.textProperty().addListener((obs, oldValue, newValue) -> previewTitleLabel.setText(fallback(newValue, "Untitled listing")));
-    priceField.textProperty().addListener((obs, oldValue, newValue) -> previewPriceLabel.setText(formatPreviewPrice(newValue)));
-    currencyField.textProperty().addListener((obs, oldValue, newValue) -> previewPriceLabel.setText(formatPreviewPrice(priceField.getText())));
-    descriptionArea.textProperty().addListener((obs, oldValue, newValue) -> previewStatusLabel.setText(isBlank(newValue) ? "Waiting for review" : "Ready to submit"));
+    titleField.textProperty().addListener((obs, oldValue, newValue) ->
+        previewTitleLabel.setText(fallback(newValue, "Untitled listing")));
+    priceField.textProperty().addListener((obs, oldValue, newValue) ->
+        previewPriceLabel.setText(formatPreviewPrice(newValue)));
+    currencyField.textProperty().addListener((obs, oldValue, newValue) ->
+        previewPriceLabel.setText(formatPreviewPrice(priceField.getText())));
+    descriptionArea.textProperty().addListener((obs, oldValue, newValue) ->
+        previewStatusLabel.setText(isBlank(newValue) ? "Waiting for review" : "Ready to submit"));
   }
 
   /**
@@ -123,7 +126,9 @@ public class CreateItemController {
 
     String username = fallback(currentUser.getUsername(), "Seller");
     sellerNameLabel.setText(username);
-    sellerRoleLabel.setText(currentUser.getSystemRole() == null ? "USER" : currentUser.getSystemRole().name());
+    sellerRoleLabel.setText(
+        currentUser.getSystemRole() == null ? "USER" : currentUser.getSystemRole().name()
+    );
     sellerInitialsLabel.setText(buildInitials(username));
     previewSellerLabel.setText(username);
     breadcrumbLabel.setText("Dashboard / My Items / Create Item");
@@ -213,7 +218,9 @@ public class CreateItemController {
       return;
     }
 
-    int sellerId = SessionManager.getCurrentUser() == null ? 0 : SessionManager.getCurrentUser().getUserId();
+    int sellerId = SessionManager.getCurrentUser() == null
+        ? 0
+        : SessionManager.getCurrentUser().getUserId();
 
     String payload = fields(
         String.valueOf(sellerId),
@@ -231,7 +238,9 @@ public class CreateItemController {
 
     saveDraftButton.setDisable(true);
     submitItemButton.setDisable(true);
-    showNeutralMessage(draftMode ? "Đang lưu draft item..." : "Đang submit item lên pending approval...");
+    showNeutralMessage(
+        draftMode ? "Đang lưu draft item..." : "Đang submit item lên pending approval..."
+    );
     networkManager.send("CREATE_ITEM " + payload);
   }
 
@@ -261,7 +270,8 @@ public class CreateItemController {
       List<String> fields = splitPayload(message.substring("CREATE_ITEM_SUCCESS ".length()));
       String itemId = fields.isEmpty() ? "" : fields.get(0);
       String status = fields.size() > 1 ? fields.get(1) : "PENDING_REVIEW";
-      showSuccessMessage("Tạo item thành công. Item #" + itemId + " đang ở trạng thái " + status + ".");
+      showSuccessMessage("Tạo item thành công. Item #" + itemId + " đang ở trạng thái " +
+          status + ".");
       saveDraftButton.setDisable(false);
       submitItemButton.setDisable(false);
       clearForm();
@@ -403,7 +413,8 @@ public class CreateItemController {
     if (price == null) {
       return "Starting price: 0";
     }
-    return "Starting price: " + PREVIEW_PRICE.format(price) + " " + fallback(normalize(currencyField.getText()), "VND");
+    return "Starting price: " + PREVIEW_PRICE.format(price) + " " +
+        fallback(normalize(currencyField.getText()), "VND");
   }
 
   /**
@@ -552,9 +563,11 @@ public class CreateItemController {
     }
     if (tokens.length == 1) {
       String token = tokens[0];
-      return token.length() >= 2 ? token.substring(0, 2).toUpperCase(Locale.ROOT) : token.toUpperCase(Locale.ROOT);
+      return token.length() >= 2
+          ? token.substring(0, 2).toUpperCase(Locale.ROOT)
+          : token.toUpperCase(Locale.ROOT);
     }
-    return (tokens[0].substring(0, 1) + tokens[tokens.length - 1].substring(0, 1)).toUpperCase(Locale.ROOT);
+    return (tokens[0].substring(0, 1) +
+        tokens[tokens.length - 1].substring(0, 1)).toUpperCase(Locale.ROOT);
   }
 }
-

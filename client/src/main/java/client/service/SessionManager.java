@@ -1,12 +1,14 @@
 package client.service;
 
-import java.util.prefs.BackingStoreException;
-import java.util.prefs.Preferences;
-
 import client.enums.AccountStatus;
 import client.enums.SystemRole;
 import client.model.User;
+import java.util.prefs.BackingStoreException;
+import java.util.prefs.Preferences;
 
+/**
+ * Stores and restores the current authenticated client user session.
+ */
 public class SessionManager {
     private static final Preferences PREFS = Preferences.userNodeForPackage(SessionManager.class);
     private static final String KEY_USER_ID = "userId";
@@ -20,11 +22,21 @@ public class SessionManager {
 
     private static User currentUser;
 
+    /**
+     * Saves the active user in memory and preferences.
+     *
+     * @param user authenticated user to persist
+     */
     public static void setCurrentUser(User user) {
         currentUser = user;
         persist(user);
     }
 
+    /**
+     * Returns the current user, restoring it from preferences when needed.
+     *
+     * @return active user, or null when no session exists
+     */
     public static User getCurrentUser() {
         if (currentUser == null) {
             currentUser = restoreCurrentUser();
@@ -32,6 +44,11 @@ public class SessionManager {
         return currentUser;
     }
 
+    /**
+     * Restores the persisted user session from local preferences.
+     *
+     * @return restored user, or null when the saved session is empty
+     */
     public static User restoreCurrentUser() {
         String username = PREFS.get(KEY_USERNAME, "");
         String email = PREFS.get(KEY_EMAIL, "");
@@ -50,6 +67,9 @@ public class SessionManager {
         return new User(userId, username, email, fullName, phone, role, status, active);
     }
 
+    /**
+     * Clears the active user from memory and preferences.
+     */
     public static void clear() {
         currentUser = null;
         try {

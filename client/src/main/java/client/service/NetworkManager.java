@@ -1,11 +1,17 @@
 package client.service;
 
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
+/**
+ * Maintains the TCP connection between the JavaFX client and auction server.
+ */
 public class NetworkManager {
 
     private static final String HOST = ServerFinder.find();
@@ -14,7 +20,7 @@ public class NetworkManager {
     private static final int BASE_RETRY_DELAY = 1000;
     private static final int MAX_RETRY_DELAY = 30000;
 
-    private static final int HEARTBEAT_INTERVAL = 5000; // 5s
+    private static final int HEARTBEAT_INTERVAL = 5000;
 
     private Socket socket;
     private BufferedReader in;
@@ -26,29 +32,44 @@ public class NetworkManager {
     private volatile boolean shouldReconnect = true;
     private volatile boolean isConnecting = false;
 
-    // 🔥 Queue để giữ message khi mất mạng
     private final Queue<String> messageQueue = new ConcurrentLinkedQueue<>();
 
+    /**
+     * Opens the client connection and starts the heartbeat loop.
+     */
     public NetworkManager() {
         connect();
         startHeartbeat();
     }
 
+    /**
+     * Registers a callback for server messages.
+     *
+     * @param handler callback invoked for each non-heartbeat server message
+     */
     public void setMessageHandler(Consumer<String> handler) {
         this.messageHandler = handler;
     }
 
+    /**
+     * Stops reconnect attempts and closes the current socket.
+     */
     public void disconnect() {
         shouldReconnect = false;
         connected = false;
         try {
-            if (socket != null) socket.close();
-        } catch (Exception ignored) {}
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (Exception ignored) {
+            // Best-effort disconnect only.
+        }
     }
 
-    // ================== CONNECT ==================
     private void connect() {
-        if (isConnecting) return;
+        if (isConnecting) {
+            return;
+        }
 
         new Thread(() -> {
             isConnecting = true;
@@ -69,15 +90,14 @@ public class NetworkManager {
 
                     System.out.println("✅ Connected");
 
-                    // 🔥 gửi lại message bị pending
                     flushQueue();
-
                     listen();
-
                 } catch (Exception e) {
                     connected = false;
 
-                    if (!shouldReconnect) break;
+                    if (!shouldReconnect) {
+                        break;
+                    }
 
                     System.out.println("⚠️ Reconnect in " + (delay / 1000) + "s");
 
@@ -90,14 +110,13 @@ public class NetworkManager {
         }).start();
     }
 
-    // ================== LISTEN ==================
     private void listen() {
         try {
             String msg;
             while ((msg = in.readLine()) != null) {
-
-                // 🔥 xử lý heartbeat response
-                if ("PONG".equals(msg)) continue;
+                if ("PONG".equals(msg)) {
+                    continue;
+                }
 
                 if (messageHandler != null) {
                     messageHandler.accept(msg);
@@ -111,7 +130,11 @@ public class NetworkManager {
         }
     }
 
-    // ================== SEND ==================
+    /**
+     * Sends a message immediately or queues it while reconnecting.
+     *
+     * @param msg protocol message to send to the server
+     */
     public void send(String msg) {
         if (!connected || out == null) {
             System.out.println("⚠️ Queue message: " + msg);
@@ -122,7 +145,6 @@ public class NetworkManager {
         out.println(msg);
     }
 
-    // ================== FLUSH QUEUE ==================
     private void flushQueue() {
         System.out.println("🔄 Resending queued messages...");
 
@@ -134,7 +156,6 @@ public class NetworkManager {
         }
     }
 
-    // ================== HEARTBEAT ==================
     private void startHeartbeat() {
         new Thread(() -> {
             while (shouldReconnect) {
@@ -144,25 +165,37 @@ public class NetworkManager {
                     if (connected && out != null) {
                         out.println("PING");
                     }
-
-                } catch (InterruptedException ignored) {}
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }).start();
     }
 
-    // ================== UTILS ==================
     private void closeSocket() {
         try {
-            if (socket != null) socket.close();
-        } catch (Exception ignored) {}
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (Exception ignored) {
+            // Socket may already be closed by the server or another client path.
+        }
     }
 
     private void sleep(int ms) {
         try {
             Thread.sleep(ms);
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
     }
 
+    /**
+     * Indicates whether the current socket is connected.
+     *
+     * @return true when the client is connected to the server
+     */
     public boolean isConnected() {
         return connected;
     }

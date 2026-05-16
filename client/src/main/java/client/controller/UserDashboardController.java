@@ -1,5 +1,8 @@
 package client.controller;
 
+import client.model.User;
+import client.service.NetworkManager;
+import client.service.SessionManager;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -11,14 +14,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import client.model.User;
-import client.service.NetworkManager;
-import client.service.SessionManager;
 import javafx.application.Platform;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.stage.FileChooser;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
 import javafx.geometry.Pos;
@@ -30,6 +26,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.OverrunStyle;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
@@ -41,7 +39,11 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.FileChooser;
 
+/**
+ * Controller for bidder and seller dashboard features shown to regular users.
+ */
 public class UserDashboardController extends BaseDashboardController {
 
     @FXML private FlowPane userActionBar;
@@ -96,7 +98,9 @@ public class UserDashboardController extends BaseDashboardController {
 
     private void setupCreateItemNetwork() {
         createItemNetworkManager = new NetworkManager();
-        createItemNetworkManager.setMessageHandler(message -> Platform.runLater(() -> handleCreateItemServerMessage(message)));
+        createItemNetworkManager.setMessageHandler(
+            message -> Platform.runLater(() -> handleCreateItemServerMessage(message))
+        );
         requestCreateListingMetadata();
     }
 
@@ -104,7 +108,8 @@ public class UserDashboardController extends BaseDashboardController {
      * Loads data needed by the inline Create Listing form.
      *
      * <p>The dashboard uses a lightweight socket, so the current user id is included in
-     * seller-specific requests. The server still prefers the authenticated socket user when it has one.</p>
+     * seller-specific requests. The server still prefers the authenticated socket user when it has
+     * one.</p>
      */
     private void requestCreateListingMetadata() {
         if (createItemNetworkManager == null) {
@@ -176,7 +181,8 @@ public class UserDashboardController extends BaseDashboardController {
             "Dashboard",
             "Track bids, browse live auctions, manage listings, and follow transactions.",
             "User Auction Workspace",
-            "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller tasks, and auto-bid warnings.",
+            "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller " +
+                "tasks, and auto-bid warnings.",
             new String[]{"12", "04", "03", "08"},
             new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
             new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
@@ -197,13 +203,15 @@ public class UserDashboardController extends BaseDashboardController {
             "Auctions",
             "Browse by category, filter live auctions, preview items, and place bids quickly.",
             "Auction Browse",
-            "Marketplace-style browsing with product images, category cards, status filters, and paginated auction cards.",
+            "Marketplace-style browsing with product images, category cards, status filters, and " +
+                "paginated auction cards.",
             new String[]{"32", "10", "08", "06"},
             new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
             new String[]{"Shop by Category", "Auction cards", "Pagination"},
             new String[]{
                 "Category cards work as practical browse shortcuts instead of decorative sections.",
-                "Each auction card shows image, category, current bid, bid count, countdown, badge, and actions.",
+                "Each auction card shows image, category, current bid, bid count, countdown, " +
+                    "badge, and actions.",
                 "Large result sets stay manageable with page 1, page 2, and Next/Previous controls."
             },
             new String[]{
@@ -218,7 +226,8 @@ public class UserDashboardController extends BaseDashboardController {
             "My Bids",
             "Track every bid you placed and act when you are winning, outbid, won, or lost.",
             "Bid Tracking Board",
-            "A management table is best here: item thumbnail, current price, your bid, status, countdown, and quick action.",
+            "A management table is best here: item thumbnail, current price, your bid, status, " +
+                "countdown, and quick action.",
             new String[]{"18", "07", "05", "06"},
             new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
             new String[]{"Bid history", "Status badges", "Quick re-bid"},
@@ -239,7 +248,8 @@ public class UserDashboardController extends BaseDashboardController {
             "Auto Bids",
             "Manage automated bidding rules, maximum limits, increments, and pause or resume controls.",
             "Auto Bid Controls",
-            "Auto bids are bidding rules, not just history. Keep max limit, current price, increment, warning threshold, and controls visible.",
+            "Auto bids are bidding rules, not just history. Keep max limit, current price, " +
+                "increment, warning threshold, and controls visible.",
             new String[]{"03", "01", "02", "01"},
             new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
             new String[]{"Rule table", "Limit safety", "Pause / resume"},
@@ -260,14 +270,16 @@ public class UserDashboardController extends BaseDashboardController {
             "My Items",
             "Manage seller listings, drafts, active auctions, sold items, and relist actions.",
             "Seller Workspace",
-            "Seller management stays practical with item thumbnails, listing status, bids, watchers, countdown, winner, and context actions.",
+            "Seller management stays practical with item thumbnails, listing status, bids, " +
+                "watchers, countdown, winner, and context actions.",
             new String[]{"14", "05", "03", "06"},
             new String[]{"Items", "Drafts", "Active Sales", "Sold"},
             new String[]{"Listing status", "Auction linkage", "Seller actions"},
             new String[]{
                 "Draft, Pending, Active, Sold, and Unsold items are separated by filter chips.",
                 "Each item shows whether it has bids, watchers, or a winner follow-up task.",
-                "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, or Relist."
+                "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, " +
+                    "or Relist."
             },
             new String[]{
                 "Leather Backpack draft needs image and starting price.",
@@ -281,14 +293,16 @@ public class UserDashboardController extends BaseDashboardController {
             "Transactions",
             "Follow auctions you won and auctions you sold after bidding ends.",
             "Post-Auction Transactions",
-            "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold Auctions for winners of your listings.",
+            "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold " +
+                "Auctions for winners of your listings.",
             new String[]{"06", "02", "03", "01"},
             new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
             new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
             new String[]{
                 "Won Auctions track final price, seller, payment, and pickup or shipping status.",
                 "Sold Auctions track winner, winning bid, payment status, and seller fulfilment.",
-                "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or Leave Review."
+                "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or " +
+                    "Leave Review."
             },
             new String[]{
                 "Canon EOS M50 is waiting for payment.",
@@ -300,16 +314,20 @@ public class UserDashboardController extends BaseDashboardController {
 
         map.put("settings", page(
             "Settings",
-            "Manage account details, notifications, bidding preferences, seller profile, payments, and app preferences.",
+            "Manage account details, notifications, bidding preferences, seller profile, payments, " +
+                "and app preferences.",
             "Settings Workspace",
-            "Settings should be grouped forms, not auction tables: account, notifications, bidding, seller profile, payment, privacy, and preferences.",
+            "Settings should be grouped forms, not auction tables: account, notifications, " +
+                "bidding, seller profile, payment, privacy, and preferences.",
             new String[]{"07", "08", "04", "03"},
             new String[]{"Groups", "Alerts", "Bid Rules", "Preferences"},
             new String[]{"Account", "Notifications", "Bidding preferences"},
             new String[]{
                 "Profile, email, phone number, avatar, and password change belong in Account.",
-                "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts belong in Notifications.",
-                "Default increment, quick bid confirmation, auto-bid threshold, currency, timezone, and default view belong in Preferences."
+                "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts " +
+                    "belong in Notifications.",
+                "Default increment, quick bid confirmation, auto-bid threshold, currency, " +
+                    "timezone, and default view belong in Preferences."
             },
             new String[]{
                 "Outbid and ending-soon alerts are enabled.",
@@ -360,18 +378,126 @@ public class UserDashboardController extends BaseDashboardController {
 
     private List<AuctionCardData> buildAuctionCards() {
         List<AuctionCardData> list = new ArrayList<>();
-        list.add(auction("MacBook Pro M3", "Electronics", "32,500,000 VND", "18 bids", "42m", "Hot", "/client/images/overlay2.jpg", "Seller minh.seller - high value laptop auction with active auto bids."));
-        list.add(auction("Vintage Camera", "Electronics", "4,600,000 VND", "21 bids", "38m", "Ending Soon", "/client/images/overlay3.jpg", "Camera auction with strong demand and quick final-minute pressure."));
-        list.add(auction("Wireless Headset", "Electronics", "1,100,000 VND", "5 bids", "1d", "Running", "/client/images/overlay5.jpg", "Audio item with quick bid increment and shipping support."));
-        list.add(auction("Mechanical Keyboard", "Electronics", "2,400,000 VND", "9 bids", "6h", "Watched", "/client/images/overlay7.jpg", "Watched item with current leading bid and compact bid history."));
-        list.add(auction("Smart Speaker", "Electronics", "1,250,000 VND", "7 bids", "8h", "No Reserve", "/client/images/overlay2.jpg", "Electronics auction with no reserve and high watcher count."));
-        list.add(auction("Signed Art Print", "Art", "8,200,000 VND", "11 bids", "3h", "No Reserve", "/client/images/overlay4.jpg", "No-reserve art listing with gallery preview and verified seller note."));
-        list.add(auction("Abstract Painting", "Art", "3,000,000 VND", "2 bids", "1d", "Running", "/client/images/overlay.jpg", "Painting listing with preview image and artist note."));
-        list.add(auction("Ceramic Sculpture", "Art", "5,900,000 VND", "13 bids", "2h", "Ending Soon", "/client/images/overlay4.jpg", "Art auction with a detailed preview image and closing pressure."));
-        list.add(auction("Digital Artwork Print", "Art", "1,750,000 VND", "6 bids", "22h", "Watched", "/client/images/bg2.jpg", "Watched art print with seller notes and shipping support."));
-        list.add(auction("City Bike", "Vehicle", "2,800,000 VND", "6 bids", "5h", "Ending Soon", "/client/images/overlay3.jpg", "Vehicle listing with pickup information and bidder questions."));
-        list.add(auction("Electric Scooter", "Vehicle", "7,500,000 VND", "10 bids", "1d", "Hot", "/client/images/overlay6.jpg", "Vehicle auction with active watchers and pickup arrangement."));
-        list.add(auction("Vintage Motorbike", "Vehicle", "18,000,000 VND", "16 bids", "2d", "Running", "/client/images/overlay5.jpg", "Vehicle auction with seller inspection notes and bidder questions."));
+        list.add(auction(
+            "MacBook Pro M3",
+            "Electronics",
+            "32,500,000 VND",
+            "18 bids",
+            "42m",
+            "Hot",
+            "/client/images/overlay2.jpg",
+            "Seller minh.seller - high value laptop auction with active auto bids."
+        ));
+        list.add(auction(
+            "Vintage Camera",
+            "Electronics",
+            "4,600,000 VND",
+            "21 bids",
+            "38m",
+            "Ending Soon",
+            "/client/images/overlay3.jpg",
+            "Camera auction with strong demand and quick final-minute pressure."
+        ));
+        list.add(auction(
+            "Wireless Headset",
+            "Electronics",
+            "1,100,000 VND",
+            "5 bids",
+            "1d",
+            "Running",
+            "/client/images/overlay5.jpg",
+            "Audio item with quick bid increment and shipping support."
+        ));
+        list.add(auction(
+            "Mechanical Keyboard",
+            "Electronics",
+            "2,400,000 VND",
+            "9 bids",
+            "6h",
+            "Watched",
+            "/client/images/overlay7.jpg",
+            "Watched item with current leading bid and compact bid history."
+        ));
+        list.add(auction(
+            "Smart Speaker",
+            "Electronics",
+            "1,250,000 VND",
+            "7 bids",
+            "8h",
+            "No Reserve",
+            "/client/images/overlay2.jpg",
+            "Electronics auction with no reserve and high watcher count."
+        ));
+        list.add(auction(
+            "Signed Art Print",
+            "Art",
+            "8,200,000 VND",
+            "11 bids",
+            "3h",
+            "No Reserve",
+            "/client/images/overlay4.jpg",
+            "No-reserve art listing with gallery preview and verified seller note."
+        ));
+        list.add(auction(
+            "Abstract Painting",
+            "Art",
+            "3,000,000 VND",
+            "2 bids",
+            "1d",
+            "Running",
+            "/client/images/overlay.jpg",
+            "Painting listing with preview image and artist note."
+        ));
+        list.add(auction(
+            "Ceramic Sculpture",
+            "Art",
+            "5,900,000 VND",
+            "13 bids",
+            "2h",
+            "Ending Soon",
+            "/client/images/overlay4.jpg",
+            "Art auction with a detailed preview image and closing pressure."
+        ));
+        list.add(auction(
+            "Digital Artwork Print",
+            "Art",
+            "1,750,000 VND",
+            "6 bids",
+            "22h",
+            "Watched",
+            "/client/images/bg2.jpg",
+            "Watched art print with seller notes and shipping support."
+        ));
+        list.add(auction(
+            "City Bike",
+            "Vehicle",
+            "2,800,000 VND",
+            "6 bids",
+            "5h",
+            "Ending Soon",
+            "/client/images/overlay3.jpg",
+            "Vehicle listing with pickup information and bidder questions."
+        ));
+        list.add(auction(
+            "Electric Scooter",
+            "Vehicle",
+            "7,500,000 VND",
+            "10 bids",
+            "1d",
+            "Hot",
+            "/client/images/overlay6.jpg",
+            "Vehicle auction with active watchers and pickup arrangement."
+        ));
+        list.add(auction(
+            "Vintage Motorbike",
+            "Vehicle",
+            "18,000,000 VND",
+            "16 bids",
+            "2d",
+            "Running",
+            "/client/images/overlay5.jpg",
+            "Vehicle auction with seller inspection notes and bidder questions."
+        ));
         return list;
     }
 
@@ -379,7 +505,16 @@ public class UserDashboardController extends BaseDashboardController {
         return new CategoryData(title, description, count, initials);
     }
 
-    private AuctionCardData auction(String title, String category, String price, String bids, String endsIn, String badge, String imagePath, String detail) {
+    private AuctionCardData auction(
+        String title,
+        String category,
+        String price,
+        String bids,
+        String endsIn,
+        String badge,
+        String imagePath,
+        String detail
+    ) {
         return new AuctionCardData(title, category, price, bids, endsIn, badge, imagePath, detail);
     }
 
@@ -445,10 +580,51 @@ public class UserDashboardController extends BaseDashboardController {
         addHeader("Item / Task", "Value", "Time / Signal");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("Vintage Camera", "My bid 4,300,000 VND - current price moved above your bid", "4,600,000 VND", "Ends in 38m", "Outbid", "You were outbid. Place a higher bid or configure auto bid before the auction closes.", "VC", "Bid Again", "View"));
-        rows.add(row("MacBook Pro M3", "Winning now - auto bid active until 35,000,000 VND", "32,500,000 VND", "Ends in 42m", "Winning", "You are currently leading. Watch closing pressure and bid history before the final minutes.", "MB", "View", "Auto Bid"));
-        rows.add(row("Canon EOS M50", "Won auction - seller camera.store - payment required", "5,200,000 VND", "Due today", "Payment Due", "This won auction should move through payment before fulfilment can continue.", "CE", "Pay Now", "Contact"));
-        rows.add(row("Mechanical Keyboard", "Sold item - winner thanh.user has paid", "2,400,000 VND", "Ship today", "To Ship", "Winner payment is complete. Seller should prepare shipping or pickup confirmation.", "MK", "Ship", "Details"));
+        rows.add(row(
+            "Vintage Camera",
+            "My bid 4,300,000 VND - current price moved above your bid",
+            "4,600,000 VND",
+            "Ends in 38m",
+            "Outbid",
+            "You were outbid. Place a higher bid or configure auto bid before the auction closes.",
+            "VC",
+            "Bid Again",
+            "View"
+        ));
+        rows.add(row(
+            "MacBook Pro M3",
+            "Winning now - auto bid active until 35,000,000 VND",
+            "32,500,000 VND",
+            "Ends in 42m",
+            "Winning",
+            "You are currently leading. Watch closing pressure and bid history before the final " +
+                "minutes.",
+            "MB",
+            "View",
+            "Auto Bid"
+        ));
+        rows.add(row(
+            "Canon EOS M50",
+            "Won auction - seller camera.store - payment required",
+            "5,200,000 VND",
+            "Due today",
+            "Payment Due",
+            "This won auction should move through payment before fulfilment can continue.",
+            "CE",
+            "Pay Now",
+            "Contact"
+        ));
+        rows.add(row(
+            "Mechanical Keyboard",
+            "Sold item - winner thanh.user has paid",
+            "2,400,000 VND",
+            "Ship today",
+            "To Ship",
+            "Winner payment is complete. Seller should prepare shipping or pickup confirmation.",
+            "MK",
+            "Ship",
+            "Details"
+        ));
 
         addFilteredRows(rows, filter);
     }
@@ -508,10 +684,49 @@ public class UserDashboardController extends BaseDashboardController {
         addHeader("Auction", "My Bid", "Current / Ends");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("MacBook Pro M3", "Latest bid 32,500,000 VND - max auto bid 35,000,000 VND", "32,500,000 VND", "32,500,000 VND - 42m", "Winning", "You are currently leading. Keep watching or edit the max auto bid limit.", "MB", "View", "Edit Auto"));
-        rows.add(row("Vintage Camera", "Latest bid 4,300,000 VND - current price is higher", "4,300,000 VND", "4,600,000 VND - 38m", "Outbid", "You need to bid again if you still want this item.", "VC", "Bid Again", "View"));
-        rows.add(row("Canon EOS M50", "Final winning bid accepted", "5,200,000 VND", "Won today", "Won", "Auction is won and should be handled in Transactions for payment.", "CE", "Pay Now", "View"));
-        rows.add(row("Gaming Chair", "Final bid 1,900,000 VND - another bidder won", "1,900,000 VND", "Closed", "Lost", "This auction is closed. Use View for bid history only.", "GC", "View"));
+        rows.add(row(
+            "MacBook Pro M3",
+            "Latest bid 32,500,000 VND - max auto bid 35,000,000 VND",
+            "32,500,000 VND",
+            "32,500,000 VND - 42m",
+            "Winning",
+            "You are currently leading. Keep watching or edit the max auto bid limit.",
+            "MB",
+            "View",
+            "Edit Auto"
+        ));
+        rows.add(row(
+            "Vintage Camera",
+            "Latest bid 4,300,000 VND - current price is higher",
+            "4,300,000 VND",
+            "4,600,000 VND - 38m",
+            "Outbid",
+            "You need to bid again if you still want this item.",
+            "VC",
+            "Bid Again",
+            "View"
+        ));
+        rows.add(row(
+            "Canon EOS M50",
+            "Final winning bid accepted",
+            "5,200,000 VND",
+            "Won today",
+            "Won",
+            "Auction is won and should be handled in Transactions for payment.",
+            "CE",
+            "Pay Now",
+            "View"
+        ));
+        rows.add(row(
+            "Gaming Chair",
+            "Final bid 1,900,000 VND - another bidder won",
+            "1,900,000 VND",
+            "Closed",
+            "Lost",
+            "This auction is closed. Use View for bid history only.",
+            "GC",
+            "View"
+        ));
 
         addFilteredRows(rows, filter);
     }
@@ -523,10 +738,49 @@ public class UserDashboardController extends BaseDashboardController {
         addHeader("Auction Rule", "Current / Max", "Increment");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("MacBook Pro M3", "Auto bid active - stop at 35,000,000 VND - threshold 80%", "32.5M / 35M", "+500,000 VND", "Near Limit", "Current price is close to max limit. Edit max bid or watch manually.", "MB", "Edit", "Pause"));
-        rows.add(row("Vintage Camera", "Auto bid paused by user - can resume before close", "4.6M / 5M", "+100,000 VND", "Paused", "Paused auto bid will not respond to new bids until resumed.", "VC", "Resume", "Edit"));
-        rows.add(row("Signed Art Print", "Auto bid active - no reserve auction", "8.2M / 10M", "+200,000 VND", "Active", "Auto bid rule is healthy and still below warning threshold.", "AP", "Edit", "Pause"));
-        rows.add(row("Mechanical Keyboard", "Auto bid ended after auction close", "2.4M / 2.5M", "+50,000 VND", "Ended", "Rule is ended and the transaction should be tracked after close.", "MK", "View"));
+        rows.add(row(
+            "MacBook Pro M3",
+            "Auto bid active - stop at 35,000,000 VND - threshold 80%",
+            "32.5M / 35M",
+            "+500,000 VND",
+            "Near Limit",
+            "Current price is close to max limit. Edit max bid or watch manually.",
+            "MB",
+            "Edit",
+            "Pause"
+        ));
+        rows.add(row(
+            "Vintage Camera",
+            "Auto bid paused by user - can resume before close",
+            "4.6M / 5M",
+            "+100,000 VND",
+            "Paused",
+            "Paused auto bid will not respond to new bids until resumed.",
+            "VC",
+            "Resume",
+            "Edit"
+        ));
+        rows.add(row(
+            "Signed Art Print",
+            "Auto bid active - no reserve auction",
+            "8.2M / 10M",
+            "+200,000 VND",
+            "Active",
+            "Auto bid rule is healthy and still below warning threshold.",
+            "AP",
+            "Edit",
+            "Pause"
+        ));
+        rows.add(row(
+            "Mechanical Keyboard",
+            "Auto bid ended after auction close",
+            "2.4M / 2.5M",
+            "+50,000 VND",
+            "Ended",
+            "Rule is ended and the transaction should be tracked after close.",
+            "MK",
+            "View"
+        ));
 
         addFilteredRows(rows, filter);
     }
@@ -538,26 +792,123 @@ public class UserDashboardController extends BaseDashboardController {
         addHeader("Item", "Price / Bids", "Watchers / Ends");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("Mechanical Keyboard", "Sold through AUC-0977 - winner thanh.user", "2,400,000 VND", "9 bids - paid", "Sold", "Winner has paid. Prepare shipment or pickup confirmation.", "MK", "Ship", "Contact"));
-        rows.add(row("Leather Backpack", "Draft listing - missing photo validation and starting price", "No price", "Draft", "Draft", "Complete required listing details before publishing or submitting for approval.", "LB", "Edit", "Publish"));
-        rows.add(row("Wireless Mouse", "Active sale - 11 watchers but no bid yet", "450,000 VND", "11 watchers - 1d", "Active", "Consider lowering start price or promoting before the auction ends.", "WM", "View Bids", "Edit"));
-        rows.add(row("Abstract Painting", "Ended without winner - eligible for relist", "3,000,000 VND", "0 bids - closed", "Unsold", "Relist with improved title, image, or starting price.", "AR", "Relist", "Edit"));
-        rows.add(row("Vintage Watch", "Submitted for review before auction launch", "6,000,000 VND", "Pending", "Pending", "Item is waiting review before it can become ACTIVE.", "VW", "View"));
+        rows.add(row(
+            "Mechanical Keyboard",
+            "Sold through AUC-0977 - winner thanh.user",
+            "2,400,000 VND",
+            "9 bids - paid",
+            "Sold",
+            "Winner has paid. Prepare shipment or pickup confirmation.",
+            "MK",
+            "Ship",
+            "Contact"
+        ));
+        rows.add(row(
+            "Leather Backpack",
+            "Draft listing - missing photo validation and starting price",
+            "No price",
+            "Draft",
+            "Draft",
+            "Complete required listing details before publishing or submitting for approval.",
+            "LB",
+            "Edit",
+            "Publish"
+        ));
+        rows.add(row(
+            "Wireless Mouse",
+            "Active sale - 11 watchers but no bid yet",
+            "450,000 VND",
+            "11 watchers - 1d",
+            "Active",
+            "Consider lowering start price or promoting before the auction ends.",
+            "WM",
+            "View Bids",
+            "Edit"
+        ));
+        rows.add(row(
+            "Abstract Painting",
+            "Ended without winner - eligible for relist",
+            "3,000,000 VND",
+            "0 bids - closed",
+            "Unsold",
+            "Relist with improved title, image, or starting price.",
+            "AR",
+            "Relist",
+            "Edit"
+        ));
+        rows.add(row(
+            "Vintage Watch",
+            "Submitted for review before auction launch",
+            "6,000,000 VND",
+            "Pending",
+            "Pending",
+            "Item is waiting review before it can become ACTIVE.",
+            "VW",
+            "View"
+        ));
 
         addFilteredRows(rows, filter);
     }
 
     private void renderTransactions(String filter) {
         setWorkspaceTitle("Won Auctions / Sold Auctions");
-        renderChips(filter, "All", "Won Auctions", "Sold Auctions", "Payment Due", "To Ship", "Completed");
+        renderChips(
+            filter,
+            "All",
+            "Won Auctions",
+            "Sold Auctions",
+            "Payment Due",
+            "To Ship",
+            "Completed"
+        );
 
         addHeader("Transaction", "Final Price", "Next Step");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("Won - Canon EOS M50", "Seller camera.store - invoice ready", "5,200,000 VND", "Pay today", "Payment Due", "Bidder flow: pay the final price, then track shipping or pickup.", "CE", "Pay Now", "Contact Seller"));
-        rows.add(row("Sold - Mechanical Keyboard", "Winner thanh.user - payment completed", "2,400,000 VND", "Ship today", "To Ship", "Seller flow: winner has paid, so mark shipped after fulfilment.", "MK", "Ship", "Contact Winner"));
-        rows.add(row("Won - Signed Art Print", "Seller art.house - completed purchase", "8,200,000 VND", "Leave review", "Completed", "Transaction complete. User can leave seller review or download receipt.", "AP", "Review", "Receipt"));
-        rows.add(row("Sold - Wireless Mouse", "Winner pending payment confirmation", "450,000 VND", "Payment check", "Payment Due", "Seller should wait for payment confirmation before shipment.", "WM", "View", "Reminder"));
+        rows.add(row(
+            "Won - Canon EOS M50",
+            "Seller camera.store - invoice ready",
+            "5,200,000 VND",
+            "Pay today",
+            "Payment Due",
+            "Bidder flow: pay the final price, then track shipping or pickup.",
+            "CE",
+            "Pay Now",
+            "Contact Seller"
+        ));
+        rows.add(row(
+            "Sold - Mechanical Keyboard",
+            "Winner thanh.user - payment completed",
+            "2,400,000 VND",
+            "Ship today",
+            "To Ship",
+            "Seller flow: winner has paid, so mark shipped after fulfilment.",
+            "MK",
+            "Ship",
+            "Contact Winner"
+        ));
+        rows.add(row(
+            "Won - Signed Art Print",
+            "Seller art.house - completed purchase",
+            "8,200,000 VND",
+            "Leave review",
+            "Completed",
+            "Transaction complete. User can leave seller review or download receipt.",
+            "AP",
+            "Review",
+            "Receipt"
+        ));
+        rows.add(row(
+            "Sold - Wireless Mouse",
+            "Winner pending payment confirmation",
+            "450,000 VND",
+            "Payment check",
+            "Payment Due",
+            "Seller should wait for payment confirmation before shipment.",
+            "WM",
+            "View",
+            "Reminder"
+        ));
 
         addFilteredRows(rows, filter);
     }
@@ -569,12 +920,66 @@ public class UserDashboardController extends BaseDashboardController {
         addHeader("Setting Group", "Configured", "Scope");
 
         List<UserRow> rows = new ArrayList<>();
-        rows.add(row("Account", "Display name, email, phone, avatar, and password", "Profile", "User", "Ready", "Account settings should manage profile and password changes.", "AC", "Edit"));
-        rows.add(row("Notifications", "Outbid, ending soon, won auction, new bid, payment reminders", "8 alerts", "Email / in-app", "Active", "Notification settings are critical in auction flows because timing matters.", "NO", "Edit"));
-        rows.add(row("Bidding Preferences", "Confirm bid, quick bid, default increment, auto-bid warning threshold", "4 rules", "Bidding", "Ready", "Bidding preferences reduce mistakes before placing manual or automated bids.", "BP", "Edit"));
-        rows.add(row("Seller Profile", "Seller name, bio, pickup location, verification status", "Seller", "Listings", "Ready", "Seller profile supports My Items and Sold Auctions fulfilment.", "SP", "Edit"));
-        rows.add(row("Payment & Payout", "Payment method, payout method, invoices, receipts", "Prepared", "Transactions", "Pending", "Payment and payout settings support Won Auctions and Sold Auctions.", "PP", "Edit"));
-        rows.add(row("App Preferences", "Theme, language, currency, timezone, default auction view and sort", "VND", "Dashboard", "Ready", "App preferences should persist default grid/list and ending-soon sort.", "AP", "Edit"));
+        rows.add(row(
+            "Account",
+            "Display name, email, phone, avatar, and password",
+            "Profile",
+            "User",
+            "Ready",
+            "Account settings should manage profile and password changes.",
+            "AC",
+            "Edit"
+        ));
+        rows.add(row(
+            "Notifications",
+            "Outbid, ending soon, won auction, new bid, payment reminders",
+            "8 alerts",
+            "Email / in-app",
+            "Active",
+            "Notification settings are critical in auction flows because timing matters.",
+            "NO",
+            "Edit"
+        ));
+        rows.add(row(
+            "Bidding Preferences",
+            "Confirm bid, quick bid, default increment, auto-bid warning threshold",
+            "4 rules",
+            "Bidding",
+            "Ready",
+            "Bidding preferences reduce mistakes before placing manual or automated bids.",
+            "BP",
+            "Edit"
+        ));
+        rows.add(row(
+            "Seller Profile",
+            "Seller name, bio, pickup location, verification status",
+            "Seller",
+            "Listings",
+            "Ready",
+            "Seller profile supports My Items and Sold Auctions fulfilment.",
+            "SP",
+            "Edit"
+        ));
+        rows.add(row(
+            "Payment & Payout",
+            "Payment method, payout method, invoices, receipts",
+            "Prepared",
+            "Transactions",
+            "Pending",
+            "Payment and payout settings support Won Auctions and Sold Auctions.",
+            "PP",
+            "Edit"
+        ));
+        rows.add(row(
+            "App Preferences",
+            "Theme, language, currency, timezone, default auction view and sort",
+            "VND",
+            "Dashboard",
+            "Ready",
+            "App preferences should persist default grid/list and ending-soon sort.",
+            "AP",
+            "Edit"
+        ));
 
         addFilteredRows(rows, filter);
     }
@@ -661,15 +1066,19 @@ public class UserDashboardController extends BaseDashboardController {
             imageView.fitWidthProperty().bind(imageWrap.widthProperty());
             imageView.fitHeightProperty().bind(imageWrap.heightProperty());
 
-            imageWrap.widthProperty().addListener((observable, oldValue, newValue) -> updateCoverViewport(imageView, imageWrap));
-            imageWrap.heightProperty().addListener((observable, oldValue, newValue) -> updateCoverViewport(imageView, imageWrap));
+            imageWrap.widthProperty().addListener((observable, oldValue, newValue) ->
+                updateCoverViewport(imageView, imageWrap));
+            imageWrap.heightProperty().addListener((observable, oldValue, newValue) ->
+                updateCoverViewport(imageView, imageWrap));
 
             imageWrap.getChildren().add(imageView);
             imageWrap.applyCss();
             imageWrap.layout();
             updateCoverViewport(imageView, imageWrap);
         } else {
-            imageWrap.getChildren().add(buildThumbnail(data.title.substring(0, Math.min(2, data.title.length())).toUpperCase()));
+            imageWrap.getChildren().add(
+                buildThumbnail(data.title.substring(0, Math.min(2, data.title.length())).toUpperCase())
+            );
         }
 
         Label badge = new Label(data.badge);
@@ -745,7 +1154,11 @@ public class UserDashboardController extends BaseDashboardController {
 
     private void updateCoverViewport(ImageView imageView, Region container) {
         Image image = imageView.getImage();
-        if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0 || container.getWidth() <= 0 || container.getHeight() <= 0) {
+        if (image == null
+            || image.getWidth() <= 0
+            || image.getHeight() <= 0
+            || container.getWidth() <= 0
+            || container.getHeight() <= 0) {
             return;
         }
 
@@ -860,7 +1273,8 @@ public class UserDashboardController extends BaseDashboardController {
         String normalizedFilter = normalize(filter);
 
         for (AuctionCardData card : auctionCards) {
-            String haystack = normalize(card.title + " " + card.category + " " + card.badge + " " + card.detail);
+            String haystack = normalize(card.title + " " + card.category + " " + card.badge + " " +
+                card.detail);
 
             if (isAllLikeFilter(filter)
                 || haystack.contains(normalizedFilter)
@@ -942,7 +1356,13 @@ public class UserDashboardController extends BaseDashboardController {
         ColumnConstraints statusColumn = percentColumn(14);
         ColumnConstraints actionColumn = percentColumn(16);
 
-        grid.getColumnConstraints().addAll(mainColumn, firstColumn, secondColumn, statusColumn, actionColumn);
+        grid.getColumnConstraints().addAll(
+            mainColumn,
+            firstColumn,
+            secondColumn,
+            statusColumn,
+            actionColumn
+        );
         return grid;
     }
 
@@ -960,7 +1380,16 @@ public class UserDashboardController extends BaseDashboardController {
         return constraints;
     }
 
-    private UserRow row(String title, String meta, String firstValue, String secondValue, String status, String detail, String thumbnail, String... actions) {
+    private UserRow row(
+        String title,
+        String meta,
+        String firstValue,
+        String secondValue,
+        String status,
+        String detail,
+        String thumbnail,
+        String... actions
+    ) {
         return new UserRow(title, meta, firstValue, secondValue, status, detail, thumbnail, actions);
     }
 
@@ -1116,7 +1545,10 @@ public class UserDashboardController extends BaseDashboardController {
         actions.setMinWidth(0);
         actions.setMaxWidth(Double.MAX_VALUE);
         actions.getStyleClass().add("user-row-actions");
-        actions.getColumnConstraints().addAll(fixedColumn(USER_ACTION_PRIMARY_WIDTH), fixedColumn(USER_ACTION_MORE_WIDTH));
+        actions.getColumnConstraints().addAll(
+            fixedColumn(USER_ACTION_PRIMARY_WIDTH),
+            fixedColumn(USER_ACTION_MORE_WIDTH)
+        );
 
         String primaryAction = resolvePrimaryAction(data);
         Button primary = new Button(primaryAction);
@@ -1169,7 +1601,9 @@ public class UserDashboardController extends BaseDashboardController {
         thumbnail.setMinSize(54, 46);
         thumbnail.setPrefSize(54, 46);
         thumbnail.setMaxSize(54, 46);
-        thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #d1b15d, #8fb1a4); -fx-background-radius: 14; -fx-border-color: rgba(39, 75, 69, 0.16); -fx-border-radius: 14;");
+        thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #d1b15d, " +
+            "#8fb1a4); -fx-background-radius: 14; -fx-border-color: rgba(39, 75, 69, 0.16); " +
+            "-fx-border-radius: 14;");
 
         Label label = new Label(text == null || text.isBlank() ? "IT" : text);
         label.setStyle("-fx-text-fill: #17352c; -fx-font-size: 12px; -fx-font-weight: bold;");
@@ -1283,7 +1717,8 @@ public class UserDashboardController extends BaseDashboardController {
         Label formTitle = new Label("Create Listing");
         formTitle.getStyleClass().add("create-listing-title");
 
-        Label formNote = new Label("Submit an item for admin review. Approved items become available for auction creation.");
+        Label formNote = new Label("Submit an item for admin review. Approved items become " +
+            "available for auction creation.");
         formNote.getStyleClass().add("create-listing-note");
         formNote.setWrapText(true);
 
@@ -1362,7 +1797,13 @@ public class UserDashboardController extends BaseDashboardController {
         previewStatus.getStyleClass().add("status-badge");
         previewStatus.getStyleClass().add("status-warn");
 
-        previewPanel.getChildren().addAll(previewTitle, previewImageWrap, previewName, previewPrice, previewStatus);
+        previewPanel.getChildren().addAll(
+            previewTitle,
+            previewImageWrap,
+            previewName,
+            previewPrice,
+            previewStatus
+        );
         topRow.getChildren().addAll(uploadPanel, previewPanel);
 
         VBox detailsPanel = new VBox(12);
@@ -1382,7 +1823,8 @@ public class UserDashboardController extends BaseDashboardController {
         currencyBox.getSelectionModel().select("VND");
 
         TextArea descriptionArea = new TextArea();
-        descriptionArea.setPromptText("Description, condition, provenance, and notes for admin review...");
+        descriptionArea.setPromptText("Description, condition, provenance, and notes for admin " +
+            "review...");
         descriptionArea.setWrapText(true);
         descriptionArea.setPrefRowCount(4);
         descriptionArea.getStyleClass().add("create-text-area");
@@ -1418,13 +1860,21 @@ public class UserDashboardController extends BaseDashboardController {
         HBox.setHgrow(messageLabel, Priority.ALWAYS);
 
         titleField.textProperty().addListener((observable, oldValue, newValue) ->
-            previewName.setText(newValue == null || newValue.isBlank() ? "Untitled listing" : newValue.trim()));
+            previewName.setText(
+                newValue == null || newValue.isBlank() ? "Untitled listing" : newValue.trim()
+            ));
         priceField.textProperty().addListener((observable, oldValue, newValue) ->
-            previewPrice.setText("Starting price: " + (newValue == null || newValue.isBlank() ? "0" : newValue.trim()) + " " + currencyBox.getValue()));
+            previewPrice.setText("Starting price: " +
+                (newValue == null || newValue.isBlank() ? "0" : newValue.trim()) + " " +
+                currencyBox.getValue()));
         currencyBox.valueProperty().addListener((observable, oldValue, newValue) ->
-            previewPrice.setText("Starting price: " + (priceField.getText().isBlank() ? "0" : priceField.getText().trim()) + " " + (newValue == null ? "VND" : newValue)));
+            previewPrice.setText("Starting price: " +
+                (priceField.getText().isBlank() ? "0" : priceField.getText().trim()) + " " +
+                (newValue == null ? "VND" : newValue)));
 
-        browseButton.setOnAction(event -> chooseItemImages(selectedFileLabel, previewImage, messageLabel));
+        browseButton.setOnAction(
+            event -> chooseItemImages(selectedFileLabel, previewImage, messageLabel)
+        );
 
         saveDraft.setOnAction(event -> submitCreateItem(
             true, titleField, descriptionArea, priceField,
@@ -1438,7 +1888,13 @@ public class UserDashboardController extends BaseDashboardController {
             saveDraft, submitItem, messageLabel
         ));
 
-        detailsPanel.getChildren().addAll(detailsTitle, rowOne, rowTwo, fieldBox("Description", descriptionArea), actions);
+        detailsPanel.getChildren().addAll(
+            detailsTitle,
+            rowOne,
+            rowTwo,
+            fieldBox("Description", descriptionArea),
+            actions
+        );
         formShell.getChildren().addAll(formTitle, formNote, topRow, detailsPanel);
         workspaceBox.getChildren().add(formShell);
 
@@ -1465,10 +1921,15 @@ public class UserDashboardController extends BaseDashboardController {
         return box;
     }
 
-    private void chooseItemImages(Label selectedFileLabel, ImageView previewImage, Label messageLabel) {
+    private void chooseItemImages(
+        Label selectedFileLabel,
+        ImageView previewImage,
+        Label messageLabel) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Choose item images");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Image files", "*.png", "*.jpg", "*.jpeg", "*.webp"));
+        chooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("Image files", "*.png", "*.jpg", "*.jpeg", "*.webp")
+        );
 
         File currentDirectory = new File(System.getProperty("user.home"));
         if (currentDirectory.exists()) {
@@ -1555,7 +2016,11 @@ public class UserDashboardController extends BaseDashboardController {
             String.join("\n", pendingCreateItemImageUris)
         );
 
-        showCreateMessage(messageLabel, draftMode ? "Đang lưu draft item..." : "Đang submit item lên Pending Approval...", false);
+        showCreateMessage(
+            messageLabel,
+            draftMode ? "Đang lưu draft item..." : "Đang submit item lên Pending Approval...",
+            false
+        );
         createItemNetworkManager.send("CREATE_ITEM " + payload);
     }
 
@@ -1579,7 +2044,10 @@ public class UserDashboardController extends BaseDashboardController {
 
         if (message.startsWith("CREATE_ITEM_SUCCESS")) {
             requestCreateListingMetadata();
-            showTemporaryDetail("Create Listing", "Tạo item thành công. Nếu submit item, admin sẽ thấy nó trong Pending Approval.");
+            showTemporaryDetail(
+                "Create Listing",
+                "Tạo item thành công. Nếu submit item, admin sẽ thấy nó trong Pending Approval."
+            );
             if ("myItems".equals(currentSectionKey)) {
                 showSection("myItems");
             }
@@ -1741,7 +2209,15 @@ public class UserDashboardController extends BaseDashboardController {
         private final String imagePath;
         private final String detail;
 
-        private AuctionCardData(String title, String category, String price, String bids, String endsIn, String badge, String imagePath, String detail) {
+        private AuctionCardData(
+            String title,
+            String category,
+            String price,
+            String bids,
+            String endsIn,
+            String badge,
+            String imagePath,
+            String detail) {
             this.title = title;
             this.category = category;
             this.price = price;
@@ -1763,7 +2239,15 @@ public class UserDashboardController extends BaseDashboardController {
         private final String thumbnail;
         private final String[] actions;
 
-        private UserRow(String title, String meta, String firstValue, String secondValue, String status, String detail, String thumbnail, String... actions) {
+        private UserRow(
+            String title,
+            String meta,
+            String firstValue,
+            String secondValue,
+            String status,
+            String detail,
+            String thumbnail,
+            String... actions) {
             this.title = title;
             this.meta = meta;
             this.firstValue = firstValue;

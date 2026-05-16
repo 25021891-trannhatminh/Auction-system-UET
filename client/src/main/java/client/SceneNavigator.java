@@ -4,6 +4,9 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
+/**
+ * Centralizes scene creation and window-size preservation for the JavaFX client.
+ */
 public final class SceneNavigator {
 
     public static final double DEFAULT_WIDTH = 1150.0;
@@ -14,15 +17,33 @@ public final class SceneNavigator {
     private SceneNavigator() {
     }
 
+    /**
+     * Creates the first scene with the standard client dimensions.
+     *
+     * @param root root node loaded from FXML
+     * @return scene configured with the default client size
+     */
     public static Scene createInitialScene(Parent root) {
         return new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
     }
 
+    /**
+     * Applies minimum dimensions shared by all client screens.
+     *
+     * @param stage stage whose bounds should be constrained
+     */
     public static void applyStageBounds(Stage stage) {
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
     }
 
+    /**
+     * Replaces the current scene while keeping the user's window state.
+     *
+     * @param stage active application stage
+     * @param root root node for the next screen
+     * @param title next window title
+     */
     public static void switchSceneKeepingWindow(Stage stage, Parent root, String title) {
         boolean wasMaximized = stage.isMaximized();
         boolean wasFullScreen = stage.isFullScreen();

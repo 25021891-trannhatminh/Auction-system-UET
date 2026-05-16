@@ -1,9 +1,5 @@
 package client.controller;
 
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-
 import client.SceneNavigator;
 import client.enums.AccountStatus;
 import client.enums.SystemRole;
@@ -11,6 +7,9 @@ import client.model.User;
 import client.service.AuthService;
 import client.service.NetworkManager;
 import client.service.SessionManager;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -31,6 +30,9 @@ import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+/**
+ * Handles authentication UI state, validation, and server authentication responses.
+ */
 public class AuthController {
 
     private static final double OVERLAY_DISTANCE = 430.0;
@@ -67,6 +69,9 @@ public class AuthController {
     private boolean signInMode = true;
     private boolean animating = false;
 
+    /**
+     * Initializes the authentication form, network connection, and overlay state.
+     */
     @FXML
     public void initialize() {
         networkManager = new NetworkManager();
@@ -129,14 +134,23 @@ public class AuthController {
         overlaySlide.setInterpolator(Interpolator.EASE_BOTH);
         overlaySlide.setToX(toSignIn ? OVERLAY_DISTANCE : 0);
 
-        TranslateTransition overlayImageSlide = new TranslateTransition(SLIDE_DURATION, overlayImageView);
+        TranslateTransition overlayImageSlide = new TranslateTransition(
+            SLIDE_DURATION,
+            overlayImageView
+        );
         overlayImageSlide.setInterpolator(Interpolator.EASE_BOTH);
         overlayImageSlide.setToX(toSignIn ? -OVERLAY_DISTANCE : 0);
 
-        FadeTransition outgoingOverlayFade = new FadeTransition(Duration.millis(180), outgoingOverlayContent);
+        FadeTransition outgoingOverlayFade = new FadeTransition(
+            Duration.millis(180),
+            outgoingOverlayContent
+        );
         outgoingOverlayFade.setToValue(0);
 
-        FadeTransition incomingOverlayFade = new FadeTransition(Duration.millis(260), incomingOverlayContent);
+        FadeTransition incomingOverlayFade = new FadeTransition(
+            Duration.millis(260),
+            incomingOverlayContent
+        );
         incomingOverlayFade.setFromValue(0);
         incomingOverlayFade.setToValue(1);
         incomingOverlayFade.setDelay(Duration.millis(120));
@@ -148,12 +162,12 @@ public class AuthController {
         signUpFade.setToValue(toSignIn ? 0.35 : 1.0);
 
         ParallelTransition transition = new ParallelTransition(
-                overlaySlide,
-                overlayImageSlide,
-                outgoingOverlayFade,
-                incomingOverlayFade,
-                signInFade,
-                signUpFade
+            overlaySlide,
+            overlayImageSlide,
+            outgoingOverlayFade,
+            incomingOverlayFade,
+            signInFade,
+            signUpFade
         );
 
         transition.setOnFinished(event -> {
@@ -203,7 +217,7 @@ public class AuthController {
         clearMessages();
 
         if (username.isEmpty() || email.isEmpty() || fullName.isEmpty() || phone.isEmpty()
-                || password.isEmpty() || confirmPassword.isEmpty()) {
+            || password.isEmpty() || confirmPassword.isEmpty()) {
             showError(signUpMessageLabel, "Vui lòng nhập đầy đủ thông tin.");
             return;
         }
@@ -234,11 +248,11 @@ public class AuthController {
         }
 
         authService.register(
-                username,
-                password,
-                email,
-                normalizeFullNameForProtocol(fullName),
-                normalizePhoneForProtocol(phone)
+            username,
+            password,
+            email,
+            normalizeFullNameForProtocol(fullName),
+            normalizePhoneForProtocol(phone)
         );
 
         showSuccess(signUpMessageLabel, "Đang đăng ký...");
@@ -266,6 +280,11 @@ public class AuthController {
     }
 
     @FXML
+    /**
+     * Handles protocol messages returned by the server after login or registration.
+     *
+     * @param msg raw server response message
+     */
     public void handleServerResponse(String msg) {
         javafx.application.Platform.runLater(() -> {
             if (msg == null || msg.isBlank()) {
