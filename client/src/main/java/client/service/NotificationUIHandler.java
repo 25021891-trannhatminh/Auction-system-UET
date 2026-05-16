@@ -2,14 +2,21 @@ package client.service;
 
 import client.model.NotificationModel;
 import javafx.application.Platform;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.Alert;
 
+/**
+ * Converts server notification protocol messages into JavaFX alert dialogs.
+ */
 public class NotificationUIHandler {
 
+  /**
+   * Parses and displays a notification message from the server.
+   *
+   * @param rawMessage raw PUSH_NOTIF protocol message
+   */
   public void handle(String rawMessage) {
     try {
-      // Protocol: PUSH_NOTIF|TYPE|TITLE|CONTENT
       String[] parts = rawMessage.split("\\|", 4);
 
       if (parts.length >= 4) {
@@ -18,76 +25,61 @@ public class NotificationUIHandler {
         String message = parts[3];
 
         NotificationModel notif = new NotificationModel(type, title, message);
-
-        // Luôn cập nhật UI trong luồng JavaFX
-        Platform.runLater(() -> {
-          processNotificationUI(notif);
-        });
+        Platform.runLater(() -> processNotificationUi(notif));
       }
     } catch (Exception e) {
       System.err.println("Error parsing notification: " + e.getMessage());
     }
   }
 
-  private void processNotificationUI(NotificationModel notif) {
-    Alert alert = new Alert(AlertType.INFORMATION); // Mặc định là Information
+  private void processNotificationUi(NotificationModel notif) {
+    Alert alert = new Alert(AlertType.INFORMATION);
 
     switch (notif.getType()) {
       case "OUTBID":
         alert.setAlertType(AlertType.WARNING);
         alert.setTitle("Outbid Alert!");
         break;
-
       case "PAYMENT_DUE":
-        alert.setAlertType(AlertType.WARNING); // Hiện dấu chấm than vàng
+        alert.setAlertType(AlertType.WARNING);
         alert.setTitle("⚠️ Warning");
         break;
-
       case "AUCTION_WON":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("Congratulations! You Won");
         break;
-
       case "ITEM_APPROVED":
-        alert.setAlertType(AlertType.INFORMATION); // Hiện chữ i xanh (Tin vui)
+        alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("🎉 Congratulations");
         break;
-
       case "AUCTION_LOST":
         alert.setAlertType(AlertType.ERROR);
         alert.setTitle("Auction Result");
         break;
-
       case "ITEM_REJECTED":
-        alert.setAlertType(AlertType.ERROR); // Hiện dấu X đỏ (Tin buồn)
+        alert.setAlertType(AlertType.ERROR);
         alert.setTitle("❌ Notice");
         break;
-
       case "BID_PLACED":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("Bid Placed");
         break;
-
       case "AUCTION_STARTED":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("Live Now! 🚀");
         break;
-
       case "AUCTION_ENDED":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("Auction Closed");
         break;
-
       case "PAYMENT_RECEIVED":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("Money Received! 💰");
         break;
-
       case "SYSTEM":
         alert.setAlertType(AlertType.INFORMATION);
         alert.setTitle("💻 System Message");
         break;
-
       default:
         alert.setTitle("🔔 Notification");
         break;
@@ -95,8 +87,6 @@ public class NotificationUIHandler {
 
     alert.setHeaderText(notif.getTitle());
     alert.setContentText(notif.getMessage());
-
-    // Hiển thị thông báo
     alert.show();
   }
 }
