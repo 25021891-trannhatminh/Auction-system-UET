@@ -1,7 +1,9 @@
 package server.repository;
 
+import server.common.entity.Item;
+import server.common.entity.factory.ItemFactory;
+import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
-import server.common.model.ItemDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,19 +24,19 @@ public class ItemDAO {
     private static final Logger logger = LoggerFactory.getLogger(ItemDAO.class);
 
     private static final String SQL_SELECT_BASE = """
-        SELECT item_id, seller_id, category_id, name, description,
+        SELECT item_id, seller_id, category, name, description,
                starting_price, status, created_at
         FROM items
         """;
 
     private static final String SQL_INSERT = """
-        INSERT INTO items (seller_id, category_id, name, description, starting_price, status)
+        INSERT INTO items (seller_id, category, name, description, starting_price, status)
         VALUES (?, ?, ?, ?, ?, ?)
         """;
 
     private static final String SQL_UPDATE = """
         UPDATE items
-        SET category_id = ?, name = ?, description = ?, starting_price = ?
+        SET category = ?, name = ?, description = ?, starting_price = ?
         WHERE item_id = ?
         """;
 
@@ -67,15 +69,15 @@ public class ItemDAO {
 
     // Lấy items theo đúng category
     private static final String SQL_SELECT_BY_CATEGORY =
-        SQL_SELECT_BASE + " WHERE category_id = ? ORDER BY created_at DESC";
+        SQL_SELECT_BASE + " WHERE category = ? ORDER BY created_at DESC";
 
     // Lấy items theo category cha + tất cả category con (chỉ 1 cấp)
     private static final String SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS = """
-        SELECT i.item_id, i.seller_id, i.category_id, i.name,
+        SELECT i.item_id, i.seller_id, i.category, i.name,
                i.description, i.starting_price, i.status, i.created_at
         FROM items i
-        JOIN item_categories c ON i.category_id = c.category_id
-        WHERE c.category_id = ? OR c.parent_id = ?
+        JOIN item_categories c ON i.category = c.category
+        WHERE c.category = ? OR c.parent_id = ?
         ORDER BY i.created_at DESC
         """;
 
@@ -105,15 +107,15 @@ public class ItemDAO {
      * Thêm một sản phẩm mới vào hệ thống.
      *
      * @param sellerId      ID của người bán (người sở hữu sản phẩm)
-     * @param categoryId    ID của danh mục sản phẩm
+     * @param category    ID của danh mục sản phẩm
      * @param name          Tên sản phẩm
      * @param description   Mô tả chi tiết sản phẩm
      * @param startingPrice Giá khởi điểm để đấu giá
      * @return {@code true} nếu thêm thành công, {@code false} nếu dữ liệu không hợp lệ hoặc lỗi DB
      */
-    public boolean addItem(int sellerId, int categoryId, String name,
+    public boolean addItem(int sellerId, ItemCategory category, String name,
                            String description, BigDecimal startingPrice) {
-        return addItem(sellerId, categoryId, name, description, startingPrice, ItemStatus.PENDING_REVIEW) > 0;
+        return addItem(sellerId, category, name, description, startingPrice, ItemStatus.PENDING_REVIEW) > 0;
     }
 
     /**
@@ -123,13 +125,13 @@ public class ItemDAO {
      * into {@code item_images} and {@code item_attributes} immediately after the core
      * item row is created.</p>
      */
-    public int addItem(int sellerId, Integer categoryId, String name,
+    public int addItem(int sellerId, ItemCategory category, String name,
                        String description, BigDecimal startingPrice, ItemStatus status) {
 
         if (isInvalidItemData(name, startingPrice)) return -1;
 
         try (Connection conn = DBConnection.getConnection()) {
-            return addItem(conn, sellerId, categoryId, name, description, startingPrice, status);
+            return addItem(conn, sellerId, category, name, description, startingPrice, status);
         } catch (SQLException e) {
             logger.error("addItem failed for sellerId={}", sellerId, e);
             return -1;
@@ -142,7 +144,7 @@ public class ItemDAO {
      * <p>Callers such as {@code ItemService} pass their own connection so the item row,
      * image rows, attribute rows, and admin notifications can commit or rollback together.</p>
      */
-    public int addItem(Connection conn, int sellerId, Integer categoryId, String name,
+    public int addItem(Connection conn, int sellerId, ItemCategory category, String name,
                        String description, BigDecimal startingPrice, ItemStatus status) throws SQLException {
 
         if (isInvalidItemData(name, startingPrice)) return -1;
@@ -150,11 +152,7 @@ public class ItemDAO {
         try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
 
             ps.setInt(1, sellerId);
-            if (categoryId == null || categoryId <= 0) {
-                ps.setNull(2, Types.INTEGER);
-            } else {
-                ps.setInt(2, categoryId);
-            }
+            ps.setString(2, category.name());
             ps.setString(3, name);
             ps.setString(4, description);
             ps.setBigDecimal(5, startingPrice);
@@ -177,10 +175,10 @@ public class ItemDAO {
      * Lấy danh sách tất cả sản phẩm đang chờ admin kiểm duyệt.
      * Sắp xếp cũ nhất lên đầu để duyệt theo thứ tự FIFO.
      *
-     * @return Danh sách {@link ItemDTO} có status {@code PENDING_REVIEW}
+     * @return Danh sách {@link Item} có status {@code PENDING_REVIEW}
      */
-    public List<ItemDTO> getPendingReviewItems() {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getPendingReviewItems() {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING_REVIEW);
              ResultSet rs = ps.executeQuery()) {
@@ -356,9 +354,9 @@ public class ItemDAO {
      * Truy vấn thông tin chi tiết của một sản phẩm theo ID.
      *
      * @param itemId ID sản phẩm cần tìm
-     * @return {@link ItemDTO} chứa thông tin sản phẩm, hoặc {@code null} nếu không tìm thấy
+     * @return {@link Item} chứa thông tin sản phẩm, hoặc {@code null} nếu không tìm thấy
      */
-    public ItemDTO getById(int itemId) {
+    public Item getById(int itemId) {
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
             ps.setInt(1, itemId);
@@ -375,10 +373,10 @@ public class ItemDAO {
      * Lấy danh sách tất cả sản phẩm của một người bán cụ thể.
      *
      * @param sellerId ID của người bán
-     * @return Danh sách {@link ItemDTO}, trả về list rỗng nếu không có dữ liệu
+     * @return Danh sách {@link Item}, trả về list rỗng nếu không có dữ liệu
      */
-    public List<ItemDTO> getBySeller(int sellerId) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getBySeller(int sellerId) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER)) {
             ps.setInt(1, sellerId);
@@ -399,10 +397,10 @@ public class ItemDAO {
      *
      * @param sellerId ID của người bán
      * @param status   Trạng thái cần lọc
-     * @return Danh sách {@link ItemDTO} thỏa điều kiện
+     * @return Danh sách {@link Item} thỏa điều kiện
      */
-    public List<ItemDTO> getBySellerAndStatus(int sellerId, ItemStatus status) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getBySellerAndStatus(int sellerId, ItemStatus status) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER_STATUS)) {
             ps.setInt(1, sellerId);
@@ -424,10 +422,10 @@ public class ItemDAO {
      *
      * @param page     Trang hiện tại, bắt đầu từ 0
      * @param pageSize Số sản phẩm mỗi trang
-     * @return Danh sách {@link ItemDTO} của trang đó
+     * @return Danh sách {@link Item} của trang đó
      */
-    public List<ItemDTO> getAll(int page, int pageSize) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getAll(int page, int pageSize) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL_PAGED)) {
             ps.setInt(1, pageSize);
@@ -444,10 +442,10 @@ public class ItemDAO {
     /**
      * Lấy toàn bộ sản phẩm không phân trang (dùng nội bộ hoặc admin).
      *
-     * @return Danh sách {@link ItemDTO}
+     * @return Danh sách {@link Item}
      */
-    public List<ItemDTO> getAll() {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getAll() {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
              ResultSet rs = ps.executeQuery()) {
@@ -478,10 +476,10 @@ public class ItemDAO {
      * Lấy danh sách sản phẩm thuộc đúng một danh mục cụ thể.
      *
      * @param categoryId ID danh mục cần lấy sản phẩm
-     * @return Danh sách {@link ItemDTO} thuộc danh mục đó
+     * @return Danh sách {@link Item} thuộc danh mục đó
      */
-    public List<ItemDTO> getByCategory(int categoryId) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getByCategory(int categoryId) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY)) {
             ps.setInt(1, categoryId);
@@ -501,10 +499,10 @@ public class ItemDAO {
      * và "Laptop" mà không cần query từng danh mục con.</p>
      *
      * @param categoryId ID danh mục cha
-     * @return Danh sách {@link ItemDTO} của danh mục cha và các danh mục con
+     * @return Danh sách {@link Item} của danh mục cha và các danh mục con
      */
-    public List<ItemDTO> getByCategoryIncludeSubs(int categoryId) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getByCategoryIncludeSubs(int categoryId) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS)) {
             ps.setInt(1, categoryId);
@@ -525,10 +523,10 @@ public class ItemDAO {
      * trang đấu giá đang diễn ra.</p>
      *
      * @param status Trạng thái cần lọc
-     * @return Danh sách {@link ItemDTO} có trạng thái tương ứng
+     * @return Danh sách {@link Item} có trạng thái tương ứng
      */
-    public List<ItemDTO> getByStatus(ItemStatus status) {
-        List<ItemDTO> list = new ArrayList<>();
+    public List<Item> getByStatus(ItemStatus status) {
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
             ps.setString(1, status.name());
@@ -548,12 +546,12 @@ public class ItemDAO {
      * tên chứa từ khóa bất kỳ vị trí.</p>
      *
      * @param keyword Từ khóa tìm kiếm
-     * @return Danh sách {@link ItemDTO} có tên chứa từ khóa
+     * @return Danh sách {@link Item} có tên chứa từ khóa
      */
-    public List<ItemDTO> searchByName(String keyword) {
+    public List<Item> searchByName(String keyword) {
         if (keyword == null || keyword.isBlank()) return new ArrayList<>();
 
-        List<ItemDTO> list = new ArrayList<>();
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME)) {
             ps.setString(1, "%" + keyword.trim() + "%");
@@ -574,12 +572,12 @@ public class ItemDAO {
      *
      * @param keyword Từ khóa tìm kiếm tên sản phẩm
      * @param status  Trạng thái cần lọc
-     * @return Danh sách {@link ItemDTO} thỏa cả hai điều kiện
+     * @return Danh sách {@link Item} thỏa cả hai điều kiện
      */
-    public List<ItemDTO> searchByNameAndStatus(String keyword, ItemStatus status) {
+    public List<Item> searchByNameAndStatus(String keyword, ItemStatus status) {
         if (keyword == null || keyword.isBlank()) return getByStatus(status);
 
-        List<ItemDTO> list = new ArrayList<>();
+        List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME_AND_STATUS)) {
             ps.setString(1, "%" + keyword.trim() + "%");
@@ -614,19 +612,16 @@ public class ItemDAO {
      * Chuyển đổi một hàng dữ liệu từ ResultSet sang đối tượng DTO.
      *
      * @param rs ResultSet đang trỏ tới hàng hiện tại
-     * @return Đối tượng {@link ItemDTO}
+     * @return Đối tượng {@link Item}
      * @throws SQLException Nếu có lỗi khi đọc tên cột hoặc dữ liệu
      */
-    private ItemDTO mapRow(ResultSet rs) throws SQLException {
-        return new ItemDTO(
-            rs.getInt("item_id"),
-            rs.getInt("seller_id"),
-            rs.getInt("category_id"),
+    private Item mapRow(ResultSet rs) throws SQLException {
+        return ItemFactory.create(ItemCategory.valueOf(rs.getString("category")),
+            String.valueOf(rs.getInt("seller_id")),
             rs.getString("name"),
             rs.getString("description"),
-            rs.getBigDecimal("starting_price"),
-            ItemStatus.valueOf(rs.getString("status")),
-            rs.getTimestamp("created_at")
+            rs.getBigDecimal("starting_price").doubleValue(),
+            ItemStatus.valueOf(rs.getString("status"))
         );
     }
 }

@@ -1,17 +1,13 @@
 package server.repository;
 
+import server.common.entity.Auction;
 import server.common.enums.AuctionStatus;
-import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,7 +21,7 @@ import java.util.List;
  * <p>Ví dụ sử dụng:
  * <pre>{@code
  * AuctionDAO dao = new AuctionDAO();
- * AuctionDTO auction = dao.getById(42);
+ * Auction auction = dao.getById(42);
  * if (auction != null) {
  *     dao.updateStatus(42, AuctionStatus.FINISHED);
  * }
@@ -91,44 +87,45 @@ public class AuctionDAO {
 
     /**
      * Tạo một phiên đấu giá mới trong cơ sở dữ liệu.
+     * AuctionManager gọi hàm này khi tạo 1 Auction mới
      *
-     * @param dto thông tin phiên đấu giá cần tạo; không được {@code null}
+     * @param auction thông tin phiên đấu giá cần tạo; không được {@code null}
      * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
      */
-    public boolean create(AuctionDTO dto) {
-        if (!isItemAvailable(dto.getItemId())) {
-            logger.warn("create() – itemId={} is not AVAILABLE", dto.getItemId());
+    public boolean create(Auction auction) {
+        if (!isItemAvailable(Integer.parseInt(auction.getId()))) {
+            logger.warn("create() – itemId={} is not AVAILABLE", auction.getId());
             return false;
         }
 
         logger.debug("create() – itemId={}, sellerId={}, status={}",
-            dto.getItemId(), dto.getSellerId(), dto.getStatus());
+            auction.getId(), auction.getSellerId(), auction.getStatus());
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
 
-            ps.setInt(1, dto.getItemId());
-            ps.setInt(2, dto.getSellerId());
-            ps.setTimestamp(3, dto.getStartTime());
-            ps.setTimestamp(4, dto.getEndTime());
-            ps.setBigDecimal(5, dto.getMinBidIncrement());
-            ps.setBigDecimal(6, dto.getReservePrice());
-            ps.setShort(7, dto.getSnipeWindowSeconds());
-            ps.setShort(8, dto.getSnipeExtensionSeconds());
-            ps.setBigDecimal(9, dto.getCurrentPrice());
-            setNullableInt(ps, 10, dto.getCurrentWinnerId());
-            ps.setString(11, dto.getStatus().name());
+            ps.setInt(1, Integer.parseInt(auction.getId()));
+            ps.setInt(2, Integer.parseInt(auction.getSellerId()));
+            ps.setTimestamp(3, Timestamp.valueOf(auction.getStartTime()));
+            ps.setTimestamp(4, Timestamp.valueOf(auction.getEndTime()));
+            ps.setBigDecimal(5, BigDecimal.valueOf(auction.getMinBidIncrement()));
+            ps.setBigDecimal(6, BigDecimal.valueOf(auction.getReservePrice()));
+            ps.setShort(7, (short) auction.getSnipeWindowSeconds());
+            ps.setShort(8, (short) auction.getSnipeExtensionSeconds());
+            ps.setBigDecimal(9, BigDecimal.valueOf(auction.getCurrentPrice()));
+            setNullableInt(ps, 10, Integer.parseInt(auction.getCurrentLeader().getId()));
+            ps.setString(11, auction.getStatus().name());
 
             boolean created = ps.executeUpdate() > 0;
             if (created) {
-                logger.info("create() – Auction created successfully for itemId={}", dto.getItemId());
+                logger.info("create() – Auction created successfully for itemId={}", auction.getId());
             } else {
-                logger.warn("create() – No rows affected for itemId={}", dto.getItemId());
+                logger.warn("create() – No rows affected for itemId={}", auction.getId());
             }
             return created;
 
         } catch (SQLException e) {
-            logger.error("create() – DB error for itemId={}", dto.getItemId(), e);
+            logger.error("create() – DB error for itemId={}", auction.getId(), e);
             return false;
         }
     }
@@ -181,9 +178,9 @@ public class AuctionDAO {
      * Lấy thông tin phiên đấu giá theo ID.
      *
      * @param auctionId khóa chính của phiên đấu giá
-     * @return {@link AuctionDTO} tương ứng, hoặc {@code null} nếu không tìm thấy
+     * @return {@link Auction} tương ứng, hoặc {@code null} nếu không tìm thấy
      */
-    public AuctionDTO getById(int auctionId) {
+    public Auction getById(int auctionId) {
         logger.debug("getById() – auctionId={}", auctionId);
 
         try (Connection conn = DBConnection.getConnection();
@@ -193,9 +190,9 @@ public class AuctionDAO {
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    AuctionDTO dto = mapRow(rs);
+                    Auction auction = getAuctionByRow(rs);
                     logger.debug("getById() – Found auction auctionId={}", auctionId);
-                    return dto;
+                    return auction;
                 }
             }
 
@@ -211,18 +208,18 @@ public class AuctionDAO {
     /**
      * Lấy toàn bộ danh sách phiên đấu giá, sắp xếp mới nhất trước.
      *
-     * @return danh sách {@link AuctionDTO}; trả về list rỗng nếu có lỗi
+     * @return danh sách {@link Auction}; trả về list rỗng nếu có lỗi
      */
-    public List<AuctionDTO> getAll() {
+    public List<Auction> getAllAuction() {
         logger.debug("getAll() – Fetching all auctions");
-        List<AuctionDTO> results = new ArrayList<>();
+        List<Auction> results = new ArrayList<>();
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
             ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
-                results.add(mapRow(rs));
+                results.add(getAuctionByRow(rs));
             }
 
             logger.debug("getAll() – Fetched {} auction(s)", results.size());
@@ -238,11 +235,11 @@ public class AuctionDAO {
      * Lấy danh sách phiên đấu giá theo trạng thái.
      *
      * @param status trạng thái cần lọc; không được {@code null}
-     * @return danh sách {@link AuctionDTO} khớp trạng thái; list rỗng nếu có lỗi
+     * @return danh sách {@link Auction} khớp trạng thái; list rỗng nếu có lỗi
      */
-    public List<AuctionDTO> getByStatus(AuctionStatus status) {
+    public List<Auction> getByStatus(AuctionStatus status) {
         logger.debug("getByStatus() – status={}", status);
-        List<AuctionDTO> results = new ArrayList<>();
+        List<Auction> results = new ArrayList<>();
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
@@ -251,7 +248,7 @@ public class AuctionDAO {
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    results.add(mapRow(rs));
+                    results.add(getAuctionByRow(rs));
                 }
             }
 
@@ -418,15 +415,17 @@ public class AuctionDAO {
     }
 
     /**
-     * Map một hàng {@link ResultSet} thành {@link AuctionDTO}.
+     * Map một hàng {@link ResultSet} thành {@link Auction}.
      *
      * @param rs result set đã được định vị tại hàng cần đọc
-     * @return {@link AuctionDTO} được điền đầy đủ
+     * @return {@link Auction} được điền đầy đủ
      * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
      */
-    private AuctionDTO mapRow(ResultSet rs) throws SQLException {
-        return new AuctionDTO(
-            rs.getInt("auction_id"),
+    private Auction getAuctionByRow(ResultSet rs) throws SQLException {
+        ItemDAO itemDAO = new ItemDAO();
+        return new Auction(
+            String.valueOf(rs.getInt("auction_id")),
+            rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getInt("item_id"),
             rs.getInt("seller_id"),
             rs.getTimestamp("start_time"),
@@ -438,8 +437,8 @@ public class AuctionDAO {
             rs.getShort("snipe_extension_seconds"),
             rs.getBigDecimal("current_price"),
             (Integer) rs.getObject("current_winner_id"),
-            AuctionStatus.valueOf(rs.getString("status")),
-            rs.getTimestamp("created_at")
+            AuctionStatus.valueOf(rs.getString("status"))
+
         );
     }
 

@@ -46,7 +46,7 @@ public class Auction extends Entity {
 
     // ── Identity ─────────────────────────────────────────────────────────────
     private final Item          item;
-    private final User        seller;
+    private final String        sellerId;
 
     // ── Time config ───────────────────────────────────────────────────────────
     private final LocalDateTime startTime;
@@ -63,19 +63,19 @@ public class Auction extends Entity {
      * ⚠️  Kết nối DB: ánh xạ sang auctions.snipe_window_seconds
      *     và auctions.snipe_extension_seconds
      */
-    private final int snipeWindowSeconds;
-    private final int snipeExtensionSeconds;
+    private final int snipeWindowSeconds;   // Số giây cuối cùng trong Anti-snipping
+    private final int snipeExtensionSeconds;    // Thêm bao nhiêu giây nếu Anti-snipping
 
     // ── Bid config ────────────────────────────────────────────────────────────
-    private final double startingPrice;
-    private final double minBidIncrement;  // ánh xạ auctions.min_bid_increment
+    private final double startingPrice;     // giá khởi điểm
+    private final double minBidIncrement;  // độ tăng tối thiểu giữa mỗi lần đặt bid
     private final Double reservePrice;     // null = không có giá sàn
 
     // ── Runtime state ─────────────────────────────────────────────────────────
     private       AuctionStatus status;
     private       double         currentPrice;
     private       User         currentLeader;   // người đang dẫn đầu
-    private       LocalDateTime  lastBidTime;     // ánh xạ auctions.last_bid_time
+    private       LocalDateTime  lastBidTime;
 
     // ── Bid history ───────────────────────────────────────────────────────────
     private final List<BidTransaction> bidHistory;
@@ -98,15 +98,16 @@ public class Auction extends Entity {
     //  Constructors
     // ─────────────────────────────────────────────────────────────────────────
 
-    public Auction(Item item, User seller,
+    public Auction(Item item, String sellerId,
                    LocalDateTime startTime, LocalDateTime endTime,
                    double minBidIncrement, Double reservePrice,
                    int snipeWindowSeconds, int snipeExtensionSeconds) {
 
-        super(UUID.randomUUID().toString(),LocalDateTime.now());
+        super();
         validateTimes(startTime, endTime);
+        validateSnippingTimes(snipeWindowSeconds,snipeExtensionSeconds);
         this.item                  = item;
-        this.seller                = seller;
+        this.sellerId                = sellerId;
         this.startTime             = startTime;
         this.endTime               = endTime;
         this.startingPrice         = item.getStartingPrice();
@@ -123,8 +124,8 @@ public class Auction extends Entity {
     }
 
     /** Constructor load từ DB — truyền vào state đã lưu */
-    public Auction(String id, Item item, User seller,
-                   LocalDateTime createdAt,
+    public Auction(String id, LocalDateTime createdAt,
+                   Item item, String sellerId,
                    LocalDateTime startTime, LocalDateTime endTime,
                    double startingPrice, double currentPrice,
                    double minBidIncrement, Double reservePrice,
@@ -133,7 +134,7 @@ public class Auction extends Entity {
                    LocalDateTime lastBidTime) {
         super(id,createdAt);
         this.item                  = item;
-        this.seller                = seller;
+        this.sellerId                = sellerId;
         this.startTime             = startTime;
         this.endTime               = endTime;
         this.startingPrice         = startingPrice;
@@ -181,7 +182,7 @@ public class Auction extends Entity {
         }
 
         // Không cho phép seller tự bid vào phiên của mình
-        if (bidder.getId().equals(seller.getId())) {
+        if (bidder.getId().equals(sellerId)) {
             throw new InvalidBidException("User cannot bid on their own auction", amount, currentPrice);
         }
 
@@ -465,7 +466,7 @@ public class Auction extends Entity {
     // ─────────────────────────────────────────────────────────────────────────
 
     public Item             getItem()               { return item; }
-    public User           getSeller()             { return seller; }
+    public String          getSellerId()             { return sellerId; }
     public LocalDateTime    getStartTime()           { return startTime; }
     public LocalDateTime    getEndTime()             { return endTime; }
     public double           getStartingPrice()       { return startingPrice; }
@@ -487,6 +488,11 @@ public class Auction extends Entity {
     private void validateTimes(LocalDateTime start, LocalDateTime end) {
         if (!end.isAfter(start))
             throw new IllegalArgumentException("end_time must be after start_time");
+    }
+    private void validateSnippingTimes(int snipeWindowSeconds,int snipeExtensionSeconds){
+        if (snipeWindowSeconds < 0 || snipeExtensionSeconds < 0  ){
+            throw new IllegalArgumentException("snipping_times must be positive");
+        }
     }
 
     @Override

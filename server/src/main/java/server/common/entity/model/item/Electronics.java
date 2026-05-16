@@ -1,6 +1,8 @@
 package server.common.entity.model.item;
 
 import server.common.entity.Item;
+import server.common.enums.ItemCategory;
+import server.common.enums.ItemStatus;
 
 import java.time.LocalDateTime;
 
@@ -13,8 +15,9 @@ public class Electronics extends Item {
     private int    warrantyMonths;
 
     public Electronics(String sellerId, String name, String description,
-                       double startingPrice, String brand, int warrantyMonths) {
-        super(sellerId, name, description, startingPrice);
+                       double startingPrice,  ItemStatus status,
+                       String brand, int warrantyMonths) {
+        super(sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);
         this.brand          = brand;
         this.warrantyMonths = warrantyMonths;
     }
@@ -23,10 +26,13 @@ public class Electronics extends Item {
     public Electronics(String id, LocalDateTime createdAt,
                        String sellerId, String name, String description,
                        double startingPrice,
-                       String brand, int warrantyMonths) {
-        super(id, createdAt, sellerId, name, description, startingPrice);
+                       String brand, int warrantyMonths, ItemStatus status) {
+        super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);
         this.brand          = brand;
         this.warrantyMonths = warrantyMonths;
+    }
+    public Electronics(Item item){
+        super(item);
     }
 
     @Override public String  getCategory()      { return "ELECTRONICS"; }

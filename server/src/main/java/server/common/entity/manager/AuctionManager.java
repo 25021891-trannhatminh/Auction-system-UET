@@ -9,6 +9,7 @@ import server.common.entity.User;
 import server.common.entity.AuctionObserver;
 import server.common.enums.AuctionStatus;
 import server.common.model.BidResultDTO;
+import server.repository.AuctionDAO;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -43,6 +44,7 @@ import java.util.stream.Collectors;
 public class AuctionManager {
 
     private static volatile AuctionManager instance;
+    private static AuctionDAO auctionDAO;
 
     private AuctionManager() {}
 
@@ -55,6 +57,7 @@ public class AuctionManager {
             synchronized (AuctionManager.class) {
                 if (instance == null) {
                     instance = new AuctionManager();
+                    auctionDAO = new AuctionDAO();
                 }
             }
         }
@@ -136,12 +139,12 @@ public class AuctionManager {
 
       @return Auction vừa được tạo
      */
-    public Auction createAuction(Item item, User seller,
+    public Auction createAuction(Item item, String sellerId,
                                  LocalDateTime startTime, LocalDateTime endTime,
                                  double minBidIncrement, Double reservePrice,
                                  int snipeWindowSeconds, int snipeExtensionSeconds) {
         Auction auction = new Auction(
-            item, seller, startTime, endTime,
+            item, sellerId, startTime, endTime,
             minBidIncrement, reservePrice,
             snipeWindowSeconds, snipeExtensionSeconds
         );
@@ -222,7 +225,7 @@ public class AuctionManager {
      */
     public List<Auction> getAuctionsForSeller(String sellerId) {
         return auctionMap.values().stream()
-            .filter(a -> a.getSeller().getId().equals(sellerId))
+            .filter(a -> a.getSellerId().equals(sellerId))
             .collect(Collectors.toList());
     }
 

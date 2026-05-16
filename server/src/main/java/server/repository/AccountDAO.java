@@ -54,7 +54,7 @@ public class AccountDAO {
      */
     private static final String SQL_SELECT_BASE = """
         SELECT user_id, username, email, full_name, phone,
-               role, status, is_active, last_login, created_at
+               role, status, last_login, created_at
         FROM users
         """;
 
@@ -63,8 +63,8 @@ public class AccountDAO {
      */
     private static final String SQL_REGISTER = """
         INSERT INTO users
-        (username, password, email, full_name, phone, role, status, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+        (username, password, email, full_name, phone, role, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
 
     /**
@@ -72,10 +72,10 @@ public class AccountDAO {
      */
     private static final String SQL_LOGIN = """
         SELECT user_id, username, password, email, full_name,
-               phone, role, status, is_active, last_login, created_at
+               phone, role, status, last_login, created_at
         FROM users
         WHERE (username = ? OR email = ?)
-        AND is_active = TRUE
+        AND status = 'ACTIVE'
         LIMIT 1
         """;
 
@@ -101,7 +101,7 @@ public class AccountDAO {
      * SQL khóa tài khoản user.
      */
     private static final String SQL_BAN_USER =
-        "UPDATE users SET status = ?, is_active = FALSE WHERE user_id = ?";
+        "UPDATE users SET status = ? WHERE user_id = ?";
 
     /**
      * Đăng ký tài khoản mới.
@@ -175,7 +175,7 @@ public class AccountDAO {
 
                 logger.info("Login success: {}", identifier);
 
-                return mapRow(rs);
+                return getUserByRow(rs);
             }
 
         } catch (SQLException e) {
@@ -200,7 +200,7 @@ public class AccountDAO {
             try (ResultSet rs = ps.executeQuery()) {
 
                 if (rs.next()) {
-                    return mapRow(rs);
+                    return getUserByRow(rs);
                 }
             }
 
@@ -225,7 +225,7 @@ public class AccountDAO {
             ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
-                users.add(mapRow(rs));
+                users.add(getUserByRow(rs));
             }
 
         } catch (SQLException e) {
@@ -299,7 +299,7 @@ public class AccountDAO {
      * @return đối tượng User
      * @throws SQLException nếu lỗi truy xuất dữ liệu
      */
-    private User mapRow(ResultSet rs) throws SQLException {
+    private User getUserByRow(ResultSet rs) throws SQLException {
         return new User(String.valueOf(rs.getInt("user_id")),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
