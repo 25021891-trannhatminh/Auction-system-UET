@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import server.common.enums.AuctionStatus;
 import server.common.model.AuctionDTO;
 import server.repository.AuctionDAO;
-import server.repository.BidDAO;
+import server.repository.BidTransactionDAO;
 import server.repository.ItemDAO;
 import server.service.listeners.AuctionEventListener;
 
@@ -26,11 +26,11 @@ public class AuctionService {
   private final List<AuctionEventListener> listeners = new CopyOnWriteArrayList<>();
 
   private final AuctionDAO auctionDAO;
-  private final BidDAO bidDAO;
+  private final BidTransactionDAO bidDAO;
 
   public AuctionService() {
     this.auctionDAO = new AuctionDAO();
-    this.bidDAO = new BidDAO();
+    this.bidDAO = new BidTransactionDAO();
   }
 
   /**
@@ -100,7 +100,7 @@ public class AuctionService {
       Integer oldWinnerId = auction.getCurrentWinnerId();
       String itemName = "Auction #" + auctionId;
 
-      // 4. Cập nhật Database qua BidDAO
+      // 4. Cập nhật Database qua BidTransactionDAO
       boolean success = bidDAO.placeBid(auctionId, bidderId, amount, autoBid);
       if (!success) {
         logger.error("processBid() - DB update failed for Auction: {}", auctionId);

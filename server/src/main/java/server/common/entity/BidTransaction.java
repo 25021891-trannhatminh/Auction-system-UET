@@ -31,7 +31,7 @@ public class BidTransaction {
     private final String        auctionId;
     private final String        bidderId;
     private final String        bidderName;  // cache để hiển thị UI mà không cần JOIN DB
-    private final BigDecimal amount;
+    private final BigDecimal    amount;
     private final LocalDateTime bidTime;
     private final boolean       isAutoBid;
     private BidStatus status;

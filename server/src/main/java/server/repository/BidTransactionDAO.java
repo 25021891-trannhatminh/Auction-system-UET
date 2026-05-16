@@ -1,7 +1,8 @@
 package server.repository;
 
+import server.common.enums.AccountRole;
 import server.common.enums.BidStatus;
-import server.common.model.BidHistoryDTO;
+import server.common.entity.BidTransaction;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,12 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * BidDAO - Optimized Version 10/10
+ * BidTransactionDAO - Optimized Version 10/10
  * Xử lý đấu giá thời gian thực với Pessimistic Locking & Transaction Integrity.
  */
-public class BidDAO {
+public class BidTransactionDAO {
 
-    private static final Logger logger = LoggerFactory.getLogger(BidDAO.class);
+    private static final Logger logger = LoggerFactory.getLogger(BidTransactionDAO.class);
 
     // SQL Constants - Sử dụng Text Block để dễ quản lý
     private static final String SQL_LOCK_AUCTION = """
@@ -131,14 +132,14 @@ public class BidDAO {
     /**
      * Truy vấn lịch sử đặt giá.
      */
-    public List<BidHistoryDTO> getBidHistory(int auctionId) {
-        List<BidHistoryDTO> results = new ArrayList<>();
+    public List<BidTransaction> getBidHistory(int auctionId) {
+        List<BidTransaction> results = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_HISTORY)) {
             ps.setInt(1, auctionId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    results.add(mapRow(rs));
+                    results.add(getBidTransactionByRow(rs));
                 }
             }
         } catch (SQLException e) {
@@ -178,15 +179,18 @@ public class BidDAO {
         }
     }
 
-    private BidHistoryDTO mapRow(ResultSet rs) throws SQLException {
-        return new BidHistoryDTO(
-            rs.getInt("bid_id"),
-            rs.getInt("auction_id"),
-            rs.getInt("bidder_id"),
+    private BidTransaction getBidTransactionByRow(ResultSet rs) throws SQLException {
+        AccountDAO accountDAO = new AccountDAO();
+        String bidderName = accountDAO.getById(rs.getInt("bidder_id")).getFullName();
+        return new BidTransaction(
+            String.valueOf(rs.getInt("bid_id")),
+            String.valueOf(rs.getInt("auction_id")),
+            String.valueOf(rs.getInt("bidder_id")),
+            bidderName,
             rs.getBigDecimal("amount"),
+            rs.getTimestamp("bid_time").toLocalDateTime(),
             rs.getBoolean("is_auto_bid"),
-            BidStatus.valueOf(rs.getString("status")),
-            rs.getTimestamp("bid_time")
+            BidStatus.valueOf(rs.getString("status"))
         );
     }
 }

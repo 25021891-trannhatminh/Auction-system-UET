@@ -84,35 +84,35 @@
 //  /**
 //   * Tạo một cấu hình auto bid mới. Status mặc định là {@code ACTIVE}.
 //   *
-//   * @param dto thông tin auto bid cần tạo; không được {@code null}
+//   * @param autoBidConfig thông tin auto bid cần tạo; không được {@code null}
 //   * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
 //   */
-//  public boolean create(AutoBidDTO dto) {
+//  public boolean create(AutoBidDTO autoBidConfig) {
 //    logger.debug("create() – auctionId={}, bidderId={}, maxBid={}, increment={}",
-//        dto.getAuctionId(), dto.getBidderId(), dto.getMaxBid(), dto.getIncrement());
+//        autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(), autoBidConfig.getMaxBid(), autoBidConfig.getIncrement());
 //
 //    try (Connection conn = DBConnection.getConnection();
 //        PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
 //
-//      ps.setInt(1, dto.getAuctionId());
-//      ps.setInt(2, dto.getBidderId());
-//      ps.setBigDecimal(3, dto.getMaxBid());
-//      ps.setBigDecimal(4, dto.getIncrement());
+//      ps.setInt(1, autoBidConfig.getAuctionId());
+//      ps.setInt(2, autoBidConfig.getBidderId());
+//      ps.setBigDecimal(3, autoBidConfig.getMaxBid());
+//      ps.setBigDecimal(4, autoBidConfig.getIncrement());
 //      ps.setString(5, AutoBidStatus.ACTIVE.name());
 //
 //      boolean created = ps.executeUpdate() > 0;
 //      if (created) {
 //        logger.info("create() – AutoBid created for auctionId={}, bidderId={}",
-//            dto.getAuctionId(), dto.getBidderId());
+//            autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
 //      } else {
 //        logger.warn("create() – No rows affected for auctionId={}, bidderId={}",
-//            dto.getAuctionId(), dto.getBidderId());
+//            autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
 //      }
 //      return created;
 //
 //    } catch (SQLException e) {
 //      logger.error("create() – DB error for auctionId={}, bidderId={}",
-//          dto.getAuctionId(), dto.getBidderId(), e);
+//          autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(), e);
 //      return false;
 //    }
 //  }
@@ -134,7 +134,7 @@
 //
 //      try (ResultSet rs = ps.executeQuery()) {
 //        while (rs.next()) {
-//          results.add(mapRow(rs));
+//          results.add(getAutoBidConfigByRow(rs));
 //        }
 //      }
 //
@@ -166,10 +166,10 @@
 //
 //      try (ResultSet rs = ps.executeQuery()) {
 //        if (rs.next()) {
-//          AutoBidDTO dto = mapRow(rs);
+//          AutoBidDTO autoBidConfig = getAutoBidConfigByRow(rs);
 //          logger.debug("getHighestAutoBid() – Found autoBidId={} with maxBid={} for auctionId={}",
-//              dto.getAutoBidId(), dto.getMaxBid(), auctionId);
-//          return dto;
+//              autoBidConfig.getAutoBidId(), autoBidConfig.getMaxBid(), auctionId);
+//          return autoBidConfig;
 //        }
 //      }
 //
@@ -286,7 +286,7 @@
 //   * @return {@link AutoBidDTO} được điền đầy đủ
 //   * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
 //   */
-//  private AutoBidDTO mapRow(ResultSet rs) throws SQLException {
+//  private AutoBidDTO getAutoBidConfigByRow(ResultSet rs) throws SQLException {
 //    return new AutoBidDTO(
 //        rs.getInt("auto_bid_id"),
 //        rs.getInt("auction_id"),
@@ -301,8 +301,8 @@
 //}
 package server.repository;
 
+import server.common.entity.AutoBidConfig;
 import server.common.enums.AutoBidStatus;
-import server.common.model.AutoBidConfigDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -346,7 +346,7 @@ import java.util.List;
  * try (Connection conn = DBConnection.getConnection()) {
  *     conn.setAutoCommit(false);
  *     try {
- *         autoBidDAO.create(conn, dto);
+ *         autoBidDAO.create(conn, autoBidConfig);
  *         bidDAO.placeBid(conn, auctionId, bidderId, amount);
  *         conn.commit();
  *     } catch (Exception e) {
@@ -442,21 +442,21 @@ public class AutoBidConfigDAO {
    * <p>Trước khi tạo, nên kiểm tra {@link #hasActiveBid(int, int)} để tránh
    * tạo trùng auto bid cho cùng một người trong cùng phiên đấu giá.</p>
    *
-   * @param dto thông tin auto bid cần tạo; không được {@code null}
+   * @param autoBidConfig thông tin auto bid cần tạo; không được {@code null}
    * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
    */
-  public boolean create(AutoBidConfigDTO dto) {
+  public boolean create(AutoBidConfig autoBidConfig) {
     logger.debug("create() – auctionId={}, bidderId={}, maxBid={}, increment={}",
-        dto.getAuctionId(), dto.getBidderId(), dto.getMaxBid(), dto.getIncrement());
+        autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(), autoBidConfig.getMaxBid(), autoBidConfig.getIncrement());
 
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
 
-      return executeCreate(ps, dto);
+      return executeCreate(ps, autoBidConfig);
 
     } catch (SQLException e) {
       logger.error("create() – DB error for auctionId={}, bidderId={}",
-          dto.getAuctionId(), dto.getBidderId(), e);
+          autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(), e);
       return false;
     }
   }
@@ -465,13 +465,13 @@ public class AutoBidConfigDAO {
    * Overload hỗ trợ Transaction: tạo auto bid trong {@link Connection} cho trước.
    *
    * @param conn connection đang trong transaction; không được {@code null}
-   * @param dto  thông tin auto bid cần tạo
+   * @param autoBidConfig  thông tin auto bid cần tạo
    * @return {@code true} nếu insert thành công
    * @throws SQLException để Service layer có thể rollback
    */
-  public boolean create(Connection conn, AutoBidConfigDTO dto) throws SQLException {
+  public boolean create(Connection conn, AutoBidConfig autoBidConfig) throws SQLException {
     try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
-      return executeCreate(ps, dto);
+      return executeCreate(ps, autoBidConfig);
     }
   }
 
@@ -483,9 +483,9 @@ public class AutoBidConfigDAO {
    * Lấy thông tin auto bid theo ID.
    *
    * @param autoBidId id auto bid cần tìm
-   * @return {@link AutoBidConfigDTO} tương ứng, hoặc {@code null} nếu không tìm thấy
+   * @return {@link AutoBidConfig} tương ứng, hoặc {@code null} nếu không tìm thấy
    */
-  public AutoBidConfigDTO getById(int autoBidId) {
+  public AutoBidConfig getById(int autoBidId) {
     logger.debug("getById() – autoBidId={}", autoBidId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -493,7 +493,7 @@ public class AutoBidConfigDAO {
 
       ps.setInt(1, autoBidId);
       try (ResultSet rs = ps.executeQuery()) {
-        if (rs.next()) return mapRow(rs);
+        if (rs.next()) return getAutoBidConfigByRow(rs);
       }
 
     } catch (SQLException e) {
@@ -507,18 +507,18 @@ public class AutoBidConfigDAO {
    * sắp xếp theo {@code max_bid} giảm dần.
    *
    * @param auctionId id phiên đấu giá cần truy vấn
-   * @return danh sách {@link AutoBidConfigDTO} đang active; list rỗng nếu không có hoặc lỗi
+   * @return danh sách {@link AutoBidConfig} đang active; list rỗng nếu không có hoặc lỗi
    */
-  public List<AutoBidConfigDTO> getByAuction(int auctionId) {
+  public List<AutoBidConfig> getByAuction(int auctionId) {
     logger.debug("getByAuction() – auctionId={}", auctionId);
-    List<AutoBidConfigDTO> results = new ArrayList<>();
+    List<AutoBidConfig> results = new ArrayList<>();
 
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_AUCTION)) {
 
       ps.setInt(1, auctionId);
       try (ResultSet rs = ps.executeQuery()) {
-        while (rs.next()) results.add(mapRow(rs));
+        while (rs.next()) results.add(getAutoBidConfigByRow(rs));
       }
 
       logger.debug("getByAuction() – Found {} active auto bid(s) for auctionId={}",
@@ -536,18 +536,18 @@ public class AutoBidConfigDAO {
    * <p>Dùng để hiển thị lịch sử đặt giá tự động trong trang cá nhân.</p>
    *
    * @param bidderId id người dùng cần truy vấn
-   * @return danh sách {@link AutoBidConfigDTO} của người dùng đó
+   * @return danh sách {@link AutoBidConfig} của người dùng đó
    */
-  public List<AutoBidConfigDTO> getByBidder(int bidderId) {
+  public List<AutoBidConfig> getByBidder(int bidderId) {
     logger.debug("getByBidder() – bidderId={}", bidderId);
-    List<AutoBidConfigDTO> results = new ArrayList<>();
+    List<AutoBidConfig> results = new ArrayList<>();
 
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_BIDDER)) {
 
       ps.setInt(1, bidderId);
       try (ResultSet rs = ps.executeQuery()) {
-        while (rs.next()) results.add(mapRow(rs));
+        while (rs.next()) results.add(getAutoBidConfigByRow(rs));
       }
 
       logger.debug("getByBidder() – Found {} auto bid(s) for bidderId={}",
@@ -567,9 +567,9 @@ public class AutoBidConfigDAO {
    *
    * @param auctionId id phiên đấu giá
    * @param bidderId  id người dùng
-   * @return {@link AutoBidConfigDTO} nếu tồn tại, hoặc {@code null}
+   * @return {@link AutoBidConfig} nếu tồn tại, hoặc {@code null}
    */
-  public AutoBidConfigDTO getByAuctionAndBidder(int auctionId, int bidderId) {
+  public AutoBidConfig getByAuctionAndBidder(int auctionId, int bidderId) {
     logger.debug("getByAuctionAndBidder() – auctionId={}, bidderId={}", auctionId, bidderId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -578,7 +578,7 @@ public class AutoBidConfigDAO {
       ps.setInt(1, auctionId);
       ps.setInt(2, bidderId);
       try (ResultSet rs = ps.executeQuery()) {
-        if (rs.next()) return mapRow(rs);
+        if (rs.next()) return getAutoBidConfigByRow(rs);
       }
 
     } catch (SQLException e) {
@@ -595,9 +595,9 @@ public class AutoBidConfigDAO {
    * mỗi khi có bid mới để xác định xem có auto bid nào cần kích hoạt không.</p>
    *
    * @param auctionId id phiên đấu giá
-   * @return {@link AutoBidConfigDTO} có max_bid cao nhất, hoặc {@code null} nếu không có
+   * @return {@link AutoBidConfig} có max_bid cao nhất, hoặc {@code null} nếu không có
    */
-  public AutoBidConfigDTO getHighestAutoBid(int auctionId) {
+  public AutoBidConfig getHighestAutoBid(int auctionId) {
     logger.debug("getHighestAutoBid() – auctionId={}", auctionId);
 
     try (Connection conn = DBConnection.getConnection();
@@ -606,10 +606,10 @@ public class AutoBidConfigDAO {
       ps.setInt(1, auctionId);
       try (ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          AutoBidConfigDTO dto = mapRow(rs);
+          AutoBidConfig autoBidConfig = getAutoBidConfigByRow(rs);
           logger.debug("getHighestAutoBid() – Found autoBidId={}, maxBid={} for auctionId={}",
-              dto.getAutoBidId(), dto.getMaxBid(), auctionId);
-          return dto;
+              rs.getInt("auto_bid_id"), autoBidConfig.getMaxBid(), auctionId);
+          return autoBidConfig;
         }
       }
 
@@ -800,20 +800,20 @@ public class AutoBidConfigDAO {
   /**
    * Tách logic insert ra helper để tái sử dụng giữa 2 overload {@code create()}.
    */
-  private boolean executeCreate(PreparedStatement ps, AutoBidConfigDTO dto) throws SQLException {
-    ps.setInt(1, dto.getAuctionId());
-    ps.setInt(2, dto.getBidderId());
-    ps.setBigDecimal(3, dto.getMaxBid());
-    ps.setBigDecimal(4, dto.getIncrement());
+  private boolean executeCreate(PreparedStatement ps, AutoBidConfig autoBidConfig) throws SQLException {
+    ps.setInt(1, Integer.parseInt(autoBidConfig.getAuctionId()));
+    ps.setInt(2, Integer.parseInt(autoBidConfig.getBidderId()));
+    ps.setBigDecimal(3, autoBidConfig.getMaxBid());
+    ps.setBigDecimal(4, autoBidConfig.getIncrement());
     ps.setString(5, AutoBidStatus.ACTIVE.name());
 
     boolean created = ps.executeUpdate() > 0;
     if (created) {
       logger.info("create() – AutoBid created for auctionId={}, bidderId={}",
-          dto.getAuctionId(), dto.getBidderId());
+          autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
     } else {
       logger.warn("create() – No rows affected for auctionId={}, bidderId={}",
-          dto.getAuctionId(), dto.getBidderId());
+          autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
     }
     return created;
   }
@@ -844,22 +844,20 @@ public class AutoBidConfigDAO {
   }
 
   /**
-   * Map một hàng {@link ResultSet} thành {@link AutoBidConfigDTO}.
+   * Map một hàng {@link ResultSet} thành {@link AutoBidConfig}.
    *
    * @param rs result set đã được định vị tại hàng cần đọc
-   * @return {@link AutoBidConfigDTO} được điền đầy đủ
+   * @return {@link AutoBidConfig} được điền đầy đủ
    * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
    */
-  private AutoBidConfigDTO mapRow(ResultSet rs) throws SQLException {
-    return new AutoBidConfigDTO(
-        rs.getInt("auto_bid_id"),
-        rs.getInt("auction_id"),
-        rs.getInt("bidder_id"),
+  private AutoBidConfig getAutoBidConfigByRow(ResultSet rs) throws SQLException {
+    return new AutoBidConfig(
+        String.valueOf(rs.getInt("auction_id")),
+        String.valueOf(rs.getInt("bidder_id")),
         rs.getBigDecimal("max_bid"),
         rs.getBigDecimal("increment"),
         AutoBidStatus.valueOf(rs.getString("status")),
-        rs.getTimestamp("created_at"),
-        rs.getTimestamp("updated_at")
+        rs.getTimestamp("created_at").toLocalDateTime()
     );
   }
 }
