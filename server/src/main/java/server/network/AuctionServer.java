@@ -40,8 +40,9 @@ public class AuctionServer {
                 System.out.println("Client connected");
 
                 ClientHandler handler = new ClientHandler(socket);
-
-                new Thread(handler).start();
+                // Dùng Virtual Thread thay Thread thường
+                // → Nhẹ hơn ~1000 lần, phù hợp khi nhiều client chờ DB cùng lúc
+                Thread.ofVirtual().start(handler);
             }
 
         } catch (Exception e) {
