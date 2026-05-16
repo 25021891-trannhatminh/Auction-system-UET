@@ -145,7 +145,9 @@ create table notifications (
         'AUCTION_ENDED',
         'PAYMENT_RECEIVED',
         'PAYMENT_DUE',
-        'SYSTEM'
+        'SYSTEM',
+        'ITEM_APPROVED',
+        'ITEM_REJECTED'
     ) not null,
     title varchar(255) not null,
     content text not null,
