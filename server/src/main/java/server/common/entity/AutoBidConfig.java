@@ -3,6 +3,7 @@ package server.common.entity;
 
 import server.common.enums.AutoBidStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /*
@@ -27,16 +28,16 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
 
     private final String        auctionId;
     private final String        bidderId;
-    private double              maxBid;
-    private double              increment;
+    private BigDecimal          maxBid;
+    private BigDecimal              increment;
     private AutoBidStatus status;
     private final LocalDateTime registeredAt;
 
     public AutoBidConfig(String auctionId, String bidderId,
-                         double maxBid, double increment) {
-        if (maxBid <= 0)      throw new IllegalArgumentException("maxBid must be positive");
-        if (increment <= 0)   throw new IllegalArgumentException("increment must be positive");
-        if (maxBid < increment) throw new IllegalArgumentException("maxBid must be >= increment");
+                         BigDecimal maxBid, BigDecimal increment) {
+        if (maxBid.compareTo(BigDecimal.ZERO) <= 0)      throw new IllegalArgumentException("maxBid must be positive");
+        if (increment.compareTo(BigDecimal.ZERO) <= 0)   throw new IllegalArgumentException("increment must be positive");
+        if (maxBid.compareTo(increment) < 0) throw new IllegalArgumentException("maxBid must be >= increment");
 
         this.auctionId    = auctionId;
         this.bidderId     = bidderId;
@@ -48,7 +49,7 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
 
     /* Load từ DB — registeredAt được truyền vào */
     public AutoBidConfig(String auctionId, String bidderId,
-                         double maxBid, double increment,
+                         BigDecimal maxBid, BigDecimal increment,
                          AutoBidStatus status, LocalDateTime registeredAt) {
         this.auctionId    = auctionId;
         this.bidderId     = bidderId;
@@ -64,17 +65,17 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
      Kiểm tra config này có thể đặt giá tại mức currentPrice không.
      Điều kiện: config phải đang ACTIVE và nextBid = currentPrice + increment <= maxBid.
     */
-    public boolean canBid(double currentPrice) {
+    public boolean canBid(BigDecimal currentPrice) {
         return status == AutoBidStatus.ACTIVE
-            && (currentPrice + increment) <= maxBid;
+            && (currentPrice.add(increment)).compareTo(maxBid) <= 0;
     }
 
     /*
      Tính giá đặt kế tiếp = currentPrice + increment.
      Gọi canBid() trước để đảm bảo không vượt maxBid.
      */
-    public double nextBidAmount(double currentPrice) {
-        return currentPrice + increment;
+    public BigDecimal nextBidAmount(BigDecimal currentPrice) {
+        return currentPrice.add(increment);
     }
 
     // ── Status management ──
@@ -91,7 +92,7 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
      */
     @Override
     public int compareTo(AutoBidConfig other) {
-        int compare = Double.compare(other.maxBid, this.maxBid); // desc by maxBid
+        int compare = other.maxBid.compareTo(this.maxBid); // desc by maxBid
         if (compare != 0) return compare;
         return this.registeredAt.compareTo(other.registeredAt);
     }
@@ -100,18 +101,18 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
 
     public String        getAuctionId()    { return auctionId; }
     public String        getBidderId()     { return bidderId; }
-    public double        getMaxBid()       { return maxBid; }
-    public double        getIncrement()    { return increment; }
+    public BigDecimal        getMaxBid()       { return maxBid; }
+    public BigDecimal        getIncrement()    { return increment; }
     public AutoBidStatus getStatus()       { return status; }
     public LocalDateTime getRegisteredAt() { return registeredAt; }
 
-//    public void setMaxBid(double maxBid) {  // set MaxBid làm thay đổi AutoBidEngine
+//    public void setMaxBid(BigDecimal maxBid) {  // set MaxBid làm thay đổi AutoBidEngine
 //        if (maxBid < this.increment)
 //            throw new IllegalArgumentException("maxBid must be >= increment");
 //        this.maxBid = maxBid;
 //    }
 
-//    public void setIncrement(double increment) {  // set Increment làm thay đổi AutoBidEngine
+//    public void setIncrement(BigDecimal increment) {  // set Increment làm thay đổi AutoBidEngine
 //        if (increment <= 0)
 //            throw new IllegalArgumentException("increment must be positive");
 //        this.increment = increment;

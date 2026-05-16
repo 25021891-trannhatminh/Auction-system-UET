@@ -7,6 +7,7 @@ import server.common.entity.model.item.Vehicle;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 /*
@@ -46,8 +47,8 @@ public class ItemFactory {
         @return Item đúng subclass
      */
     public static Item create(ItemCategory category, String sellerId, String name,
-                               String description, double startingPrice, ItemStatus status,
-                               Map<String, String> attributes) {
+                              String description, BigDecimal startingPrice, ItemStatus status,
+                              Map<String, String> attributes) {
         if (category == null)
             throw new IllegalArgumentException("Category cannot be null");
 
@@ -94,7 +95,7 @@ public class ItemFactory {
     Overload tiện lợi — không cần attributes (dùng khi tạo từ UI form đơn giản)
      */
     public static Item create(ItemCategory category, String sellerId,
-                               String name, String description, double startingPrice,ItemStatus status) {
+                               String name, String description, BigDecimal startingPrice,ItemStatus status) {
         return create(category, sellerId, name, description, startingPrice, status, Map.of());
     }
 

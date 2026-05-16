@@ -3,6 +3,7 @@ package server.common.entity;
 
 import server.common.entity.exception.InvalidBidException;
 
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -142,20 +143,21 @@ public class AutoBidEngine {
     */
 
     // Amount mà winner có thể trả
-    double calculateWinnerAmount(double currentPrice,
-                                 AutoBidConfig winner,
-                                 AutoBidConfig secondWinner) {
-        double baseAmount = winner.getMaxBid();
+    BigDecimal calculateWinnerAmount(BigDecimal currentPrice,
+                                     AutoBidConfig winner,
+                                     AutoBidConfig secondWinner) {
+        BigDecimal baseAmount = winner.getMaxBid();
         if (secondWinner != null) {
-            if (secondWinner.getMaxBid() < currentPrice && currentPrice < winner.getMaxBid()){
-                baseAmount = currentPrice + winner.getIncrement();
-            }else if (secondWinner.getMaxBid() > currentPrice) {
-                baseAmount = secondWinner.getMaxBid() + winner.getIncrement();
+            if (secondWinner.getMaxBid().compareTo(currentPrice) < 0 && currentPrice.compareTo(winner.getMaxBid()) < 0){
+                baseAmount = currentPrice.add(winner.getIncrement());
+            }else if (secondWinner.getMaxBid().compareTo(currentPrice) > 0) {
+                baseAmount = secondWinner.getMaxBid().add(winner.getIncrement());
             }
         } else {
-            baseAmount = currentPrice + winner.getIncrement();
+            baseAmount = currentPrice.add(winner.getIncrement());
         }
-        return Math.min(baseAmount, winner.getMaxBid());
+        BigDecimal winnerCanBidAmount = baseAmount.min(winner.getMaxBid());
+        return winnerCanBidAmount;
     }
 
     /* Xử lý return BidTransaction */
@@ -163,9 +165,9 @@ public class AutoBidEngine {
                                             AutoBidConfig winner,
                                             AutoBidConfig secondWinner) {
     // Kiểm tra điều kiện auto-bid
-        double amountBidWinner = calculateWinnerAmount(auction.getCurrentPrice(), winner, secondWinner);
+        BigDecimal amountBidWinner = calculateWinnerAmount(auction.getCurrentPrice(), winner, secondWinner);
 
-        if (amountBidWinner <= auction.getCurrentPrice()) {
+        if (amountBidWinner.compareTo(auction.getCurrentPrice()) <= 0) {
             // Đánh dấu winner config là COMPLETED nếu không còn canBid
             winner.complete();
 //                synchronized (this) {
@@ -184,7 +186,7 @@ public class AutoBidEngine {
         try {
             BidTransaction transaction = auction.placeBid(winnerBidder, amountBidWinner, true);
             // Nếu winner đã dùng hết maxBid → đánh dấu COMPLETED
-            if (amountBidWinner >= winner.getMaxBid()) winner.complete();
+            if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) winner.complete();
 
             return transaction;
 

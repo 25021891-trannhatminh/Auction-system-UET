@@ -2,6 +2,8 @@ package server.common.model;
 
 import server.common.entity.BidTransaction;
 
+import java.math.BigDecimal;
+
 public class BidResultDTO {
   // ─────────────────────────────────────────────────────────────────────────
   //  Result DTO — trả về toàn bộ thông tin sau một lần bid
@@ -17,11 +19,11 @@ public class BidResultDTO {
 
     public final BidTransaction manualTx;     // Bid thủ công của người dùng
     public final BidTransaction autoBidTx;    // Auto-bid của engine (null nếu không có)
-    public final double         finalPrice;   // Giá cuối sau tất cả
+    public final BigDecimal finalPrice;   // Giá cuối sau tất cả
     public final String         finalLeader;  // Username người đang dẫn đầu
 
     public BidResultDTO(BidTransaction manualTx, BidTransaction autoBidTx,
-              double finalPrice, String finalLeader) {
+              BigDecimal finalPrice, String finalLeader) {
       this.manualTx   = manualTx;
       this.autoBidTx  = autoBidTx;
       this.finalPrice = finalPrice;

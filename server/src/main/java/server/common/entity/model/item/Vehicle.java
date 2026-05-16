@@ -4,6 +4,7 @@ import server.common.entity.Item;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /*
@@ -17,7 +18,7 @@ public class Vehicle extends Item {
     private int    mileageKm;
 
     public Vehicle(String sellerId, String name, String description,
-                   double startingPrice,ItemStatus status, String brand,  String model,
+                   BigDecimal startingPrice, ItemStatus status, String brand, String model,
                    int yearManufactured, int mileageKm) {
         super(sellerId, name, description, startingPrice,status, ItemCategory.VEHICLE);
         this.brand            = brand;
@@ -29,7 +30,7 @@ public class Vehicle extends Item {
     /** Load từ DB */
     public Vehicle(String id, LocalDateTime createdAt,
                    String sellerId, String name, String description,
-                   double startingPrice, ItemStatus status,
+                   BigDecimal startingPrice, ItemStatus status,
                    String brand, String model, int yearManufactured, int mileageKm) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.VEHICLE);
         this.brand            = brand;

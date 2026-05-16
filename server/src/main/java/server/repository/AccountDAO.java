@@ -1,5 +1,6 @@
 package server.repository;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -310,7 +311,7 @@ public class AccountDAO {
             UserStatus.valueOf(rs.getString("status")),
             rs.getTimestamp("last_login").toLocalDateTime(),
             5.0,
-            0.0
+            BigDecimal.ZERO
         );
     }
 }

@@ -108,11 +108,11 @@ public class AuctionDAO {
             ps.setInt(2, Integer.parseInt(auction.getSellerId()));
             ps.setTimestamp(3, Timestamp.valueOf(auction.getStartTime()));
             ps.setTimestamp(4, Timestamp.valueOf(auction.getEndTime()));
-            ps.setBigDecimal(5, BigDecimal.valueOf(auction.getMinBidIncrement()));
-            ps.setBigDecimal(6, BigDecimal.valueOf(auction.getReservePrice()));
+            ps.setBigDecimal(5, auction.getMinBidIncrement());
+            ps.setBigDecimal(6, auction.getReservePrice());
             ps.setShort(7, (short) auction.getSnipeWindowSeconds());
             ps.setShort(8, (short) auction.getSnipeExtensionSeconds());
-            ps.setBigDecimal(9, BigDecimal.valueOf(auction.getCurrentPrice()));
+            ps.setBigDecimal(9, auction.getCurrentPrice());
             setNullableInt(ps, 10, Integer.parseInt(auction.getCurrentLeader().getId()));
             ps.setString(11, auction.getStatus().name());
 
@@ -423,22 +423,22 @@ public class AuctionDAO {
      */
     private Auction getAuctionByRow(ResultSet rs) throws SQLException {
         ItemDAO itemDAO = new ItemDAO();
+        AccountDAO accountDAO = new AccountDAO();
         return new Auction(
             String.valueOf(rs.getInt("auction_id")),
             rs.getTimestamp("created_at").toLocalDateTime(),
-            rs.getInt("item_id"),
-            rs.getInt("seller_id"),
-            rs.getTimestamp("start_time"),
-            rs.getTimestamp("end_time"),
-            rs.getTimestamp("last_bid_time"),
+            itemDAO.getById(rs.getInt("item_id")),
+            String.valueOf(rs.getInt("seller_id")),
+            rs.getTimestamp("start_time").toLocalDateTime(),
+            rs.getTimestamp("end_time").toLocalDateTime(),
+            rs.getTimestamp("last_bid_time").toLocalDateTime(),
+            rs.getBigDecimal("current_price"),
             rs.getBigDecimal("min_bid_increment"),
             rs.getBigDecimal("reserve_price"),
-            rs.getShort("snipe_window_seconds"),
-            rs.getShort("snipe_extension_seconds"),
-            rs.getBigDecimal("current_price"),
-            (Integer) rs.getObject("current_winner_id"),
-            AuctionStatus.valueOf(rs.getString("status"))
-
+            (int)rs.getShort("snipe_window_seconds"),
+            (int)rs.getShort("snipe_extension_seconds"),
+            AuctionStatus.valueOf(rs.getString("status")),
+            accountDAO.getById(rs.getInt("current_winner_id"))
         );
     }
 

@@ -6,6 +6,7 @@ import server.common.entity.exception.InvalidBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -67,13 +68,13 @@ public class Auction extends Entity {
     private final int snipeExtensionSeconds;    // Thêm bao nhiêu giây nếu Anti-snipping
 
     // ── Bid config ────────────────────────────────────────────────────────────
-    private final double startingPrice;     // giá khởi điểm
-    private final double minBidIncrement;  // độ tăng tối thiểu giữa mỗi lần đặt bid
-    private final Double reservePrice;     // null = không có giá sàn
+    private final BigDecimal startingPrice;     // giá khởi điểm
+    private final BigDecimal minBidIncrement;  // độ tăng tối thiểu giữa mỗi lần đặt bid
+    private final BigDecimal reservePrice;     // null = không có giá sàn
 
     // ── Runtime state ─────────────────────────────────────────────────────────
     private       AuctionStatus status;
-    private       double         currentPrice;
+    private       BigDecimal         currentPrice;
     private       User         currentLeader;   // người đang dẫn đầu
     private       LocalDateTime  lastBidTime;
 
@@ -100,7 +101,7 @@ public class Auction extends Entity {
 
     public Auction(Item item, String sellerId,
                    LocalDateTime startTime, LocalDateTime endTime,
-                   double minBidIncrement, Double reservePrice,
+                   BigDecimal minBidIncrement, BigDecimal reservePrice,
                    int snipeWindowSeconds, int snipeExtensionSeconds) {
 
         super();
@@ -127,17 +128,18 @@ public class Auction extends Entity {
     public Auction(String id, LocalDateTime createdAt,
                    Item item, String sellerId,
                    LocalDateTime startTime, LocalDateTime endTime,
-                   double startingPrice, double currentPrice,
-                   double minBidIncrement, Double reservePrice,
+                   LocalDateTime lastBidTime,
+                    BigDecimal currentPrice,
+                   BigDecimal minBidIncrement, BigDecimal reservePrice,
                    int snipeWindowSeconds, int snipeExtensionSeconds,
-                   AuctionStatus status, User currentLeader,
-                   LocalDateTime lastBidTime) {
+                   AuctionStatus status, User currentLeader
+                   ) {
         super(id,createdAt);
         this.item                  = item;
         this.sellerId                = sellerId;
         this.startTime             = startTime;
         this.endTime               = endTime;
-        this.startingPrice         = startingPrice;
+        this.startingPrice         = item.getStartingPrice();
         this.currentPrice          = currentPrice;
         this.minBidIncrement       = minBidIncrement;
         this.reservePrice          = reservePrice;
@@ -172,7 +174,7 @@ public class Auction extends Entity {
      * @throws AuctionClosedException nếu phiên không ở trạng thái RUNNING
      * @throws InvalidBidException    nếu amount không hợp lệ
      */
-    public BidTransaction placeBid(User bidder, double amount, boolean isAutoBid) {
+    public BidTransaction placeBid(User bidder, BigDecimal amount, boolean isAutoBid) {
 
         // ── Step 1: Kiểm tra trạng thái — TRƯỚC khi lock ─────────────────────
         // Tối ưu: không cần lock để đọc status (read-only check)
@@ -251,21 +253,21 @@ public class Auction extends Entity {
      * Validate bid amount.
      * @return Exception
      */
-    private void validateBid(double amount) {
-        if (amount <= 0) {
+    private void validateBid(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidBidException("Bid amount must be positive", amount, currentPrice);
         }
-        if (amount <= currentPrice) {
+        if (amount.compareTo(currentPrice) <= 0) {
             throw new InvalidBidException(
                 String.format("Bid %.2f must be higher than current price %.2f", amount, currentPrice),
                 amount, currentPrice
             );
         }
-        if (minBidIncrement > 0 && (amount - currentPrice) < minBidIncrement) {
+        if (minBidIncrement.compareTo(BigDecimal.ZERO) > 0 && (amount.subtract(currentPrice).compareTo(minBidIncrement) < 0)) {
             throw new InvalidBidException(
                 String.format("Bid must be at least %.2f above current price (%.2f). " +
                               "Minimum next bid: %.2f",
-                              minBidIncrement, currentPrice, currentPrice + minBidIncrement),
+                              minBidIncrement, currentPrice, currentPrice.add(minBidIncrement)),
                 amount, currentPrice
             );
         }
@@ -303,7 +305,7 @@ public class Auction extends Entity {
                 throw new IllegalStateException("Can only close a RUNNING auction. Current: " + status);
 
             boolean hasBids     = !bidHistory.isEmpty();
-            boolean meetsReserve = (reservePrice == null) || (currentPrice >= reservePrice);
+            boolean meetsReserve = (reservePrice.compareTo(BigDecimal.ZERO) == 0) || (currentPrice.compareTo(reservePrice) >= 0);
 
             if (!hasBids || !meetsReserve) {
                 status = AuctionStatus.CANCELED;
@@ -469,11 +471,11 @@ public class Auction extends Entity {
     public String          getSellerId()             { return sellerId; }
     public LocalDateTime    getStartTime()           { return startTime; }
     public LocalDateTime    getEndTime()             { return endTime; }
-    public double           getStartingPrice()       { return startingPrice; }
-    public double           getMinBidIncrement()     { return minBidIncrement; }
-    public Double           getReservePrice()        { return reservePrice; }
+    public BigDecimal           getStartingPrice()       { return startingPrice; }
+    public BigDecimal           getMinBidIncrement()     { return minBidIncrement; }
+    public BigDecimal           getReservePrice()        { return reservePrice; }
     public AuctionStatus    getStatus()              { return status; }
-    public double           getCurrentPrice()        { return currentPrice; }
+    public BigDecimal           getCurrentPrice()        { return currentPrice; }
     public User           getCurrentLeader()       { return currentLeader; }
     public LocalDateTime    getLastBidTime()         { return lastBidTime; }
     public int              getSnipeWindowSeconds()  { return snipeWindowSeconds; }

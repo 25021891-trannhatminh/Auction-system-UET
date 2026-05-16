@@ -11,6 +11,7 @@ import server.common.enums.AuctionStatus;
 import server.common.model.BidResultDTO;
 import server.repository.AuctionDAO;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -141,7 +142,7 @@ public class AuctionManager {
      */
     public Auction createAuction(Item item, String sellerId,
                                  LocalDateTime startTime, LocalDateTime endTime,
-                                 double minBidIncrement, Double reservePrice,
+                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
                                  int snipeWindowSeconds, int snipeExtensionSeconds) {
         Auction auction = new Auction(
             item, sellerId, startTime, endTime,
@@ -246,7 +247,7 @@ public class AuctionManager {
       @return BidTransaction của bid thủ công vừa thực hiện
               (các auto-bid sẽ được notify qua Observer)
      */
-    public BidTransaction placeBid(String auctionId, User bidder, double amount) {
+    public BidTransaction placeBid(String auctionId, User bidder, BigDecimal amount) {
         Auction auction = getAuctionByID(auctionId);
 
         // Đặt giá thủ công
@@ -272,7 +273,7 @@ public class AuctionManager {
      *   Dùng BidResult.wasOutbidByAutoBid() để hiển thị cảnh báo cho client:
      *   "Bid thành công nhưng bạn đang bị vượt qua bởi auto-bid."
      */
-    public BidResultDTO placeBidFull(String auctionId, User bidder, double amount) {
+    public BidResultDTO placeBidFull(String auctionId, User bidder, BigDecimal amount) {
         Auction auction = getAuctionByID(auctionId);
 
         // Manual bid
@@ -314,9 +315,10 @@ public class AuctionManager {
         }
         // Nếu config mới của winner maxBid < CurrentPrice hoặc < maxBid cũ thì không cho đăng ký
         String winnerAutoBidID = autoBidEngine.getWinnerId(auction.getId());
-        double winnerMaxBid = autoBidEngine.peekWinner(auction.getId()).getMaxBid();
+        BigDecimal winnerMaxBid = autoBidEngine.peekWinner(auction.getId()).getMaxBid();
         if (winnerAutoBidID.equals(bidder.getId())
-            && (config.getMaxBid() < auction.getCurrentPrice() || config.getMaxBid() < winnerMaxBid)) {
+            && (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
+            || config.getMaxBid().compareTo(winnerMaxBid) < 0)) {
             return null;
         }
         // Lưu config vào Bidder và Engine

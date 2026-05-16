@@ -4,6 +4,7 @@ import server.common.entity.Item;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /*
@@ -15,7 +16,7 @@ public class Electronics extends Item {
     private int    warrantyMonths;
 
     public Electronics(String sellerId, String name, String description,
-                       double startingPrice,  ItemStatus status,
+                       BigDecimal startingPrice, ItemStatus status,
                        String brand, int warrantyMonths) {
         super(sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);
         this.brand          = brand;
@@ -25,7 +26,7 @@ public class Electronics extends Item {
     /** Load từ DB */
     public Electronics(String id, LocalDateTime createdAt,
                        String sellerId, String name, String description,
-                       double startingPrice,
+                       BigDecimal startingPrice,
                        String brand, int warrantyMonths, ItemStatus status) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);
         this.brand          = brand;

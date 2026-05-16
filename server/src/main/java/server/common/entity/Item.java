@@ -4,6 +4,7 @@ package server.common.entity;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,12 +20,12 @@ public abstract class Item extends Entity {
     private String   sellerId;       // FK → users.user_id
     private String   name;
     private String   description;
-    private double   startingPrice;
+    private BigDecimal startingPrice;
     private final List<String> imageUrls;
     private ItemStatus status;
     private ItemCategory category;
 
-    protected Item(String sellerId, String name, String description, double startingPrice, ItemStatus status, ItemCategory category) {
+    protected Item(String sellerId, String name, String description, BigDecimal startingPrice, ItemStatus status, ItemCategory category) {
         super();
         validateStartingPrice(startingPrice);
         this.sellerId      = sellerId;
@@ -39,7 +40,7 @@ public abstract class Item extends Entity {
     /* Constructor load từ DB */
     protected Item(String id, LocalDateTime createdAt,
                    String sellerId, String name, String description,
-                   double startingPrice, ItemStatus status, ItemCategory category) {
+                   BigDecimal startingPrice, ItemStatus status, ItemCategory category) {
         super(id, createdAt);
         this.sellerId      = sellerId;
         this.name          = name;
@@ -61,8 +62,8 @@ public abstract class Item extends Entity {
     }
 
 
-    private void validateStartingPrice(double price) {
-        if (price <= 0) throw new IllegalArgumentException("Starting price must be positive");
+    private void validateStartingPrice(BigDecimal price) {
+        if (price.compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("Starting price must be positive");
     }
 
     // ── Abstract methods ──
@@ -90,12 +91,12 @@ public abstract class Item extends Entity {
     public String getSellerId()     { return sellerId; }
     public String getName()         { return name; }
     public String getDescription()  { return description; }
-    public double getStartingPrice(){ return startingPrice; }
+    public BigDecimal getStartingPrice(){ return startingPrice; }
     public ItemStatus getStatus()   { return status;}
 
     public void setName(String name)            { this.name = name; }
     public void setDescription(String desc)     { this.description = desc; }
-    public void setStartingPrice(double price)  {
+    public void setStartingPrice(BigDecimal price)  {
         validateStartingPrice(price);
         this.startingPrice = price;
     }

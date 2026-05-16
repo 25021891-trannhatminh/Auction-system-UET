@@ -4,6 +4,7 @@ import server.common.entity.Item;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /*
@@ -16,7 +17,7 @@ public class Art extends Item {
     private String medium;
 
     public Art(String sellerId, String name, String description,
-               double startingPrice, ItemStatus status, String artist, int yearCreated, String medium) {
+               BigDecimal startingPrice, ItemStatus status, String artist, int yearCreated, String medium) {
         super(sellerId, name, description, startingPrice, status, ItemCategory.ART);
         this.artist      = artist;
         this.yearCreated = yearCreated;
@@ -26,7 +27,7 @@ public class Art extends Item {
     /** Load từ DB */
     public Art(String id, LocalDateTime createdAt,
                String sellerId, String name, String description,
-               double startingPrice, ItemStatus status,
+               BigDecimal startingPrice, ItemStatus status,
                String artist, int yearCreated, String medium) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.ART);
         this.artist      = artist;

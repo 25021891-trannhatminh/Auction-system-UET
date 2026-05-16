@@ -1,5 +1,7 @@
 package server.common.entity.exception;
 
+import java.math.BigDecimal;
+
 /*
     Ném ra khi số tiền bid không hợp lệ:
         - amount <= currentHighestBid
@@ -7,15 +9,15 @@ package server.common.entity.exception;
         - amount không đủ bước nhảy tối thiểu (minBidIncrement)
  */
 public class InvalidBidException extends RuntimeException {
-    private final double attemptedAmount;
-    private final double currentPrice;
+    private final BigDecimal attemptedAmount;
+    private final BigDecimal currentPrice;
 
-    public InvalidBidException(String message, double attemptedAmount, double currentPrice) {
+    public InvalidBidException(String message, BigDecimal attemptedAmount, BigDecimal currentPrice) {
         super(message);
         this.attemptedAmount = attemptedAmount;
         this.currentPrice = currentPrice;
     }
 
-    public double getAttemptedAmount() { return attemptedAmount; }
-    public double getCurrentPrice()    { return currentPrice; }
+    public BigDecimal getAttemptedAmount() { return attemptedAmount; }
+    public BigDecimal getCurrentPrice()    { return currentPrice; }
 }

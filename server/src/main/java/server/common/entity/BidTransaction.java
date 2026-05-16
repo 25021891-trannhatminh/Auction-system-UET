@@ -3,6 +3,7 @@ package server.common.entity;
 
 import server.common.enums.BidStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -30,13 +31,13 @@ public class BidTransaction {
     private final String        auctionId;
     private final String        bidderId;
     private final String        bidderName;  // cache để hiển thị UI mà không cần JOIN DB
-    private final double        amount;
+    private final BigDecimal amount;
     private final LocalDateTime bidTime;
     private final boolean       isAutoBid;
     private BidStatus status;
 
     public BidTransaction(String auctionId, String bidderId, String bidderName,
-                          double amount, boolean isAutoBid) {
+                          BigDecimal amount, boolean isAutoBid) {
         this.id          = UUID.randomUUID().toString();
         this.auctionId   = auctionId;
         this.bidderId    = bidderId;
@@ -49,7 +50,7 @@ public class BidTransaction {
 
     /** Load từ DB */
     public BidTransaction(String id, String auctionId, String bidderId, String bidderName,
-                          double amount, LocalDateTime bidTime,
+                          BigDecimal amount, LocalDateTime bidTime,
                           boolean isAutoBid, BidStatus status) {
         this.id          = id;
         this.auctionId   = auctionId;
@@ -78,7 +79,7 @@ public class BidTransaction {
     public String        getAuctionId()   { return auctionId; }
     public String        getBidderId()    { return bidderId; }
     public String        getBidderName()  { return bidderName; }
-    public double        getAmount()      { return amount; }
+    public BigDecimal        getAmount()      { return amount; }
     public LocalDateTime getBidTime()     { return bidTime; }
     public boolean       isAutoBid()     { return isAutoBid; }
     public BidStatus     getStatus()      { return status; }

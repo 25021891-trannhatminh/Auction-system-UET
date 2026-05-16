@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Data Access Object cho bảng {@code ITEMS}.
@@ -71,16 +72,6 @@ public class ItemDAO {
     private static final String SQL_SELECT_BY_CATEGORY =
         SQL_SELECT_BASE + " WHERE category = ? ORDER BY created_at DESC";
 
-    // Lấy items theo category cha + tất cả category con (chỉ 1 cấp)
-    private static final String SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS = """
-        SELECT i.item_id, i.seller_id, i.category, i.name,
-               i.description, i.starting_price, i.status, i.created_at
-        FROM items i
-        JOIN item_categories c ON i.category = c.category
-        WHERE c.category = ? OR c.parent_id = ?
-        ORDER BY i.created_at DESC
-        """;
-
     // Lấy items theo status
     private static final String SQL_SELECT_BY_STATUS =
         SQL_SELECT_BASE + " WHERE status = ? ORDER BY created_at DESC";
@@ -107,7 +98,7 @@ public class ItemDAO {
      * Thêm một sản phẩm mới vào hệ thống.
      *
      * @param sellerId      ID của người bán (người sở hữu sản phẩm)
-     * @param category    ID của danh mục sản phẩm
+     * @param category    Loại danh mục sản phẩm
      * @param name          Tên sản phẩm
      * @param description   Mô tả chi tiết sản phẩm
      * @param startingPrice Giá khởi điểm để đấu giá
@@ -183,7 +174,7 @@ public class ItemDAO {
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING_REVIEW);
              ResultSet rs = ps.executeQuery()) {
 
-            while (rs.next()) list.add(mapRow(rs));
+            while (rs.next()) list.add(getItemByRow(rs));
             logger.debug("getPendingReviewItems() – Found {} item(s) pending review", list.size());
 
         } catch (SQLException e) {
@@ -361,7 +352,7 @@ public class ItemDAO {
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
             ps.setInt(1, itemId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return mapRow(rs);
+                if (rs.next()) return getItemByRow(rs);
             }
         } catch (SQLException e) {
             logger.error("getById failed for itemId={}", itemId, e);
@@ -381,7 +372,7 @@ public class ItemDAO {
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_SELLER)) {
             ps.setInt(1, sellerId);
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("getBySeller failed for sellerId={}", sellerId, e);
@@ -406,7 +397,7 @@ public class ItemDAO {
             ps.setInt(1, sellerId);
             ps.setString(2, status.name());
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("getBySellerAndStatus failed for sellerId={}, status={}", sellerId, status, e);
@@ -431,7 +422,7 @@ public class ItemDAO {
             ps.setInt(1, pageSize);
             ps.setInt(2, page * pageSize);
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("getAll (paged) failed for page={}, pageSize={}", page, pageSize, e);
@@ -444,12 +435,12 @@ public class ItemDAO {
      *
      * @return Danh sách {@link Item}
      */
-    public List<Item> getAll() {
+    public List<Item> getAllItem() {
         List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
              ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) list.add(mapRow(rs));
+            while (rs.next()) list.add(getItemByRow(rs));
         } catch (SQLException e) {
             logger.error("getAll failed", e);
         }
@@ -475,46 +466,23 @@ public class ItemDAO {
     /**
      * Lấy danh sách sản phẩm thuộc đúng một danh mục cụ thể.
      *
-     * @param categoryId ID danh mục cần lấy sản phẩm
+     * @param category Loại danh mục cần lấy sản phẩm
      * @return Danh sách {@link Item} thuộc danh mục đó
      */
-    public List<Item> getByCategory(int categoryId) {
+    public List<Item> getByCategory(ItemCategory category) {
         List<Item> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY)) {
-            ps.setInt(1, categoryId);
+            ps.setString(1, category.name());
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
-            logger.error("getByCategory failed for categoryId={}", categoryId, e);
+            logger.error("getByCategory failed for categoryId={}", category, e);
         }
         return list;
     }
 
-    /**
-     * Lấy danh sách sản phẩm thuộc danh mục cha lẫn tất cả danh mục con (1 cấp).
-     *
-     * <p>Ví dụ: click vào "Điện tử" sẽ thấy cả sản phẩm thuộc "Điện thoại"
-     * và "Laptop" mà không cần query từng danh mục con.</p>
-     *
-     * @param categoryId ID danh mục cha
-     * @return Danh sách {@link Item} của danh mục cha và các danh mục con
-     */
-    public List<Item> getByCategoryIncludeSubs(int categoryId) {
-        List<Item> list = new ArrayList<>();
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_CATEGORY_INCLUDE_SUBS)) {
-            ps.setInt(1, categoryId);
-            ps.setInt(2, categoryId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
-            }
-        } catch (SQLException e) {
-            logger.error("getByCategoryIncludeSubs failed for categoryId={}", categoryId, e);
-        }
-        return list;
-    }
 
     /**
      * Lấy danh sách sản phẩm theo trạng thái.
@@ -531,7 +499,7 @@ public class ItemDAO {
              PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
             ps.setString(1, status.name());
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("getByStatus failed for status={}", status, e);
@@ -556,7 +524,7 @@ public class ItemDAO {
              PreparedStatement ps = conn.prepareStatement(SQL_SEARCH_BY_NAME)) {
             ps.setString(1, "%" + keyword.trim() + "%");
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("searchByName failed for keyword={}", keyword, e);
@@ -583,7 +551,7 @@ public class ItemDAO {
             ps.setString(1, "%" + keyword.trim() + "%");
             ps.setString(2, status.name());
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
+                while (rs.next()) list.add(getItemByRow(rs));
             }
         } catch (SQLException e) {
             logger.error("searchByNameAndStatus failed for keyword={}, status={}", keyword, status, e);
@@ -609,19 +577,22 @@ public class ItemDAO {
     }
 
     /**
-     * Chuyển đổi một hàng dữ liệu từ ResultSet sang đối tượng DTO.
+     * Chuyển đổi một hàng dữ liệu từ ResultSet sang đối tượng Item.
+     * ItemFactory để xác định kiểu Item
      *
      * @param rs ResultSet đang trỏ tới hàng hiện tại
-     * @return Đối tượng {@link Item}
+     * @return Item
      * @throws SQLException Nếu có lỗi khi đọc tên cột hoặc dữ liệu
      */
-    private Item mapRow(ResultSet rs) throws SQLException {
+    private Item getItemByRow(ResultSet rs) throws SQLException {
+        ItemAttributeDAO itemAttributeDAO = new ItemAttributeDAO();
+        Map<String,String> mapAttributeItem = itemAttributeDAO.getAttributeMapByItemId(rs.getInt("seller_id"));
         return ItemFactory.create(ItemCategory.valueOf(rs.getString("category")),
             String.valueOf(rs.getInt("seller_id")),
             rs.getString("name"),
             rs.getString("description"),
-            rs.getBigDecimal("starting_price").doubleValue(),
-            ItemStatus.valueOf(rs.getString("status"))
+            rs.getBigDecimal("starting_price"),
+            ItemStatus.valueOf(rs.getString("status")), mapAttributeItem
         );
     }
 }
