@@ -73,10 +73,10 @@ public class Auction extends Entity {
     private final BigDecimal reservePrice;     // null = không có giá sàn
 
     // ── Runtime state ─────────────────────────────────────────────────────────
-    private       AuctionStatus status;
-    private       BigDecimal         currentPrice;
-    private       User         currentLeader;   // người đang dẫn đầu
-    private       LocalDateTime  lastBidTime;
+    private volatile AuctionStatus status;
+    private          BigDecimal    currentPrice;
+    private          User          currentLeader;   // người đang dẫn đầu
+    private          LocalDateTime lastBidTime;
 
     // ── Bid history ───────────────────────────────────────────────────────────
     private final List<BidTransaction> bidHistory;

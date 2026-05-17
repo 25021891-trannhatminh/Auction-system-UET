@@ -19,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import server.common.entity.Auction;
+import server.common.entity.BidTransaction;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
@@ -26,8 +28,8 @@ import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import server.network.ClientManager;
 import server.repository.AuctionDAO;
-import server.repository.BidDAO;
 import server.repository.AccountDAO;
+import server.repository.BidTransactionDAO;
 import server.service.ItemService;
 import server.service.ServerAuthService;
 
@@ -39,15 +41,11 @@ public class ClientHandler implements Runnable {
     private String username = "Guest"; // Tên hiển thị mặc định
     private int userId = -1 ;
 
-
-
     private AccountDAO accountDAO = new AccountDAO();
-    private BidDAO bidDAO = new BidDAO();
+    private BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
     private AuctionDAO auctionDAO = new AuctionDAO();
     private final ServerAuthService authService = new ServerAuthService();
     private final ItemService itemService = new ItemService();
-
-
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -99,7 +97,6 @@ public class ClientHandler implements Runnable {
         }
         System.out.println("MSG FROM CLIENT: " + msg);
 
-
         // Xử lý request
         switch (request[0]) {
             case "LOGIN":
@@ -109,7 +106,11 @@ public class ClientHandler implements Runnable {
 
                 // User login -> đăng ký ClientHandler support luồng của User này
                 User loginUser = accountDAO.login(identifier, password);
-                if (loginUser != null) ClientManager.add(Integer.parseInt(identifier),this);
+                if (loginUser != null) {
+                    this.userId = Integer.parseInt(loginUser.getId());
+                    this.username = loginUser.getUsername();
+                    ClientManager.add(this.userId, this);
+                }
                 break;
 
             case "REGISTER":
@@ -144,9 +145,9 @@ public class ClientHandler implements Runnable {
 
             case "LIST":
                 //✅ Lấy từ DB thay vì RAM
-                List<AuctionDTO> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
-                for (AuctionDTO a : auctions){
-                    send("ITEM "+ a.getAuctionId()+ " "+ a.getCurrentPrice());
+                List<Auction> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
+                for (Auction a : auctions){
+                    send("ITEM "+ a.getId()+ " "+ a.getCurrentPrice());
                 }
                 break;
 
@@ -159,9 +160,9 @@ public class ClientHandler implements Runnable {
                     int auctionId = Integer.parseInt(request[1]);
                     BigDecimal amount = new BigDecimal(request[2]);
 
-                    // ✅ Gọi BidDAO.placeBid() — có Transaction + Row Locking sẵn!
-                    // Không cần synchronized nữa vì BidDAO đã xử lý bằng SELECT FOR UPDATE
-                    boolean ok = bidDAO.placeBid(auctionId, this.userId, amount, false);
+                    // ✅ Gọi BidTransactionDAO.placeBid() — có Transaction + Row Locking sẵn!
+                    // Không cần synchronized nữa vì BidTransactionDAO đã xử lý bằng SELECT FOR UPDATE
+                    boolean ok = bidTransactionDAO.placeBid(auctionId, this.userId, amount, false);
                     if (ok) {
                         ClientManager.broadcast("NEW_BID " + this.username + " " + auctionId + " " + amount);
                     } else {
@@ -343,7 +344,7 @@ public class ClientHandler implements Runnable {
             """;
 
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+            PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, sellerId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -376,7 +377,7 @@ public class ClientHandler implements Runnable {
             """);
         Map<Integer, Integer> bidCounts = loadIntCounts("""
             SELECT bidder_id AS user_id, COUNT(*) AS value
-            FROM bids
+            FROM bid_transactions
             GROUP BY bidder_id
             """);
 
@@ -388,20 +389,22 @@ public class ClientHandler implements Runnable {
                    COALESCE(phone, '') AS phone,
                    COALESCE(role, 'USER') AS role,
                    COALESCE(status, 'ACTIVE') AS status,
-                   is_active,
                    last_login,
                    created_at
-            FROM users
+            FROM accounts
             ORDER BY created_at DESC, user_id DESC
             """;
 
         send("ADMIN_USERS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
                 int userId = rs.getInt("user_id");
+                String statusStr = rs.getString("status");
+                String isActiveStr = "ACTIVE".equals(statusStr) ? "true" : "false";
+
                 send("ADMIN_USER " + fields(
                     userId,
                     rs.getString("username"),
@@ -409,8 +412,8 @@ public class ClientHandler implements Runnable {
                     rs.getString("full_name"),
                     rs.getString("phone"),
                     rs.getString("role"),
-                    rs.getString("status"),
-                    rs.getBoolean("is_active") ? "true" : "false",
+                    statusStr,
+                    isActiveStr,
                     rs.getTimestamp("last_login"),
                     rs.getTimestamp("created_at"),
                     itemCounts.getOrDefault(userId, 0),
@@ -428,8 +431,8 @@ public class ClientHandler implements Runnable {
     private Map<Integer, Integer> loadIntCounts(String sql) {
         Map<Integer, Integer> counts = new HashMap<>();
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 counts.put(rs.getInt("user_id"), rs.getInt("value"));
             }
@@ -443,17 +446,16 @@ public class ClientHandler implements Runnable {
     private void sendAdminItems() {
         String sql = """
             SELECT i.item_id, i.seller_id, COALESCE(seller.username, '') AS seller_username,
-                   COALESCE(category.name, 'Uncategorized') AS category_name,
+                   COALESCE(i.category, 'Uncategorized') AS category_name,
                    i.name, i.description, i.starting_price, i.status, i.created_at,
                    a.auction_id, a.status AS auction_status, a.current_price,
                    COALESCE(bid_counts.bid_count, 0) AS bid_count
             FROM items i
-            LEFT JOIN users seller ON seller.user_id = i.seller_id
-            LEFT JOIN item_categories category ON category.category_id = i.category_id
+            LEFT JOIN accounts seller ON seller.user_id = i.seller_id
             LEFT JOIN auctions a ON a.item_id = i.item_id
             LEFT JOIN (
                 SELECT auction_id, COUNT(*) AS bid_count
-                FROM bids
+                FROM bid_transactions
                 GROUP BY auction_id
             ) bid_counts ON bid_counts.auction_id = a.auction_id
             ORDER BY i.created_at DESC, i.item_id DESC
@@ -461,8 +463,8 @@ public class ClientHandler implements Runnable {
 
         send("ADMIN_ITEMS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
                 send("ADMIN_ITEM " + fields(
@@ -497,11 +499,11 @@ public class ClientHandler implements Runnable {
                    COALESCE(winner.username, '') AS winner_username
             FROM auctions a
             LEFT JOIN items i ON i.item_id = a.item_id
-            LEFT JOIN users seller ON seller.user_id = a.seller_id
-            LEFT JOIN users winner ON winner.user_id = a.current_winner_id
+            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+            LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
             LEFT JOIN (
                 SELECT auction_id, COUNT(*) AS bid_count
-                FROM bids
+                FROM bid_transactions
                 GROUP BY auction_id
             ) bid_counts ON bid_counts.auction_id = a.auction_id
             ORDER BY a.created_at DESC, a.auction_id DESC
@@ -509,15 +511,15 @@ public class ClientHandler implements Runnable {
 
         send("ADMIN_AUCTIONS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
                 send("ADMIN_AUCTION " + fields(
-                    rs.getInt("auction_id"),
-                    rs.getInt("item_id"),
+                    String.valueOf(rs.getInt("auction_id")),
+                    String.valueOf(rs.getInt("item_id")),
                     rs.getString("item_name"),
-                    rs.getInt("seller_id"),
+                    String.valueOf(rs.getInt("seller_id")),
                     rs.getString("seller_username"),
                     rs.getBigDecimal("current_price"),
                     rs.getInt("bid_count"),

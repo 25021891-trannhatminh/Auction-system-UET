@@ -105,6 +105,6 @@ public abstract class Item extends Entity {
     @Override
     public void printInfo() {
         System.out.printf("[%s] %s — %.2f | %s%n",
-            getCategory(), name, startingPrice);
+            getCategory(), name, startingPrice,status);
     }
 }
