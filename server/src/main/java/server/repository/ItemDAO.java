@@ -24,6 +24,9 @@ public class ItemDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(ItemDAO.class);
 
+    // Khởi tạo 1 lần duy nhất thay vì new mỗi lần -> tránh N + 1 obj creation
+    private final ItemAttributeDAO itemAttributeDAO = new ItemAttributeDAO();
+
     private static final String SQL_SELECT_BASE = """
         SELECT item_id, seller_id, category, name, description,
                starting_price, status, created_at
@@ -585,8 +588,8 @@ public class ItemDAO {
      * @throws SQLException Nếu có lỗi khi đọc tên cột hoặc dữ liệu
      */
     private Item getItemByRow(ResultSet rs) throws SQLException {
-        ItemAttributeDAO itemAttributeDAO = new ItemAttributeDAO();
-        Map<String,String> mapAttributeItem = itemAttributeDAO.getAttributeMapByItemId(rs.getInt("seller_id"));
+
+        Map<String,String> mapAttributeItem = itemAttributeDAO.getAttributeMapByItemId(rs.getInt("item_id"));
         return ItemFactory.create(ItemCategory.valueOf(rs.getString("category")),
             String.valueOf(rs.getInt("seller_id")),
             rs.getString("name"),

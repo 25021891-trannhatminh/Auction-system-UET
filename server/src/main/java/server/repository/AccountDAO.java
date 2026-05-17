@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,14 +57,14 @@ public class AccountDAO {
     private static final String SQL_SELECT_BASE = """
         SELECT user_id, username, email, full_name, phone,
                role, status, last_login, created_at
-        FROM users
+        FROM accounts
         """;
 
     /**
      * SQL đăng ký tài khoản.
      */
     private static final String SQL_REGISTER = """
-        INSERT INTO users
+        INSERT INTO accounts
         (username, password, email, full_name, phone, role, status)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
@@ -74,7 +75,7 @@ public class AccountDAO {
     private static final String SQL_LOGIN = """
         SELECT user_id, username, password, email, full_name,
                phone, role, status, last_login, created_at
-        FROM users
+        FROM accounts
         WHERE (username = ? OR email = ?)
         AND status = 'ACTIVE'
         LIMIT 1
@@ -96,13 +97,7 @@ public class AccountDAO {
      * SQL cập nhật trạng thái user.
      */
     private static final String SQL_UPDATE_STATUS =
-        "UPDATE users SET status = ? WHERE user_id = ?";
-
-    /**
-     * SQL khóa tài khoản user.
-     */
-    private static final String SQL_BAN_USER =
-        "UPDATE users SET status = ? WHERE user_id = ?";
+        "UPDATE accounts SET status = ? WHERE user_id = ?";
 
     /**
      * Đăng ký tài khoản mới.
@@ -272,25 +267,7 @@ public class AccountDAO {
      * @return true nếu khóa thành công
      */
     public boolean banUser(int userId) {
-
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_BAN_USER)) {
-
-            ps.setString(1, UserStatus.BANNED.name());
-            ps.setInt(2, userId);
-
-            boolean success = ps.executeUpdate() > 0;
-
-            if (success) {
-                logger.warn("User banned: {}", userId);
-            }
-
-            return success;
-
-        } catch (SQLException e) {
-            logger.error("banUser failed for userId={}", userId, e);
-            return false;
-        }
+        return updateStatus(userId, UserStatus.BANNED);
     }
 
     /**
@@ -301,6 +278,7 @@ public class AccountDAO {
      * @throws SQLException nếu lỗi truy xuất dữ liệu
      */
     private User getUserByRow(ResultSet rs) throws SQLException {
+        Timestamp lastLoginTs = rs.getTimestamp("last_login");
         return new User(String.valueOf(rs.getInt("user_id")),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
@@ -309,7 +287,7 @@ public class AccountDAO {
             rs.getString("full_name"),
             rs.getString("phone"),
             UserStatus.valueOf(rs.getString("status")),
-            rs.getTimestamp("last_login").toLocalDateTime(),
+            lastLoginTs != null ? lastLoginTs.toLocalDateTime() : null,
             5.0,
             BigDecimal.ZERO
         );

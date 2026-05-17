@@ -369,11 +369,11 @@ public class AutoBidConfigDAO {
         SELECT auto_bid_id, auction_id, bidder_id,
                max_bid, increment, status,
                created_at, updated_at
-        FROM auto_bids
+        FROM auto_bid_configs
         """;
 
   private static final String SQL_INSERT = """
-        INSERT INTO auto_bids (
+        INSERT INTO auto_bid_configs (
             auction_id, bidder_id, max_bid,
             increment, status
         ) VALUES (?, ?, ?, ?, ?)
@@ -404,20 +404,20 @@ public class AutoBidConfigDAO {
 
   // Đếm số auto bid ACTIVE trong một phiên đấu giá
   private static final String SQL_COUNT_ACTIVE =
-      "SELECT COUNT(*) FROM auto_bids WHERE auction_id = ? AND status = 'ACTIVE'";
+      "SELECT COUNT(*) FROM auto_bid_configs WHERE auction_id = ? AND status = 'ACTIVE'";
 
   // Kiểm tra người dùng đã có auto bid ACTIVE trong phiên chưa
   private static final String SQL_EXISTS_ACTIVE =
-      "SELECT COUNT(*) FROM auto_bids WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
+      "SELECT COUNT(*) FROM auto_bid_configs WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
 
   private static final String SQL_UPDATE_MAX_BID = """
-        UPDATE auto_bids
+        UPDATE auto_bid_configs
         SET max_bid = ?, updated_at = NOW()
         WHERE auto_bid_id = ?
         """;
 
   private static final String SQL_UPDATE_STATUS = """
-        UPDATE auto_bids
+        UPDATE auto_bid_configs
         SET status = ?, updated_at = NOW()
         WHERE auto_bid_id = ?
         """;
@@ -430,7 +430,7 @@ public class AutoBidConfigDAO {
         """;
 
   private static final String SQL_DELETE =
-      "DELETE FROM auto_bids WHERE auto_bid_id = ?";
+      "DELETE FROM auto_bid_configs WHERE auto_bid_id = ?";
 
   // ============================================================
   // CREATE Methods

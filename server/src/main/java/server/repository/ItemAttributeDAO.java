@@ -151,29 +151,61 @@ public class ItemAttributeDAO {
    * @return Số lượng bản ghi đã được chèn thành công.
    */
   public int insertBatch(List<ItemAttributeDTO> attributes) {
-    if (attributes == null || attributes.isEmpty()) return 0;
+    if (attributes == null || attributes.isEmpty()) {
+      return 0;
+    }
 
     int count = 0;
-    try (Connection conn = DBConnection.getConnection();
-        PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+    Connection conn = null;
 
+    try {
+      conn = DBConnection.getConnection();
       conn.setAutoCommit(false);
-      for (ItemAttributeDTO dto : attributes) {
-        ps.setInt(1, dto.getItemId());
-        ps.setString(2, dto.getAttrKey());
-        ps.setString(3, dto.getAttrValue());
-        ps.addBatch();
+
+      try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+
+        for (ItemAttributeDTO dto : attributes) {
+          ps.setInt(1, dto.getItemId());
+          ps.setString(2, dto.getAttrKey());
+          ps.setString(3, dto.getAttrValue());
+          ps.addBatch();
+        }
+
+        int[] results = ps.executeBatch();
+        conn.commit();
+
+        for (int r : results) {
+          if (r > 0 || r == Statement.SUCCESS_NO_INFO) {
+            count++;
+          }
+        }
       }
 
-      int[] results = ps.executeBatch();
-      conn.commit();
-
-      for (int r : results) {
-        if (r > 0 || r == Statement.SUCCESS_NO_INFO) count++;
-      }
     } catch (SQLException e) {
-      logger.error("insertBatch failed", e);
+
+      if (conn != null) {
+        try {
+          conn.rollback();
+          logger.warn("insertBatch() – transaction rolled back");
+        } catch (SQLException rollbackEx) {
+          logger.error("insertBatch() – rollback failed", rollbackEx);
+        }
+      }
+
+      logger.error("insertBatch() failed", e);
+
+    } finally {
+
+      if (conn != null) {
+        try {
+          conn.setAutoCommit(true);
+          conn.close();
+        } catch (SQLException e) {
+          logger.error("insertBatch() – failed to restore autoCommit", e);
+        }
+      }
     }
+
     return count;
   }
 

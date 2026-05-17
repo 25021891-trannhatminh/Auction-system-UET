@@ -31,8 +31,10 @@ public class WalletTransactionDAO {
         """;
 
     private static final String SQL_INSERT = """
-        INSERT INTO wallet_transactions (wallet_id, type, amount, ref_auction_id, note)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO wallet_transactions (wallet_id, user_id, type, amount, ref_auction_id, note)
+        SELECT ?, user_id, ?, ?, ?, ?
+        FROM wallets
+        WHERE wallet_id = ?
         """;
 
     private static final String SQL_SELECT_BY_USER = """
@@ -73,6 +75,7 @@ public class WalletTransactionDAO {
             }
 
             ps.setString(5, transaction.getNote());
+            ps.setInt(6,transaction.getWalletId());
 
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {

@@ -32,20 +32,20 @@ public class BidTransactionDAO {
             """;
 
     private static final String SQL_OUTBID_PREVIOUS = """
-            UPDATE bids SET status = ? WHERE auction_id = ? AND status = ?
+            UPDATE bid_transactions SET status = ? WHERE auction_id = ? AND status = ?
             """;
 
     private static final String SQL_INSERT_BID = """
-            INSERT INTO bids (auction_id, bidder_id, amount, is_auto_bid, status, bid_time)
+            INSERT INTO bid_transactions (auction_id, bidder_id, amount, is_auto_bid, status, bid_time)
             VALUES (?, ?, ?, ?, ?, NOW())
             """;
 
     private static final String SQL_SELECT_HISTORY = """
             SELECT bid_id, auction_id, bidder_id, amount, is_auto_bid, status, bid_time
-            FROM bids WHERE auction_id = ? ORDER BY bid_time DESC
+            FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time DESC
             """;
     private static final String SELECT_DISTINCT_BIDDERS =
-        "SELECT DISTINCT user_id FROM bids WHERE auction_id = ?";
+        "SELECT DISTINCT user_id FROM bid_transactions WHERE auction_id = ?";
     /**
      * Đặt giá đấu giá - Đảm bảo tính nguyên tử và chống Race Condition.
      */
