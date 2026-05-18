@@ -2,8 +2,6 @@ package server.common.entity;
 
 /**
  * Interface Observer — pattern Observer cho hệ thống đấu giá.
- *
- * Ai implement interface này?
  *   - ConsoleObserver     (test/debug — in ra console)
  *   - ClientHandler       (server-side — push JSON qua Socket tới client)
  *   - NotificationService (lưu notification vào DB)

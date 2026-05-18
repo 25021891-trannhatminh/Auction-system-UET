@@ -11,6 +11,8 @@ import server.service.listeners.AuctionEventListener;
 import server.common.model.BidResultDTO;
 import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
+import server.service.listeners.ObserverToNotificationEventAdapter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,6 +41,16 @@ public class AuctionService {
   // Singleton domain manager
   private final AuctionManager auctionManager = AuctionManager.getInstance();
 
+  private final ObserverToNotificationEventAdapter domainAdapter;
+
+  public AuctionService() {
+    this.domainAdapter = new ObserverToNotificationEventAdapter(this);
+
+    // Đăng ký adapter vào AuctionManager ngay khi tạo service
+    AuctionManager.getInstance().addGlobalObserver(domainAdapter);
+
+    logger.info("AuctionService initialized with ObserverToNotificationEventAdapter");
+  }
 
   // =========================================================================
   //  KHỞI ĐỘNG SERVER — Load DB vào memory
@@ -86,13 +98,13 @@ public class AuctionService {
       // Load User object để engine có thể gọi auction.placeBid(user, ...)
       User bidder = accountDAO.getById(Integer.parseInt(config.getBidderId()));
       if (bidder == null) {
-        logger.warn("_loadAutoBidsForAuction() — Bidder {} not found, skipping config",
+        logger.warn("loadAutoBidsForAuction() — Bidder {} not found, skipping config",
             config.getBidderId());
         continue;
       }
       // Đăng ký vào engine (không trigger vì auction chưa hoàn toàn load xong)
       auctionManager.getAutoBidEngine().register(config, bidder);
-      logger.debug("_loadAutoBidsForAuction() — Registered AutoBid bidderId={}, auctionId={}",
+      logger.debug("loadAutoBidsForAuction() — Registered AutoBid bidderId={}, auctionId={}",
           config.getBidderId(), auction.getId());
     }
   }
@@ -161,7 +173,7 @@ public class AuctionService {
    *   Cập nhật AuctionDAO — đồng bộ trạng thái auction tổng thể.
    *
    *
-   * Về "double lock": Java lock và DB lock bảo vệ hai tầng khác nhau.
+   * Về "BigDecimal lock": Java lock và DB lock bảo vệ hai tầng khác nhau.
    * Java lock: bảo vệ in-memory state trong một JVM process.
    * DB lock: bảo vệ persistence layer, đảm bảo consistency khi có nhiều server.
    * Không thể bỏ một trong hai nếu muốn đảm bảo cả realtime lẫn data integrity.
@@ -207,7 +219,7 @@ public class AuctionService {
 
     // ── STEP 5: Đồng bộ currentPrice trong bảng auctions ──
     // BidTransactionDAO đã UPDATE auctions.current_price bên trong transaction của nó.
-    // Không cần gọi AuctionDAO.updateCurrentPrice() riêng để tránh double-write.
+    // Không cần gọi AuctionDAO.updateCurrentPrice() riêng để tránh BigDecimal-write.
     // Nếu muốn explicit update (ví dụ khi BidTxDAO không update auction table):
      auctionDAO.updateCurrentPrice(auctionID,
          Integer.parseInt(bidResult.getCurrentLeaderName()), bidResult.getFinalPrice());
@@ -377,34 +389,6 @@ public class AuctionService {
     auctionOpt.ifPresent(this::onAuctionClosed);
   }
 
-  /**
-   * Đăng ký người nghe sự kiện (vd: NotificationHandler)
-   */
-  public void addListener(AuctionEventListener listener) {
-    if (listener != null && !listeners.contains(listener)) {
-      listeners.add(listener);
-      logger.info("addListener() - Registered: {}", listener.getClass().getSimpleName());
-    }
-  }
-
-  /**
-   * Gỡ bỏ người nghe sự kiện
-   */
-  public void removeListener(AuctionEventListener listener) {
-    if (listeners.remove(listener)) {
-      logger.info("removeListener() - Unregistered: {}", listener.getClass().getSimpleName());
-    }
-  }
-
-  /**
-   * Gửi thông báo toàn hệ thống (Broadcast).
-   * Thường dùng khi bảo trì hoặc có thông báo chung.
-   */
-  public void broadcastSystemNotif(String title, String message) {
-    logger.info("Broadcasting system notification to all active users");
-    // ID -1 hoặc 0 thường được quy ước là Global/System
-    notifySystemNotification(-1, title, message);
-  }
 
   /**
    * Kích hoạt bắt đầu phiên đấu giá
@@ -436,8 +420,8 @@ public class AuctionService {
       return false;
     }
 
-    double finalPrice = auction.getCurrentPrice().doubleValue();
-    String itemName = "Auction #" + auctionId;
+    BigDecimal finalPrice = auction.getCurrentPrice();
+    String itemName = "Auction #" + auctionId + ": " + auction.getItem().getName();
 
     // 1. Thông báo cho người bán
     notifyAuctionEnded(Integer.parseInt(auction.getSellerId()), auctionId, itemName, finalPrice);
@@ -461,6 +445,21 @@ public class AuctionService {
   }
 
   /**
+   * Duyệt vật phẩm (Gọi từ Admin)
+   */
+  public void approveItem(int sellerId, int itemId, String itemName) {
+    notifyItemApproved(sellerId, itemId, itemName);
+  }
+
+  /**
+   * Từ chối vật phẩm (Gọi từ Admin)
+   */
+  public void rejectItem(int sellerId, int itemId, String itemName) {
+    notifyItemRejected(sellerId, itemId, itemName);
+  }
+
+
+  /**
    * Xác nhận thanh toán thành công và thông báo cho các bên liên quan.
    * @param auctionId ID của phiên đấu giá
    * @return true nếu xử lý thành công
@@ -480,15 +479,15 @@ public class AuctionService {
         return false;
       }
 
-      // 3. Cập nhật trạng thái thanh toán trong Database (giả sử qua auctionDAO)
+      // 3. Cập nhật trạng thái thanh toán trong Database (giả sử qua PaymentDAO)
       // Lưu ý: Bạn nên có thêm trường paymentStatus trong DB
-      boolean isUpdated = auctionDAO.updatePaymentStatus(auctionId, true);
+      boolean isUpdated = paymentDAO.updatePaymentStatus(auctionId, true);
 
       if (isUpdated) {
         int sellerId = Integer.parseInt(auction.getSellerId());
         int buyerId = Integer.parseInt(auction.getCurrentLeader().getId());
         String itemName = "Auction #" + auctionId;
-        double finalPrice = auction.getCurrentPrice().doubleValue();
+        BigDecimal finalPrice = auction.getCurrentPrice();
 
         logger.info("confirmPayment() - Payment SUCCESS [Auction:{}, Buyer:{}, Seller:{}]",
             auctionId, buyerId, sellerId);
@@ -510,61 +509,75 @@ public class AuctionService {
     }
   }
 
-  /**
-   * Duyệt vật phẩm (Gọi từ Admin)
-   */
-  public void approveItem(int sellerId, int itemId, String itemName) {
-    notifyItemApproved(sellerId, itemId, itemName);
-  }
-
-  /**
-   * Từ chối vật phẩm (Gọi từ Admin)
-   */
-  public void rejectItem(int sellerId, int itemId, String itemName) {
-    notifyItemRejected(sellerId, itemId, itemName);
-  }
-
   // ============================================================
   // Notification Dispatchers (Observer Pattern Implementation)
   // ============================================================
+  /**
+   * Đăng ký người nghe sự kiện (vd: NotificationHandler)
+   */
+  public void addListener(AuctionEventListener listener) {
+    if (listener != null && !listeners.contains(listener)) {
+      listeners.add(listener);
+      logger.info("addListener() - Registered: {}", listener.getClass().getSimpleName());
+    }
+  }
 
-  private void notifyBidPlaced(int bidderId, int auctionId, String itemName, double amount) {
+  /**
+   * Gỡ bỏ người nghe sự kiện
+   */
+  public void removeListener(AuctionEventListener listener) {
+    if (listeners.remove(listener)) {
+      logger.info("removeListener() - Unregistered: {}", listener.getClass().getSimpleName());
+    }
+  }
+
+  /**
+   * Gửi thông báo toàn hệ thống (Broadcast).
+   * Thường dùng khi bảo trì hoặc có thông báo chung.
+   */
+  public void broadcastSystemNotif(String title, String message) {
+    logger.info("Broadcasting system notification to all active users");
+    // ID -1 hoặc 0 thường được quy ước là Global/System
+    notifySystemNotification(-1, title, message);
+  }
+
+  public void notifyBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
     listeners.forEach(l -> l.onBidPlaced(bidderId, auctionId, itemName, amount));
   }
 
-  private void notifyOutbid(int userId, int auctionId, String itemName, double newPrice) {
+  public void notifyOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
     listeners.forEach(l -> l.onOutbid(userId, auctionId, itemName, newPrice));
   }
 
-  private void notifyAuctionStarted(int userId, int auctionId, String itemName) {
+  public void notifyAuctionStarted(int userId, int auctionId, String itemName) {
     listeners.forEach(l -> l.onAuctionStarted(userId, auctionId, itemName));
   }
 
-  private void notifyAuctionEnded(int userId, int auctionId, String itemName, double finalPrice) {
+  public void notifyAuctionEnded(int userId, int auctionId, String itemName, BigDecimal finalPrice) {
     listeners.forEach(l -> l.onAuctionEnded(userId, auctionId, itemName, finalPrice));
   }
 
-  private void notifyAuctionWon(int winnerId, int auctionId, String itemName, double finalPrice) {
+  public void notifyAuctionWon(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
     listeners.forEach(l -> l.onAuctionWon(winnerId, auctionId, itemName, finalPrice));
   }
 
-  private void notifyAuctionLost(int loserId, int auctionId, String itemName) {
+  public void notifyAuctionLost(int loserId, int auctionId, String itemName) {
     listeners.forEach(l -> l.onAuctionLost(loserId, auctionId, itemName));
   }
 
-  private void notifyPaymentDue(int buyerId, int auctionId, String itemName, double amount) {
+  public void notifyPaymentDue(int buyerId, int auctionId, String itemName, BigDecimal amount) {
     listeners.forEach(l -> l.onPaymentDue(buyerId, auctionId, itemName, amount));
   }
 
-  public void notifyPaymentReceived(int sellerId, int auctionId, String itemName, double amount) {
+  public void notifyPaymentReceived(int sellerId, int auctionId, String itemName, BigDecimal amount) {
     listeners.forEach(l -> l.onPaymentReceived(sellerId, auctionId, itemName, amount));
   }
 
-  private void notifyItemApproved(int sellerId, int itemId, String itemName) {
+  public void notifyItemApproved(int sellerId, int itemId, String itemName) {
     listeners.forEach(l -> l.onItemApproved(sellerId, itemId, itemName));
   }
 
-  private void notifyItemRejected(int sellerId, int itemId, String itemName) {
+  public void notifyItemRejected(int sellerId, int itemId, String itemName) {
     listeners.forEach(l -> l.onItemRejected(sellerId, itemId, itemName));
   }
 

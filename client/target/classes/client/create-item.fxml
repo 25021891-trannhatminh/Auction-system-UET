@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.RadioButton?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Priority?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Create Item page added for seller listing flow.
+     Flow: Create Listing button -> this page -> CREATE_ITEM command -> DB items/item_images/item_attributes.
+     Keep fx:id values in sync with CreateItemController. -->
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="client.controller.CreateItemController"
+            stylesheets="@create-item.css"
+            prefWidth="1200.0" prefHeight="820.0"
+            styleClass="create-item-root">
+
+    <top>
+        <HBox styleClass="topbar" alignment="CENTER_LEFT" spacing="16.0">
+            <padding>
+                <Insets top="18.0" right="26.0" bottom="18.0" left="26.0" />
+            </padding>
+
+            <Button text="← Back" onAction="#handleBack" styleClass="ghost-btn" />
+
+            <VBox spacing="4.0">
+                <Label text="Create Item" styleClass="page-title" />
+                <Label fx:id="breadcrumbLabel" text="Dashboard / Create Item" styleClass="breadcrumb-label" />
+            </VBox>
+
+            <Region HBox.hgrow="ALWAYS" />
+
+            <StackPane styleClass="seller-badge">
+                <Label fx:id="sellerInitialsLabel" text="SV" styleClass="seller-badge-text" />
+            </StackPane>
+
+            <VBox spacing="2.0" alignment="CENTER_RIGHT">
+                <Label fx:id="sellerNameLabel" text="Seller" styleClass="seller-name-label" />
+                <Label fx:id="sellerRoleLabel" text="USER" styleClass="seller-role-label" />
+            </VBox>
+        </HBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER" styleClass="content-scroll">
+            <content>
+                <VBox spacing="22.0" styleClass="content-shell">
+                    <padding>
+                        <Insets top="24.0" right="26.0" bottom="28.0" left="26.0" />
+                    </padding>
+
+                    <!-- Main content mirrors the provided NFT upload layout but keeps the existing green/gold system style. -->
+                    <HBox spacing="22.0" alignment="TOP_LEFT">
+                        <VBox spacing="22.0" HBox.hgrow="ALWAYS">
+                            <!-- Upload area: selected images are copied locally, then their URI is sent to server. -->
+                            <VBox spacing="12.0" styleClass="card-panel upload-panel">
+                                <Label text="Upload File" styleClass="section-title" />
+                                <StackPane styleClass="upload-dropzone">
+                                    <VBox spacing="12.0" alignment="CENTER">
+                                        <Label text="Upload item image" styleClass="upload-headline" />
+                                        <Label fx:id="helperTextLabel" text="PNG, JPG, JPEG, WEBP - stored locally before submit." styleClass="upload-subtext" wrapText="true" />
+                                        <Button text="Browse File" onAction="#handleBrowseFiles" styleClass="primary-btn dark-btn" />
+                                        <Label fx:id="fileNameLabel" text="No file selected yet" styleClass="upload-file-name" />
+                                    </VBox>
+                                </StackPane>
+                            </VBox>
+
+                            <VBox spacing="12.0" styleClass="card-panel">
+                                <Label text="Purchase Type" styleClass="section-title" />
+                                <HBox spacing="14.0">
+                                    <VBox spacing="6.0" styleClass="purchase-card" HBox.hgrow="ALWAYS">
+                                        <RadioButton fx:id="fixedPriceRadio" text="Fixed Price" styleClass="radio-card-title" />
+                                        <Label text="Create an instant-buy listing ready for admin review." styleClass="purchase-card-text" wrapText="true" />
+                                    </VBox>
+                                    <VBox spacing="6.0" styleClass="purchase-card purchase-card-active" HBox.hgrow="ALWAYS">
+                                        <RadioButton fx:id="timedAuctionRadio" text="Timed Auction" styleClass="radio-card-title" />
+                                        <Label text="Prepare the item for a future auction session after approval." styleClass="purchase-card-text" wrapText="true" />
+                                    </VBox>
+                                    <VBox spacing="6.0" styleClass="purchase-card" HBox.hgrow="ALWAYS">
+                                        <RadioButton fx:id="openForBidsRadio" text="Open for Bids" styleClass="radio-card-title" />
+                                        <Label text="Submit a seller listing that can later be opened for bidding." styleClass="purchase-card-text" wrapText="true" />
+                                    </VBox>
+                                </HBox>
+                            </VBox>
+
+                            <!-- Form fields: title/price are required; optional metadata is saved as item_attributes. -->
+                            <VBox spacing="16.0" styleClass="card-panel">
+                                <Label text="Main Details" styleClass="section-title" />
+
+                                <HBox spacing="16.0">
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Title" styleClass="field-label" />
+                                        <TextField fx:id="titleField" promptText="Abstract 3D Design" styleClass="form-field" />
+                                    </VBox>
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Price" styleClass="field-label" />
+                                        <TextField fx:id="priceField" promptText="2500000" styleClass="form-field" />
+                                    </VBox>
+                                </HBox>
+
+                                <HBox spacing="16.0">
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Size" styleClass="field-label" />
+                                        <TextField fx:id="sizeField" promptText="1200 x 1200" styleClass="form-field" />
+                                    </VBox>
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Property" styleClass="field-label" />
+                                        <TextField fx:id="propertyField" promptText="Original / Digital" styleClass="form-field" />
+                                    </VBox>
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Royalty" styleClass="field-label" />
+                                        <TextField fx:id="royaltyField" promptText="10%" styleClass="form-field" />
+                                    </VBox>
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Currency" styleClass="field-label" />
+                                        <TextField fx:id="currencyField" promptText="VND" styleClass="form-field" />
+                                    </VBox>
+                                </HBox>
+
+                                <VBox spacing="6.0">
+                                    <Label text="Description" styleClass="field-label" />
+                                    <TextArea fx:id="descriptionArea" promptText="Add item details, condition, provenance, and notes for admin review..."
+                                              wrapText="true" prefRowCount="6" styleClass="form-text-area" />
+                                </VBox>
+
+                                <Separator />
+
+                                <HBox spacing="12.0" alignment="CENTER_LEFT">
+                                    <Button fx:id="saveDraftButton" text="Save Draft" onAction="#handleSaveDraft" styleClass="secondary-btn" />
+                                    <Button fx:id="submitItemButton" text="Submit Item" onAction="#handleSubmitItem" styleClass="primary-btn" />
+                                    <Label fx:id="messageLabel" text="" styleClass="message-label" wrapText="true" HBox.hgrow="ALWAYS" />
+                                </HBox>
+                            </VBox>
+                        </VBox>
+
+                        <!-- Preview panel: UI-only preview, not a separate DB write. -->
+                        <VBox spacing="16.0" prefWidth="280.0" minWidth="260.0" maxWidth="320.0">
+                            <Label text="Preview File" styleClass="section-title side-title" />
+                            <VBox styleClass="card-panel preview-panel" spacing="12.0">
+                                <StackPane styleClass="preview-image-shell">
+                                    <ImageView fx:id="previewImageView" fitWidth="240.0" fitHeight="180.0" preserveRatio="true" />
+                                    <Label fx:id="previewStatusLabel" text="Waiting for review" styleClass="preview-status-badge" StackPane.alignment="BOTTOM_LEFT" />
+                                </StackPane>
+                                <VBox spacing="6.0">
+                                    <Label fx:id="previewTitleLabel" text="Untitled listing" styleClass="preview-title" wrapText="true" />
+                                    <Label fx:id="previewSellerLabel" text="Seller" styleClass="preview-seller" />
+                                    <Label fx:id="previewPriceLabel" text="Starting price: 0" styleClass="preview-price" />
+                                </VBox>
+                                <HBox spacing="10.0">
+                                    <Button text="Details" styleClass="ghost-btn small-ghost-btn" disable="true" />
+                                    <Button text="Pending" styleClass="primary-btn small-primary-btn" disable="true" />
+                                </HBox>
+                            </VBox>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+</BorderPane>

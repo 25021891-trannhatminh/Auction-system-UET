@@ -1,8 +1,8 @@
 package server.common.enums;
 
 public enum PaymentStatus {
-    PENDING,
-    COMPLETED,
-    FAILED,
-    REFUNDED
+    PENDING,    /* Đang xử lý */
+    COMPLETED,  /* Hoàn thành */
+    FAILED,     /* Thất bại */
+    REFUNDED    /* Hoàn tiền */
 }
