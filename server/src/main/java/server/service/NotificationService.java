@@ -1,6 +1,8 @@
 package server.service;
 
 import java.util.List;
+
+import server.common.entity.Notification;
 import server.common.model.NotificationEvent;
 import server.network.NotificationDispatcher;
 import server.repository.NotificationDAO;
@@ -13,14 +15,14 @@ public class NotificationService {
   // 1. Gửi thông báo mới (Real-time)
   public void push(int userId, String title, String message, NotificationType type,Integer relatedId) {
     // 1. Lưu vào Database (Để người dùng xem lại lịch sử sau này)
-    NotificationDTO dto = new NotificationDTO();
-    dto.setUserId(userId);
-    dto.setTitle(title);
-    dto.setContent(message);
-    dto.setType(type);
-    dto.setRead(false);
-    dto.setRelatedId(relatedId);
-    notificationDAO.insert(dto);
+    Notification notification = new Notification();
+    notification.setUserId(userId);
+    notification.setTitle(title);
+    notification.setContent(message);
+    notification.setType(type);
+    notification.setRead(false);
+    notification.setRelatedId(relatedId);
+    notificationDAO.insert(notification);
 
     NotificationDispatcher.getInstance().submit(
         new NotificationEvent(userId, title, message, type)
@@ -32,13 +34,13 @@ public class NotificationService {
   }
 
   // Lấy danh sách thông báo bỏ lỡ khi offline
-  public List<NotificationDTO> getUnreadNotifications(int userId) {
+  public List<Notification> getUnreadNotifications(int userId) {
     // Gọi DAO để lấy các thông báo có status 'isRead = false'
     return notificationDAO.getUnreadByUserId(userId);
   }
 
   // Lấy danh sách để hiển thị khi vừa mở App
-  public List<NotificationDTO> getAllForUser(int userId) {
+  public List<Notification> getAllForUser(int userId) {
     return notificationDAO.getByUserId(userId,50);
   }
 

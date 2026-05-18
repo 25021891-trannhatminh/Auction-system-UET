@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /*
@@ -47,12 +48,11 @@ public class AuctionManager {
     private static volatile AuctionManager instance;
     private static AuctionDAO auctionDAO;
 
-    private AuctionManager() {}
-
     /*
         Double-checked locking Singleton — thread-safe, lazy initialization.
         volatile đảm bảo visibility trên đa CPU core.
      */
+    private AuctionManager() {}
     public static AuctionManager getInstance() {
         if (instance == null) {
             synchronized (AuctionManager.class) {
@@ -78,6 +78,15 @@ public class AuctionManager {
     /** AutoBidEngine xử lý auto-bid */
     private final AutoBidEngine autoBidEngine = new AutoBidEngine();
 
+    /** Service layer callback — inject sau khi khởi tạo để tránh circular dependency
+     *  Circular dependency : A call B , B call A
+     *
+     *
+     */
+    private volatile Consumer<Auction> onAuctionClosedCallback;
+    public void setOnAuctionClosedCallback(Consumer<Auction> callback) {
+        this.onAuctionClosedCallback = callback;
+    }
     /*
     Global observers — nhận sự kiện từ MỌI phiên đấu giá.
       Ví dụ: NotificationService đăng ký ở đây để lưu notification vào DB.
@@ -269,7 +278,7 @@ public class AuctionManager {
      *   - finalLeader: ai đang dẫn đầu
      *
      *      Kết nối Server:
-     *   RequestHandler gọi method này thay vì placeBid() đơn giản.
+     *   ClientHandler gọi method này thay vì placeBid() đơn giản.
      *   Dùng BidResult.wasOutbidByAutoBid() để hiển thị cảnh báo cho client:
      *   "Bid thành công nhưng bạn đang bị vượt qua bởi auto-bid."
      */
@@ -314,14 +323,21 @@ public class AuctionManager {
                 "Cannot register auto-bid on auction with status: " + auction.getStatus());
         }
         // Nếu config mới của winner maxBid < CurrentPrice hoặc < maxBid cũ thì không cho đăng ký
-        String winnerAutoBidID = autoBidEngine.getWinnerId(auction.getId());
-        BigDecimal winnerMaxBid = autoBidEngine.peekWinner(auction.getId()).getMaxBid();
-        if (winnerAutoBidID.equals(bidder.getId())
-            && (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
-            || config.getMaxBid().compareTo(winnerMaxBid) < 0)) {
-            return null;
+        AutoBidConfig currentWinnerConfig = autoBidEngine.peekWinner(auction.getId());
+        if (currentWinnerConfig != null && currentWinnerConfig.getBidderId().equals(bidder.getId())) {
+            // Bidder đang là winner trong queue → không cho hạ maxBid
+            if (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
+                || config.getMaxBid().compareTo(currentWinnerConfig.getMaxBid()) < 0) {
+                return Optional.empty();
+            }
+            // Cho phép nâng maxBid → cập nhật config, không cần trigger
+            // (winner vẫn là winner, chỉ mở rộng giới hạn)
+            bidder.setAutoBid(config);
+            autoBidEngine.register(config, bidder);
+            return Optional.empty(); // không cần bid ngay vì đang dẫn đầu
         }
-        // Lưu config vào Bidder và Engine
+
+        // Bidder không phải winner hiện tại → đăng ký và trigger bình thường
         bidder.setAutoBid(config);
         autoBidEngine.register(config, bidder);
 
@@ -331,15 +347,7 @@ public class AuctionManager {
 
         // Trigger ngay sau đăng ký
         User currentLeader = auction.getCurrentLeader();
-
-        // Nếu chưa có ai đăng ký auto-bid hoặc bidder = winner mới → dùng currentLeader (winner cũ) làm trigger
-
-        BidTransaction autoBidTransaction;
-        if (autoBidEngine.getRegisteredCount(auction.getId()) > 1 && currentLeader != null){
-            autoBidTransaction = autoBidEngine.trigger(auction, currentLeader);
-        }else {
-            autoBidTransaction = autoBidEngine.trigger(auction, null);
-        }
+        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, currentLeader);
 
         if (autoBidTransaction != null) {
             System.out.printf("[AuctionManager] Immediate auto-bid after registration: %.0f by %s%n",
@@ -355,10 +363,32 @@ public class AuctionManager {
      * ⚠️  Tầng DAO: AutoBidDAO.updateStatus(auctionId, bidderId, CANCELED)
      */
     public void cancelAutoBid(String auctionId, User bidder) {
+        Auction auction = getAuctionByID(auctionId);
+        if (!auction.isRunning()){
+            // Nếu Auction chưa running thì hủy không cần trigger
+            bidder.cancelAutoBid(auctionId);
+            autoBidEngine.unregister(auctionId, bidder.getId());
+            return;
+        }
+        // Xét winner là autobid trong Engine + winner là người hủy
+        boolean wasWinner = autoBidEngine.peekWinner(auctionId) != null
+            && autoBidEngine.peekWinner(auctionId).getBidderId().equals(bidder.getId());
+
         bidder.cancelAutoBid(auctionId);
         autoBidEngine.unregister(auctionId, bidder.getId());
+
         System.out.printf("[AuctionManager] AutoBid canceled: %s on auction %s%n",
             bidder.getUsername(), auctionId.substring(0, 8));
+
+        // Nếu người bị cancel là winner cũ → trigger để có winner mới
+        if (wasWinner) {
+            // Truyền bidder đã cancel làm triggeringBidder để engine không xét người này
+            BidTransaction autoBidTx = autoBidEngine.trigger(auction, bidder);
+            if (autoBidTx != null) {
+                System.out.printf("[AuctionManager] New leader after cancel: %.2f by %s%n",
+                    autoBidTx.getAmount(), autoBidTx.getBidderName());
+            }
+        }
     }
 
     /**
@@ -433,6 +463,11 @@ public class AuctionManager {
                     if (auction.getStatus() == AuctionStatus.RUNNING) {
                         auction.closeSession();
                         autoBidEngine.cleanupAutoBids(auction.getId());
+
+                        // Notify service để persist DB
+                        if (onAuctionClosedCallback != null) {
+                            onAuctionClosedCallback.accept(auction);
+                        }
                         System.out.printf("[Scheduler] Auction %s CLOSED. Winner: %s, Price: %.2f%n",
                             auction.getId().substring(0, 8),
                             auction.getCurrentLeader() != null

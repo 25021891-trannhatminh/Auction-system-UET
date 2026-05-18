@@ -17,35 +17,40 @@ public class BidResultDTO {
    *   Client cần biết cả manualTransaction (bid thủ công) lẫn autoBidTransaction để hiển thị đúng:
    */
 
-    public final BidTransaction manualTx;     // Bid thủ công của người dùng
-    public final BidTransaction autoBidTx;    // Auto-bid của engine (null nếu không có)
-    public final BigDecimal finalPrice;   // Giá cuối sau tất cả
-    public final String         finalLeader;  // Username người đang dẫn đầu
+    public final BidTransaction manualTransaction;     // Bid thủ công của người dùng
+    public final BidTransaction autoBidTransaction;    // Auto-bid của engine (null nếu không có)
+    public final BigDecimal     finalPrice;   // Giá cuối sau tất cả
+    public final String         currentLeaderName;  // Username người đang dẫn đầu
 
-    public BidResultDTO(BidTransaction manualTx, BidTransaction autoBidTx,
-              BigDecimal finalPrice, String finalLeader) {
-      this.manualTx   = manualTx;
-      this.autoBidTx  = autoBidTx;
+    public BidResultDTO(BidTransaction manualTransaction, BidTransaction autoBidTransaction,
+              BigDecimal finalPrice, String currentLeaderName) {
+      this.manualTransaction   = manualTransaction;
+      this.autoBidTransaction  = autoBidTransaction;
       this.finalPrice = finalPrice;
-      this.finalLeader = finalLeader;
+      this.currentLeaderName = currentLeaderName;
     }
 
     /** True nếu manual bidder bị auto-bid của người khác vượt ngay sau khi bid */
     public boolean wasOutbidByAutoBid() {
-      return autoBidTx != null
-          && !autoBidTx.getBidderId().equals(manualTx.getBidderId());
+      return autoBidTransaction != null
+          && !autoBidTransaction.getBidderId().equals(manualTransaction.getBidderId());
     }
+
+  public BidTransaction getManualTransaction()  { return manualTransaction; }
+  public BidTransaction getAutoBidTransaction() { return autoBidTransaction; }
+  public BigDecimal     getFinalPrice()          { return finalPrice; }
+  public String         getCurrentLeaderName()   { return currentLeaderName; }
 
     @Override
     public String toString() {
       StringBuilder sb = new StringBuilder();
       sb.append(String.format("BidResult: manual=%.0f by %s",
-          manualTx.getAmount(), manualTx.getBidderName()));
-      if (autoBidTx != null) {
+          manualTransaction.getAmount(), manualTransaction.getBidderName()));
+      if (autoBidTransaction != null) {
         sb.append(String.format(" | auto=%.0f by %s",
-            autoBidTx.getAmount(), autoBidTx.getBidderName()));
+            autoBidTransaction.getAmount(), autoBidTransaction.getBidderName()));
       }
-      sb.append(String.format(" | final=%.0f leader=%s", finalPrice, finalLeader));
+      sb.append(String.format(" | final=%.0f leader=%s", finalPrice, currentLeaderName));
       return sb.toString();
     }
 

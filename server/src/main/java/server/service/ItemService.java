@@ -2,6 +2,7 @@ package server.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 import server.database.DBConnection;
 import server.repository.ItemDAO;
@@ -58,7 +59,7 @@ public class ItemService {
    * Creates an item and all related rows in a single transaction.
    *
    * @param sellerId      authenticated seller id
-   * @param categoryId    optional item category id; {@code null} is allowed
+   * @param category    optional item category id; {@code null} is allowed
    * @param name          item title
    * @param description   item description shown to admin/review flows
    * @param startingPrice starting price for the future auction
@@ -68,7 +69,7 @@ public class ItemService {
    * @return generated item id, or {@code -1} when validation/DB insert fails
    */
   public int createItem(int sellerId,
-                        Integer categoryId,
+                        ItemCategory category,
                         String name,
                         String description,
                         BigDecimal startingPrice,
@@ -89,7 +90,7 @@ public class ItemService {
     try (Connection conn = DBConnection.getConnection()){
       conn.setAutoCommit(false);
 
-      int itemId = itemDAO.addItem(conn, sellerId, categoryId, name, description, startingPrice, safeStatus);
+      int itemId = itemDAO.addItem(conn, sellerId, category, name, description, startingPrice, safeStatus);
       if (itemId <= 0) {
         conn.rollback();
         return -1;

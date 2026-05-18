@@ -1,7 +1,7 @@
 package server.repository;
 
 import server.common.enums.NotificationType;
-import server.common.model.NotificationDTO;
+import server.common.entity.Notification;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,10 +67,10 @@ public class NotificationDAO {
    *
    * @param userId ID của người dùng cần lấy thông báo.
    * @param limit  Số lượng thông báo tối đa muốn lấy (mới nhất lên đầu).
-   * @return Danh sách {@link NotificationDTO}, trả về list rỗng nếu không có dữ liệu.
+   * @return Danh sách {@link Notification}, trả về list rỗng nếu không có dữ liệu.
    */
-  public List<NotificationDTO> getByUserId(int userId, int limit) {
-    List<NotificationDTO> list = new ArrayList<>();
+  public List<Notification> getByUserId(int userId, int limit) {
+    List<Notification> list = new ArrayList<>();
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_USER_LIMIT)) {
 
@@ -92,7 +92,7 @@ public class NotificationDAO {
    * @param userId ID của người dùng.
    * @return Danh sách toàn bộ thông báo của người dùng đó.
    */
-  public List<NotificationDTO> getAllByUserId(int userId) {
+  public List<Notification> getAllByUserId(int userId) {
     return getByUserId(userId, Integer.MAX_VALUE);
   }
 
@@ -100,10 +100,10 @@ public class NotificationDAO {
    * Lấy danh sách các thông báo chưa đọc của người dùng.
    *
    * @param userId ID của người dùng.
-   * @return Danh sách các {@link NotificationDTO} có trạng thái {@code is_read = FALSE}.
+   * @return Danh sách các {@link Notification} có trạng thái {@code is_read = FALSE}.
    */
-  public List<NotificationDTO> getUnreadByUserId(int userId) {
-    List<NotificationDTO> list = new ArrayList<>();
+  public List<Notification> getUnreadByUserId(int userId) {
+    List<Notification> list = new ArrayList<>();
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_UNREAD)) {
 
@@ -121,9 +121,9 @@ public class NotificationDAO {
    * Lấy thông tin chi tiết của một thông báo theo ID.
    *
    * @param notifId ID của thông báo cần tìm.
-   * @return Đối tượng {@link NotificationDTO} hoặc {@code null} nếu không tồn tại.
+   * @return Đối tượng {@link Notification} hoặc {@code null} nếu không tồn tại.
    */
-  public NotificationDTO getById(int notifId) {
+  public Notification getById(int notifId) {
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_ID)) {
 
@@ -164,8 +164,8 @@ public class NotificationDAO {
    * @param type   Loại thông báo (ví dụ: AUCTION_END, NEW_BID, v.v.).
    * @return Danh sách thông báo tương ứng với loại yêu cầu.
    */
-  public List<NotificationDTO> getByType(int userId, NotificationType type) {
-    List<NotificationDTO> list = new ArrayList<>();
+  public List<Notification> getByType(int userId, NotificationType type) {
+    List<Notification> list = new ArrayList<>();
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_TYPE)) {
 
@@ -188,21 +188,21 @@ public class NotificationDAO {
   /**
    * Tạo một thông báo mới trong hệ thống.
    *
-   * @param dto Đối tượng chứa thông tin thông báo cần lưu.
+   * @param notification Đối tượng chứa thông tin thông báo cần lưu.
    * @return ID tự sinh của thông báo mới, hoặc {@code -1} nếu thất bại.
    */
-  public int insert(NotificationDTO dto) {
+  public int insert(Notification notification) {
     try (Connection conn = DBConnection.getConnection();
         PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
 
-      ps.setInt(1, dto.getUserId());
-      ps.setString(2, dto.getType().name());
-      ps.setString(3, dto.getTitle());
-      ps.setString(4, dto.getContent());
-      ps.setBoolean(5, dto.isRead());
+      ps.setInt(1, notification.getUserId());
+      ps.setString(2, notification.getType().name());
+      ps.setString(3, notification.getTitle());
+      ps.setString(4, notification.getContent());
+      ps.setBoolean(5, notification.isRead());
 
-      if (dto.getRelatedId() != null) {
-        ps.setInt(6, dto.getRelatedId());
+      if (notification.getRelatedId() != null) {
+        ps.setInt(6, notification.getRelatedId());
       } else {
         ps.setNull(6, Types.INTEGER);
       }
@@ -213,7 +213,7 @@ public class NotificationDAO {
         }
       }
     } catch (SQLException e) {
-      logger.error("insert notification failed for userId={}", dto.getUserId(), e);
+      logger.error("insert notification failed for userId={}", notification.getUserId(), e);
     }
     return -1;
   }
@@ -267,14 +267,14 @@ public class NotificationDAO {
   // ============================================================
 
   /**
-   * Ánh xạ một dòng dữ liệu từ {@link ResultSet} sang đối tượng {@link NotificationDTO}.
+   * Ánh xạ một dòng dữ liệu từ {@link ResultSet} sang đối tượng {@link Notification}.
    *
    * @param rs ResultSet đang trỏ tới dòng hiện tại.
-   * @return Đối tượng {@link NotificationDTO} đã được điền dữ liệu.
+   * @return Đối tượng {@link Notification} đã được điền dữ liệu.
    * @throws SQLException Nếu có lỗi khi truy xuất dữ liệu từ các cột SQL.
    */
-  private NotificationDTO mapRow(ResultSet rs) throws SQLException {
-    return new NotificationDTO(
+  private Notification mapRow(ResultSet rs) throws SQLException {
+    return new Notification(
         rs.getInt("notif_id"),
         rs.getInt("user_id"),
         NotificationType.valueOf(rs.getString("type")),
@@ -282,7 +282,7 @@ public class NotificationDAO {
         rs.getString("content"),
         rs.getBoolean("is_read"),
         (Integer) rs.getObject("related_id"),
-        rs.getTimestamp("created_at")
+        rs.getTimestamp("created_at").toLocalDateTime()
     );
   }
 }

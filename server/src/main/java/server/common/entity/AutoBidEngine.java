@@ -198,7 +198,7 @@ public class AutoBidEngine {
     }
 
     /**
-     Kích hoạt auto-bidding trigger sau một bid thành công.
+     Kích hoạt auto-bidding trigger sau một bid thành công, 1 autobidConfig đăng ký hoặc hủy trong queue, hoặc .
 
      /*
      *   Bước 1 — Xác định winner (top 1 queue):
@@ -219,14 +219,13 @@ public class AutoBidEngine {
             if (auctionQueue == null || auctionQueue.isEmpty()) return null;
 
             // Lấy tham chiếu cho top1 ,top2
-            winner = auctionQueue.poll();
-            if (auctionQueue.peek() != null){
-                secondWinner = auctionQueue.peek();
-                auctionQueue.add(winner);
-            }else secondWinner = null;
+            winner = auctionQueue.peek();
+            auctionQueue.poll();
+            secondWinner = auctionQueue.peek();
+            auctionQueue.add(winner);
         }
 
-        // Nếu trigger != null -> Check winner có phải Bidder vừa đặt Bid không?
+        // Nếu triggerBidder != null -> Check winner có phải Bidder vừa đặt Bid không?
         if (triggeringBidder != null && winner.getBidderId().equals(triggeringBidder.getId())) {
           return null;
         }
@@ -256,7 +255,7 @@ public class AutoBidEngine {
     public synchronized String getWinnerId(String auctionId){
         return peekWinner(auctionId).getBidderId();
     }
-    // Số lượng AutoBid đăng ký trong 1 Auction
+    /** Số lượng AutoBid đăng ký trong 1 Auction */
     public int getRegisteredCount(String auctionId) {
         PriorityQueue<AutoBidConfig> queue = AutoBidManager.get(auctionId);
         return queue == null ? 0 : queue.size();
