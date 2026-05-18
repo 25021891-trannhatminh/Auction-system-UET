@@ -1,12 +1,14 @@
 package server.common.model;
 
 import server.common.enums.NotificationType;
+import server.service.NotificationService;
+import server.network.NotificationDispatcher;
 
 /**
  * Đối tượng bất biến (immutable) đại diện cho một sự kiện thông báo cần gửi.
  *
- * <p>Được tạo bởi {@link server.service.NotificationService#push} và đưa vào
- * {@link server.network.NotificationDispatcher} để gửi real-time đến client.
+ * <p>Được tạo bởi {@link NotificationService#push} và đưa vào
+ * {@link NotificationDispatcher} để gửi real-time đến client.
  * Chỉ chứa đủ thông tin để gửi qua socket — không chứa dữ liệu nhạy cảm.</p>
  */
 public class NotificationEvent {

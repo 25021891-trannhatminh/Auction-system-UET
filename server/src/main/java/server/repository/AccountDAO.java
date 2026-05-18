@@ -14,6 +14,8 @@ import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import server.common.entity.Account;
+import server.common.entity.Admin;
 import server.common.entity.User;
 import server.common.enums.AccountRole;
 import server.common.enums.UserStatus;
@@ -186,7 +188,7 @@ public class AccountDAO {
      * @param userId ID người dùng
      * @return đối tượng User hoặc null nếu không tồn tại
      */
-    public User getById(int userId) {
+    public User getUserById(int userId) {
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_GET_BY_ID)) {
@@ -202,6 +204,33 @@ public class AccountDAO {
 
         } catch (SQLException e) {
             logger.error("getById failed for userId={}", userId, e);
+        }
+
+        return null;
+    }
+
+    /**
+     * Lấy thông tin admin theo ID.
+     *
+     * @param adminId ID người dùng
+     * @return đối tượng Admin hoặc null nếu không tồn tại
+     */
+    public Admin getAdminById(int adminId) {
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(SQL_GET_BY_ID)) {
+
+            ps.setInt(1, adminId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+
+                if (rs.next()) {
+                    return getAdminByRow(rs);
+                }
+            }
+
+        } catch (SQLException e) {
+            logger.error("getById failed for userId={}", adminId, e);
         }
 
         return null;
@@ -291,5 +320,23 @@ public class AccountDAO {
             5.0,
             BigDecimal.ZERO
         );
+    }
+
+    private Admin getAdminByRow(ResultSet rs) throws SQLException {
+        Timestamp lastLoginTs = rs.getTimestamp("last_login");
+        AccountRole role = AccountRole.valueOf(rs.getString("role"));
+        if (role.equals(AccountRole.ADMIN)) {
+            return new Admin(String.valueOf(rs.getInt("user_id")),
+                rs.getTimestamp("created_at").toLocalDateTime(),
+                rs.getString("username"),
+                rs.getString("email"),
+                rs.getString("password"),
+                rs.getString("full_name"),
+                rs.getString("phone"),
+                UserStatus.valueOf(rs.getString("status")),
+                lastLoginTs != null ? lastLoginTs.toLocalDateTime() : null
+            );
+        }
+        return null;
     }
 }

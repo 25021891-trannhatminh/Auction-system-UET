@@ -29,6 +29,13 @@ public class User extends Account {
         this.autoBidMap = new HashMap<>();
     }
 
+    public User (User other){
+        super(other);
+        this.rating        = other.rating;
+        this.itemIDs = new ArrayList<>(other.itemIDs);
+        this.balance    = other.balance;
+        this.autoBidMap = new HashMap<>(other.autoBidMap);
+    }
     /* Constructor dùng khi load từ DB */
     public User(String id, LocalDateTime createdAt,
                 String username, String email, String passwordHash,

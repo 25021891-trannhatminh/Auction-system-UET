@@ -30,22 +30,29 @@ import server.network.ClientManager;
 import server.repository.AuctionDAO;
 import server.repository.AccountDAO;
 import server.repository.BidTransactionDAO;
+import server.service.AuctionService;
 import server.service.ItemService;
 import server.service.ServerAuthService;
 
 public class ClientHandler implements Runnable {
+    private static final int GLOBAL_USER_ID = -1;
 
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
-    private String username = "Guest"; // Tên hiển thị mặc định
-    private int userId = -1 ;
 
-    private AccountDAO accountDAO = new AccountDAO();
+    // Infor Account connect với Server
+    private String username = "Guest"; // Tên hiển thị mặc định
+    private int userId = GLOBAL_USER_ID ;   // Default UserID
+
+    // DAOs (Refactor sau không cho DAO vào Handler)
     private BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
     private AuctionDAO auctionDAO = new AuctionDAO();
+
+    // Services
     private final ServerAuthService authService = new ServerAuthService();
     private final ItemService itemService = new ItemService();
+    private final AuctionService auctionService = new AuctionService();
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -68,7 +75,7 @@ public class ClientHandler implements Runnable {
             while ((msg = in.readLine()) != null) {
                 handle(msg);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.out.println("Client " + username + " disconnected");
         } finally {
             if(this.userId != -1){
@@ -100,12 +107,13 @@ public class ClientHandler implements Runnable {
         // Xử lý request
         switch (request[0]) {
             case "LOGIN":
+                // Format: LOGIN <indentifier> <password>
                 String identifier = request[1]; // Có thể là username hoặc email theo UserDAO
                 String password = request[2];
                 send(authService.login(request));
 
-                // User login -> đăng ký ClientHandler support luồng của User này
-                User loginUser = accountDAO.login(identifier, password);
+                // User login -> đăng ký ClientHandler cho ClientManager support luồng của User này
+                User loginUser = authService.getUser(identifier,password);
                 if (loginUser != null) {
                     this.userId = Integer.parseInt(loginUser.getId());
                     this.username = loginUser.getUsername();
@@ -180,6 +188,52 @@ public class ClientHandler implements Runnable {
                 }
                 break;
 
+            case "ADMIN_BAN_USER":
+                // Format: ADMIN_BAN_USER <UserID> <Reason>
+                if (request.length > 2) {
+                    int targetUserId = Integer.parseInt(request[1]);
+                    // Tạo 1 Array từ request[2] đến hết + nối các element trong Array bởi " " => String reason
+                    String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
+                    boolean banUserSuccess = auctionService.getAdminService().banUser(this.userId, targetUserId, reason);
+                    send(banUserSuccess ? "ADMIN_BAN_SUCCESS" : "ADMIN_BAN_FAIL");
+                }
+                break;
+
+            case "ADMIN_UNBAN_USER":
+                if (request.length > 1) {
+                    int targetUserId = Integer.parseInt(request[1]);
+                    boolean unbanUserSuccess = auctionService.getAdminService().unbanUser(this.userId, targetUserId);
+                    send(unbanUserSuccess ? "ADMIN_UNBAN_SUCCESS" : "ADMIN_UNBAN_FAIL");
+                } else {
+                    send("ADMIN_UNBAN_FAIL INVALID_FORMAT");
+                }
+                break;
+
+            case "ADMIN_FORCE_CLOSE":
+                if (request.length > 2) {
+                    String auctionId = request[1];
+                    String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
+                    boolean forceCloseSuccess = auctionService.getAdminService().forceCloseAuction(this.userId, auctionId, reason);
+                    send(forceCloseSuccess ? "ADMIN_CLOSE_SUCCESS" : "ADMIN_CLOSE_FAIL");
+                }
+                break;
+
+            case "ADMIN_APPROVE_ITEM":
+                if (request.length > 1) {
+                    int itemId = Integer.parseInt(request[1]);
+                    boolean approveItemSuccess = auctionService.getAdminService().approveItem(this.userId, itemId);
+                    send(approveItemSuccess ? "ADMIN_APPROVE_SUCCESS" : "ADMIN_APPROVE_FAIL");
+                }
+                break;
+
+            case "ADMIN_REJECT_ITEM":
+                if (request.length > 2) {
+                    int itemId = Integer.parseInt(request[1]);
+                    String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
+                    boolean rejectItemSuccess = auctionService.getAdminService().rejectItem(this.userId, itemId, reason);
+                    send(rejectItemSuccess ? "ADMIN_REJECT_SUCCESS" : "ADMIN_REJECT_FAIL");
+                }
+                break;
             default:
                 send("UNKNOWN_COMMAND");
                 break;

@@ -453,7 +453,7 @@ public class AuctionDAO {
             (int)rs.getShort("snipe_window_seconds"),
             (int)rs.getShort("snipe_extension_seconds"),
             AuctionStatus.valueOf(rs.getString("status")),
-            accountDAO.getById(rs.getInt("current_winner_id"))
+            accountDAO.getUserById(rs.getInt("current_winner_id"))
         );
     }
 

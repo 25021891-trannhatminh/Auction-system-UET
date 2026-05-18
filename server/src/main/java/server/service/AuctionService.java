@@ -41,13 +41,18 @@ public class AuctionService {
   // Singleton domain manager
   private final AuctionManager auctionManager = AuctionManager.getInstance();
 
+  // Support
   private final ObserverToNotificationEventAdapter domainAdapter;
+  private final AdminService adminService;
 
   public AuctionService() {
     this.domainAdapter = new ObserverToNotificationEventAdapter(this);
 
     // Đăng ký adapter vào AuctionManager ngay khi tạo service
     AuctionManager.getInstance().addGlobalObserver(domainAdapter);
+
+    // Đăng ký AdminService: Quyền Admin trong Auction
+    this.adminService = new AdminService(this);
 
     logger.info("AuctionService initialized with ObserverToNotificationEventAdapter");
   }
@@ -96,7 +101,7 @@ public class AuctionService {
 
     for (AutoBidConfig config : configs) {
       // Load User object để engine có thể gọi auction.placeBid(user, ...)
-      User bidder = accountDAO.getById(Integer.parseInt(config.getBidderId()));
+      User bidder = accountDAO.getUserById(Integer.parseInt(config.getBidderId()));
       if (bidder == null) {
         logger.warn("loadAutoBidsForAuction() — Bidder {} not found, skipping config",
             config.getBidderId());
@@ -541,6 +546,9 @@ public class AuctionService {
     notifySystemNotification(-1, title, message);
   }
 
+  public AdminService getAdminService() {
+    return adminService;
+  }
   public void notifyBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
     listeners.forEach(l -> l.onBidPlaced(bidderId, auctionId, itemName, amount));
   }

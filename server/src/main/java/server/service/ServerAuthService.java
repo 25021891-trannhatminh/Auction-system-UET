@@ -103,4 +103,8 @@ public class ServerAuthService {
         .replace("\n", "\\n")
         .replace("\r", "\\r");
   }
+  // Tạo ra 1 clone User từ login
+  public User getUser(String identifier, String password){
+    return accountDAO.login(identifier, password);
+  }
 }

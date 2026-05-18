@@ -40,6 +40,17 @@ public abstract class Account extends Entity {
     this.lastLogin    = null;
   }
 
+  protected Account(Account other){
+    super(other.getId(),other.getCreatedAt());
+    this.username     = other.username;
+    this.email        = other.email;
+    this.passwordHash = other.passwordHash;
+    this.fullName     = other.fullName;
+    this.phone        = other.phone;
+    this.role         = other.role;
+    this.status     = other.status;
+    this.lastLogin    = other.lastLogin;
+  }
   /* Constructor dùng khi load từ DB */
   protected Account(String id, LocalDateTime createdAt,
                  String username, String email, String passwordHash,
