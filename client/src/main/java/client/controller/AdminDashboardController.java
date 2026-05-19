@@ -5,11 +5,13 @@ import client.enums.AccountStatus;
 import client.enums.SystemRole;
 import client.model.User;
 import client.service.NetworkManager;
+import client.service.NotificationUIHandler;
 import client.service.SessionManager;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
@@ -52,19 +54,32 @@ public class AdminDashboardController extends BaseDashboardController {
     private List<AdminRow> incomingItemRows = new ArrayList<>();
     private List<AdminRow> incomingAuctionRows = new ArrayList<>();
 
-    private NetworkManager adminNetworkManager;
     private boolean usersLoaded;
     private boolean itemsLoaded;
     private boolean auctionsLoaded;
     private String currentSectionKey = "dashboard";
     private String activeFilter = "All";
 
+    private NetworkManager adminNetworkManager;
+    private Consumer<String> adminNetworkHandler;
+    private Consumer<String> adminDataFeedHandler;
 
     @FXML
     @Override
     protected void initialize() {
         super.initialize();
+        this.networkManager = NetworkManager.getInstance();
+        this.adminNetworkHandler = msg -> {
+            if (msg != null && msg.startsWith("PUSH_NOTIF|")) {
+                javafx.application.Platform.runLater(() -> {
+                    new NotificationUIHandler().handle(msg);
+                });
+            }
+        };
+        // Thêm vào danh sách lắng nghe chung của hệ thống
+        this.networkManager.addMessageHandler(adminNetworkHandler);
 
+        // Giữ nguyên logic giao diện của bạn
         if (searchField != null) {
             searchField.textProperty().addListener((observable, oldValue, newValue) -> {
                 String query = newValue == null ? "" : newValue.trim();
@@ -137,8 +152,16 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void setupAdminDataFeed() {
-        adminNetworkManager = new NetworkManager();
-        adminNetworkManager.setMessageHandler(this::handleAdminServerMessage);
+        adminNetworkManager = NetworkManager.getInstance();
+        this.adminDataFeedHandler = message -> {
+            // Chỉ xử lý tin nhắn dữ liệu nghiệp vụ của Admin, bỏ qua nếu đó là gói thông báo đẩy PUSH_NOTIF|
+            if (message != null && !message.startsWith("PUSH_NOTIF|")) {
+                Platform.runLater(() -> this.handleAdminServerMessage(message));
+            }
+        };
+
+        // SỬA: Thêm vào danh sách lắng nghe chung để chạy song song mượt mà, không lo bị nuốt tin
+        this.adminNetworkManager.addMessageHandler(adminDataFeedHandler);
         requestLiveAdminData();
     }
 

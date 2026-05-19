@@ -25,14 +25,14 @@ public class ItemAttributeDAO {
 
   private static final String SQL_SELECT_BY_ITEM = """
         SELECT attr_id, item_id, attr_key, attr_value
-        FROM ITEM_ATTRIBUTES
+        FROM item_attributes
         WHERE item_id = ?
         ORDER BY attr_key ASC
         """;
 
   private static final String SQL_SELECT_BY_KEY = """
         SELECT attr_id, item_id, attr_key, attr_value
-        FROM ITEM_ATTRIBUTES
+        FROM item_attributes
         WHERE item_id = ? AND attr_key = ?
         """;
 

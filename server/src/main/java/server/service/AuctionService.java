@@ -152,10 +152,11 @@ public class AuctionService {
     // Cập nhật trạng thái item → IN_AUCTION trên cả 2 tầng
     if (item != null) {
       item.setStatus(ItemStatus.IN_AUCTION); // Khóa trạng thái trên RAM luôn
+      // Bước 3: Cập nhật trạng thái item → IN_AUCTION
+      itemDAO.updateStatus(Integer.parseInt(item.getId()), ItemStatus.IN_AUCTION);
     }
 
     // Bước 3: Cập nhật trạng thái item → IN_AUCTION
-    itemDAO.updateStatus(Integer.parseInt(item.getId()), ItemStatus.IN_AUCTION);
 
     logger.info("createAuction() — Auction {} created. Item {} → IN_AUCTION",
         auction.getId(), item.getId());
@@ -422,7 +423,15 @@ public class AuctionService {
 
     // Lấy trạng thái mới sau khi force close
     Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
-    auctionOpt.ifPresent(this::onAuctionClosed);
+    auctionOpt.ifPresent(auction -> {
+      if (auction.getStatus() == AuctionStatus.FINISHED
+          || auction.getStatus() == AuctionStatus.CANCELED) {
+        onAuctionClosed(auction);
+      } else {
+        logger.warn("forceCloseAuction() — Auction {} still in status {} after force close, skipping onAuctionClosed.",
+            auctionId, auction.getStatus());
+      }
+    });
   }
 
 

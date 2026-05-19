@@ -3,9 +3,12 @@ package server.service;
 
 import server.common.entity.User;
 import server.repository.AccountDAO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ServerAuthService {
 
+  private static final Logger logger = LoggerFactory.getLogger(ServerAuthService.class);
   private final AccountDAO accountDAO = new AccountDAO();
 
   /**
@@ -16,9 +19,18 @@ public class ServerAuthService {
     if (request.length < 3) {
       return "LOGIN_FAIL MISSING_CREDENTIALS";
     }
+    String identifier = request[1];
+    String password   = request[2];
+    if (identifier == null || identifier.isBlank() || password == null || password.isBlank()) {
+      return "LOGIN_FAIL MISSING_CREDENTIALS";
+    }
+    return login(identifier, password);
+  }
 
-    String identifier = request[1]; // Có thể là username hoặc email theo UserDAO
-    String password = request[2];
+  /**
+   * Xử lý đăng nhập bằng identifier + password
+   */
+  public String login(String identifier, String password) {
     try {
       User user = accountDAO.login(identifier, password);
       if (user != null) {
@@ -36,28 +48,7 @@ public class ServerAuthService {
         return "LOGIN_FAIL INVALID_AUTH";
       }
     } catch (Exception e) {
-      e.printStackTrace();
-      return "LOGIN_FAIL SERVER_ERROR";
-    }
-  }
-  public String login(String identifier, String password) {
-    try {
-      User user = accountDAO.login(identifier, password);
-      if (user != null) {
-        return "LOGIN_SUCCESS " + fields(
-            Integer.parseInt(user.getId()),
-            user.getUsername(),
-            user.getEmail(),
-            user.getFullName(),
-            user.getPhone(),
-            user.getRole() != null ? user.getRole().name() : "USER",
-            user.getStatus() != null ? user.getStatus().name() : "ACTIVE"
-        );
-      } else {
-        return "LOGIN_FAIL INVALID_AUTH";
-      }
-    } catch (Exception e) {
-      e.printStackTrace();
+      logger.error("login() — Server error for identifier={}", identifier, e);
       return "LOGIN_FAIL SERVER_ERROR";
     }
   }
@@ -81,7 +72,7 @@ public class ServerAuthService {
       boolean success = accountDAO.register(registerUser,registerPass,registerEmail,registerFullName,registerPhone);
       return success ? "REGISTER_SUCCESS" : "REGISTER_FAIL EXIST_OR_ERROR";
     } catch (Exception e) {
-      e.printStackTrace();
+      logger.error("register() — Server error for user={}", registerUser, e);
       return "REGISTER_FAIL SERVER_ERROR";
     }
   }

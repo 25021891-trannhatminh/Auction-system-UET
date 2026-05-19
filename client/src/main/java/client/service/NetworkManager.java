@@ -5,14 +5,17 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
  * Maintains the TCP connection between the JavaFX client and auction server.
  */
 public class NetworkManager {
+    private static NetworkManager instance;
 
     private static final String HOST = ServerFinder.find();
     private static final int PORT = 6666;
@@ -26,7 +29,7 @@ public class NetworkManager {
     private BufferedReader in;
     private PrintWriter out;
 
-    private Consumer<String> messageHandler;
+    private final List<Consumer<String>> handlers = new CopyOnWriteArrayList<>();
 
     private volatile boolean connected = false;
     private volatile boolean shouldReconnect = true;
@@ -42,13 +45,24 @@ public class NetworkManager {
         startHeartbeat();
     }
 
+    public static synchronized NetworkManager getInstance() {
+        if (instance == null) {
+            instance = new NetworkManager();
+        }
+        return instance;
+    }
+
     /**
      * Registers a callback for server messages.
      *
      * @param handler callback invoked for each non-heartbeat server message
      */
-    public void setMessageHandler(Consumer<String> handler) {
-        this.messageHandler = handler;
+    public void addMessageHandler(Consumer<String> handler) {
+        handlers.add(handler);
+    }
+
+    public void removeMessageHandler(Consumer<String> handler) {
+        handlers.remove(handler);
     }
 
     /**
@@ -118,8 +132,8 @@ public class NetworkManager {
                     continue;
                 }
 
-                if (messageHandler != null) {
-                    messageHandler.accept(msg);
+                for (Consumer<String> handler : handlers) {
+                    handler.accept(msg);
                 }
             }
         } catch (Exception e) {

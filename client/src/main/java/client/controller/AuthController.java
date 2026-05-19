@@ -10,6 +10,7 @@ import client.service.SessionManager;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -41,9 +42,6 @@ public class AuthController {
     private static final String OVERLAY_IMAGE_PATH = "/client/images/overlay.jpg";
     private static final String OVERLAY_IMAGE_FALLBACK_PATH = "/client/images/bg.png";
 
-    private NetworkManager networkManager;
-    private AuthService authService;
-
     @FXML private AnchorPane overlayPane;
     @FXML private StackPane overlayViewport;
     @FXML private ImageView overlayImageView;
@@ -69,13 +67,18 @@ public class AuthController {
     private boolean signInMode = true;
     private boolean animating = false;
 
+    private NetworkManager networkManager;
+    private AuthService authService;
+    private Consumer<String> authResponseHandler;
+
     /**
      * Initializes the authentication form, network connection, and overlay state.
      */
     @FXML
     public void initialize() {
-        networkManager = new NetworkManager();
-        networkManager.setMessageHandler(this::handleServerResponse);
+        // Lấy instance duy nhất thay vì tạo mới tránh trùng lặp connection
+        this.networkManager = NetworkManager.getInstance();
+        networkManager.addMessageHandler(this::handleServerResponse);
         authService = new AuthService(networkManager);
 
         setupOverlayViewport();
@@ -113,6 +116,7 @@ public class AuthController {
         }
         return imageUrl != null ? new Image(imageUrl.toExternalForm()) : null;
     }
+
 
     private void switchMode(boolean toSignIn) {
         if (animating || signInMode == toSignIn) {
@@ -440,7 +444,15 @@ public class AuthController {
         return value == null || value.isBlank() ? fallbackValue : value;
     }
 
+    private void cleanupAuthHandler() {
+        if (networkManager != null && authResponseHandler != null) {
+            networkManager.removeMessageHandler(authResponseHandler);
+            authResponseHandler = null; // Reset để tránh gỡ bỏ nhiều lần
+        }
+    }
+
     private void switchScene(String fxmlPath, String title, User user) throws Exception {
+        cleanupAuthHandler();
         FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
         Parent root = loader.load();
 
