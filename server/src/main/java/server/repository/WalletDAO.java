@@ -37,7 +37,7 @@ public class WalletDAO {
         SQL_SELECT_BASE + " WHERE user_id = ?";
 
     private static final String SQL_SELECT_BALANCE =
-        "SELECT balance FROM WALLETS WHERE wallet_id = ?";
+        "SELECT balance FROM WALLETS WHERE user_id = ?";
 
     private static final String SQL_INSERT =
         "INSERT INTO WALLETS (user_id, balance) VALUES (?, 0.00)";
@@ -48,7 +48,7 @@ public class WalletDAO {
     private static final String SQL_WITHDRAW = """
         UPDATE WALLETS 
         SET balance = balance - ?, updated_at = NOW()
-        WHERE wallet_id = ? AND balance >= ?
+        WHERE user_id = ? AND balance >= ?
         """;
 
     // ============================================================

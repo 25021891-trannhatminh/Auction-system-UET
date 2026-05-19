@@ -39,10 +39,10 @@ public class User extends Account {
     /* Constructor dùng khi load từ DB */
     public User(String id, LocalDateTime createdAt,
                 String username, String email, String passwordHash,
-                String fullName, String phone,
+                String fullName, String phone, AccountRole role,
                 UserStatus status, LocalDateTime lastLogin) {
         super(id, createdAt, username, email, passwordHash, fullName, phone,
-            AccountRole.USER, status, lastLogin);
+            role, status, lastLogin);
         this.rating        = 0.0;
         this.itemIDs = new ArrayList<>();
         this.balance    = BigDecimal.ZERO;
@@ -50,10 +50,10 @@ public class User extends Account {
     }
     public User(String id, LocalDateTime createdAt,
                    String username, String email, String passwordHash,
-                   String fullName, String phone,
+                   String fullName, String phone, AccountRole role,
                    UserStatus status, LocalDateTime lastLogin,double rating, BigDecimal balance) {
         super(id, createdAt, username, email, passwordHash, fullName, phone,
-            AccountRole.USER, status, lastLogin);
+            role, status, lastLogin);
         this.rating        = rating;
         this.itemIDs = new ArrayList<>();
         this.balance    = balance;
