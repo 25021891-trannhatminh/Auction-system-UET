@@ -29,7 +29,8 @@ public class ServerAuthService {
             user.getFullName(),
             user.getPhone(),
             user.getRole() != null ? user.getRole().name() : "USER",
-            user.getStatus() != null ? user.getStatus().name() : "ACTIVE"
+            user.getStatus() != null ? user.getStatus().name() : "ACTIVE",
+            "true"
         );
       } else {
         return "LOGIN_FAIL INVALID_AUTH";

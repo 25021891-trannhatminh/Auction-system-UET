@@ -308,6 +308,7 @@ public class AccountDAO {
      */
     private User getUserByRow(ResultSet rs) throws SQLException {
         Timestamp lastLoginTs = rs.getTimestamp("last_login");
+        AccountRole role = AccountRole.valueOf(rs.getString("role"));
         return new User(String.valueOf(rs.getInt("user_id")),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
@@ -315,6 +316,7 @@ public class AccountDAO {
             rs.getString("password"),
             rs.getString("full_name"),
             rs.getString("phone"),
+            role,
             UserStatus.valueOf(rs.getString("status")),
             lastLoginTs != null ? lastLoginTs.toLocalDateTime() : null,
             5.0,
