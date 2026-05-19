@@ -46,7 +46,7 @@ public class ItemService {
         VALUES (?, ?, ?)
         """;
 
-  private static final String SQL_SELECT_ADMINS = "SELECT user_id FROM users WHERE role = 'ADMIN'";
+  private static final String SQL_SELECT_ADMINS = "SELECT user_id FROM accounts WHERE role = 'ADMIN'";
 
   private static final String SQL_INSERT_NOTIFICATION = """
         INSERT INTO notifications (user_id, type, title, content, is_read, related_id)
@@ -59,7 +59,7 @@ public class ItemService {
    * Creates an item and all related rows in a single transaction.
    *
    * @param sellerId      authenticated seller id
-   * @param category    optional item category id; {@code null} is allowed
+   * @param category      item category enum matching database/01_schema.sql
    * @param name          item title
    * @param description   item description shown to admin/review flows
    * @param startingPrice starting price for the future auction
@@ -77,8 +77,8 @@ public class ItemService {
                         List<String> imageUrls,
                         Map<String, String> attributes) {
 
-    if (sellerId <= 0 || name == null || name.isBlank() || startingPrice == null
-        || startingPrice.compareTo(BigDecimal.ZERO) < 0) {
+    if (sellerId <= 0 || category == null || name == null || name.isBlank() || startingPrice == null
+        || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
       return -1;
     }
 

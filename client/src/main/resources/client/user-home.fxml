@@ -97,7 +97,6 @@
                                         </VBox>
 
                                         <TextField fx:id="searchField" promptText="Search..." styleClass="search-field" />
-                                        <Button fx:id="primaryActionButton" mnemonicParsing="false" styleClass="action-btn" text="Browse Auctions" />
                                     </children>
                                 </HBox>
 
@@ -163,5 +162,15 @@
                 </ScrollPane>
             </children>
         </HBox>
+
+        <Button fx:id="createListingFloatingButton"
+                managed="false"
+                mnemonicParsing="false"
+                onAction="#handleOpenCreateListing"
+                styleClass="floating-create-btn"
+                text="Create Listing"
+                visible="false"
+                AnchorPane.bottomAnchor="24.0"
+                AnchorPane.rightAnchor="28.0" />
     </children>
 </AnchorPane>

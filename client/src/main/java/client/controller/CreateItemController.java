@@ -19,6 +19,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextArea;
@@ -39,11 +40,13 @@ import javafx.stage.Stage;
 public class CreateItemController {
 
   private static final DecimalFormat PREVIEW_PRICE = new DecimalFormat("#,##0.##");
+  private static final int MAX_IMAGE_COUNT = 5;
 
   @FXML private Label sellerNameLabel;
   @FXML private Label sellerRoleLabel;
   @FXML private Label sellerInitialsLabel;
   @FXML private Label breadcrumbLabel;
+  @FXML private ComboBox<String> categoryComboBox;
   @FXML private TextField titleField;
   @FXML private TextField priceField;
   @FXML private TextField sizeField;
@@ -59,6 +62,7 @@ public class CreateItemController {
   @FXML private Label previewSellerLabel;
   @FXML private Label previewPriceLabel;
   @FXML private Label previewStatusLabel;
+  @FXML private Label previewImageCountLabel;
   @FXML private Label fileNameLabel;
   @FXML private Label helperTextLabel;
   @FXML private Label messageLabel;
@@ -67,6 +71,7 @@ public class CreateItemController {
 
   private final ToggleGroup purchaseTypeGroup = new ToggleGroup();
   private final List<Path> persistedImagePaths = new ArrayList<>();
+  private int currentPreviewImageIndex;
   private NetworkManager networkManager;
 
   /**
@@ -75,12 +80,23 @@ public class CreateItemController {
   @FXML
   public void initialize() {
     PREVIEW_PRICE.setGroupingUsed(true);
+    setupCategoryOptions();
     setupPurchaseTypeGroup();
     bindPreview();
+    updatePreviewNavigation();
     loadUserMeta();
 
     networkManager = new NetworkManager();
     networkManager.setMessageHandler(this::handleServerMessage);
+  }
+
+
+  /**
+   * Loads item categories from the enum values used by database/01_schema.sql.
+   */
+  private void setupCategoryOptions() {
+    categoryComboBox.getItems().setAll("ART", "VEHICLE", "ELECTRONIC");
+    categoryComboBox.getSelectionModel().select("ART");
   }
 
   /**
@@ -156,18 +172,44 @@ public class CreateItemController {
     }
 
     try {
+      List<File> limitedFiles = limitSelectedFiles(files);
       persistedImagePaths.clear();
-      persistedImagePaths.addAll(persistSelectedFiles(files));
-      updatePreviewImage(persistedImagePaths.get(0));
-      fileNameLabel.setText(files.size() == 1
-          ? files.get(0).getName()
-          : files.get(0).getName() + " +" + (files.size() - 1) + " more");
+      persistedImagePaths.addAll(persistSelectedFiles(limitedFiles));
+      currentPreviewImageIndex = 0;
+      updatePreviewImage(currentPreviewImageIndex);
+      fileNameLabel.setText(limitedFiles.size() == 1
+          ? limitedFiles.get(0).getName()
+          : limitedFiles.get(0).getName() + " +" + (limitedFiles.size() - 1) + " more");
+      updatePreviewNavigation();
       helperTextLabel.setText("Images copied to local uploads storage and ready for submit.");
-      showNeutralMessage("Ảnh item đã sẵn sàng để gửi cùng listing.");
+      showNeutralMessage(files.size() > MAX_IMAGE_COUNT
+          ? "Chỉ lấy 5 ảnh đầu tiên để gửi cùng listing."
+          : "Ảnh item đã sẵn sàng để gửi cùng listing.");
     } catch (IOException e) {
       showErrorMessage("Không thể lưu ảnh đã chọn. Vui lòng thử lại.");
       e.printStackTrace();
     }
+  }
+
+  @FXML
+  private void handlePreviousImage() {
+    if (persistedImagePaths.isEmpty()) {
+      return;
+    }
+    currentPreviewImageIndex = (currentPreviewImageIndex - 1 + persistedImagePaths.size())
+        % persistedImagePaths.size();
+    updatePreviewImage(currentPreviewImageIndex);
+    updatePreviewNavigation();
+  }
+
+  @FXML
+  private void handleNextImage() {
+    if (persistedImagePaths.isEmpty()) {
+      return;
+    }
+    currentPreviewImageIndex = (currentPreviewImageIndex + 1) % persistedImagePaths.size();
+    updatePreviewImage(currentPreviewImageIndex);
+    updatePreviewNavigation();
   }
 
   /**
@@ -206,6 +248,12 @@ public class CreateItemController {
     String title = normalize(titleField.getText());
     String description = normalize(descriptionArea.getText());
     String price = normalize(priceField.getText());
+    String category = categoryComboBox.getValue() == null ? "" : categoryComboBox.getValue().trim();
+
+    if (category.isBlank()) {
+      showErrorMessage("Vui lòng chọn category cho item.");
+      return;
+    }
 
     if (title.isBlank()) {
       showErrorMessage("Vui lòng nhập title cho item.");
@@ -213,8 +261,8 @@ public class CreateItemController {
     }
 
     BigDecimal parsedPrice = parsePrice(price);
-    if (parsedPrice == null || parsedPrice.compareTo(BigDecimal.ZERO) < 0) {
-      showErrorMessage("Price phải là số hợp lệ và không âm.");
+    if (parsedPrice == null || parsedPrice.compareTo(BigDecimal.ZERO) <= 0) {
+      showErrorMessage("Price phải là số hợp lệ và lớn hơn 0.");
       return;
     }
 
@@ -224,6 +272,7 @@ public class CreateItemController {
 
     String payload = fields(
         String.valueOf(sellerId),
+        category,
         title,
         description,
         parsedPrice.toPlainString(),
@@ -297,26 +346,18 @@ public class CreateItemController {
     currencyField.clear();
     descriptionArea.clear();
     persistedImagePaths.clear();
+    currentPreviewImageIndex = 0;
+    categoryComboBox.getSelectionModel().select("ART");
     fileNameLabel.setText("No file selected yet");
-    helperTextLabel.setText("PNG, JPG, JPEG, WEBP - stored locally before submit.");
+    helperTextLabel.setText("PNG, JPG, JPEG, WEBP - up to 5 images.");
     previewImageView.setImage(null);
+    updatePreviewNavigation();
     previewTitleLabel.setText("Untitled listing");
     previewPriceLabel.setText("Starting price: 0");
     previewStatusLabel.setText("Waiting for review");
     timedAuctionRadio.setSelected(true);
   }
 
-  /**
-   * Copy ảnh được chọn sang thư mục local ổn định trước khi gửi path lên server.
-   *
-   * <p>Điểm cần lưu ý: đây là local-file URI, phù hợp khi client/server chạy cùng môi
-   * trường dev. Nếu deploy thật nhiều máy, cần thay bằng upload lên storage chung rồi
-   * lưu URL public/internal vào {@code item_images.url}.</p>
-   *
-   * @param files danh sách file user chọn
-   * @return danh sách path sau khi copy
-   * @throws IOException nếu không tạo/copy được file
-   */
   /**
    * Copy ảnh được chọn vào thư mục local upload của app.
    *
@@ -342,18 +383,39 @@ public class CreateItemController {
     return paths;
   }
 
+  private List<File> limitSelectedFiles(List<File> files) {
+    if (files == null || files.size() <= MAX_IMAGE_COUNT) {
+      return files == null ? List.of() : files;
+    }
+    return new ArrayList<>(files.subList(0, MAX_IMAGE_COUNT));
+  }
+
   /**
-   * Load ảnh đầu tiên vào preview card.
+   * Load selected image into preview card.
    *
-   * @param imagePath path ảnh local đã copy
+   * @param index selected image index
    */
-  private void updatePreviewImage(Path imagePath) {
+  private void updatePreviewImage(int index) {
+    if (persistedImagePaths.isEmpty() || index < 0 || index >= persistedImagePaths.size()) {
+      previewImageView.setImage(null);
+      return;
+    }
     try {
-      Image image = new Image(imagePath.toUri().toString(), true);
+      Image image = new Image(persistedImagePaths.get(index).toUri().toString(), true);
       previewImageView.setImage(image);
     } catch (Exception ignored) {
       previewImageView.setImage(null);
     }
+  }
+
+  private void updatePreviewNavigation() {
+    if (previewImageCountLabel == null) {
+      return;
+    }
+    int total = persistedImagePaths.size();
+    previewImageCountLabel.setText(total == 0
+        ? "0/" + MAX_IMAGE_COUNT
+        : (currentPreviewImageIndex + 1) + "/" + total);
   }
 
   /**

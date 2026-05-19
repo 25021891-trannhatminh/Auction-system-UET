@@ -1182,3 +1182,374 @@
 .row-metric {
     -fx-text-overrun: ellipsis;
 }
+
+
+/* Inline Create Listing workspace. Keeps sidebar navigation visible while seller creates an item. */
+.floating-create-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-text-fill: #17352c;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 20;
+    -fx-padding: 14 22 14 22;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(31, 62, 55, 0.18), 16, 0.16, 0, 6);
+}
+
+.floating-create-btn:hover {
+    -fx-opacity: 0.72;
+}
+
+.create-listing-shell {
+    -fx-background-color: transparent;
+}
+
+.create-listing-title {
+    -fx-text-fill: #1f3e37;
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.create-listing-note,
+.create-muted-text,
+.listing-flow-text,
+.create-message {
+    -fx-text-fill: #738581;
+    -fx-font-size: 11px;
+}
+
+.create-listing-card {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 20;
+    -fx-border-color: #dde7df;
+    -fx-border-radius: 20;
+    -fx-padding: 16;
+}
+
+.create-section-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.create-upload-zone {
+    -fx-background-color: linear-gradient(to bottom right, #f8fbf8, #eef5ef);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(39, 75, 69, 0.36);
+    -fx-border-style: segments(8, 8);
+    -fx-border-radius: 18;
+    -fx-padding: 18;
+}
+
+.create-dark-btn,
+.create-primary-btn,
+.create-secondary-btn {
+    -fx-background-radius: 16;
+    -fx-padding: 10 16 10 16;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.create-dark-btn {
+    -fx-background-color: #183530;
+    -fx-text-fill: #f7f3e9;
+}
+
+.create-primary-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-text-fill: #17352c;
+}
+
+.create-primary-btn:hover,
+.create-secondary-btn:hover,
+.create-dark-btn:hover {
+    -fx-opacity: 0.78;
+}
+
+.create-secondary-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: #bccbc3;
+    -fx-border-radius: 16;
+    -fx-text-fill: #294941;
+}
+
+.create-preview-image-wrap {
+    -fx-background-color: linear-gradient(to bottom right, #e9f1ed, #f9fbf8);
+    -fx-background-radius: 18;
+    -fx-border-color: #dde7df;
+    -fx-border-radius: 18;
+    -fx-padding: 12;
+}
+
+.create-preview-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.listing-flow-card {
+    -fx-background-color: #fcfbf7;
+    -fx-background-radius: 18;
+    -fx-border-color: #d8e3dc;
+    -fx-border-radius: 18;
+    -fx-padding: 14;
+}
+
+.listing-flow-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.create-form-field,
+.create-text-area {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 15;
+    -fx-border-color: #d9e2db;
+    -fx-border-radius: 15;
+    -fx-padding: 10 13 10 13;
+    -fx-text-fill: #294941;
+    -fx-prompt-text-fill: #95a8a2;
+}
+
+.create-text-area .content {
+    -fx-background-color: transparent;
+}
+
+.create-field-label {
+    -fx-text-fill: #294941;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.create-message-info {
+    -fx-text-fill: #2e4f47;
+}
+
+.create-message-error {
+    -fx-text-fill: #a34f4f;
+    -fx-font-weight: bold;
+}
+
+
+/* Create Listing UI refinement: button sits a bit left of scrollbar and fades on hover. */
+.floating-create-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-text-fill: #17352c;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 20;
+    -fx-padding: 14 24 14 24;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(31, 62, 55, 0.18), 16, 0.16, 0, 6);
+}
+
+.floating-create-btn:hover {
+    -fx-opacity: 0.68;
+}
+
+.create-listing-shell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.create-listing-title {
+    -fx-text-fill: #1f3e37;
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.create-listing-note,
+.create-muted-text,
+.create-message {
+    -fx-text-fill: #738581;
+    -fx-font-size: 11px;
+}
+
+.create-listing-card {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 20;
+    -fx-border-color: #dde7df;
+    -fx-border-radius: 20;
+    -fx-padding: 16;
+}
+
+.create-section-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.create-upload-zone {
+    -fx-background-color: linear-gradient(to bottom right, #f8fbf8, #eef5ef);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(39, 75, 69, 0.36);
+    -fx-border-style: segments(8, 8);
+    -fx-border-radius: 18;
+    -fx-padding: 18;
+}
+
+.create-preview-image-wrap {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 18;
+    -fx-border-color: #dde7df;
+    -fx-border-radius: 18;
+    -fx-padding: 6;
+}
+
+.create-preview-title {
+    -fx-text-fill: #22433b;
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+}
+
+.create-form-field,
+.create-combo-box,
+.create-text-area {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 15;
+    -fx-border-color: #d9e2db;
+    -fx-border-radius: 15;
+    -fx-padding: 10 13 10 13;
+    -fx-text-fill: #294941;
+    -fx-prompt-text-fill: #95a8a2;
+}
+
+.create-text-area .content {
+    -fx-background-color: #fbfaf6;
+}
+
+.create-combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #294941;
+}
+
+.create-field-label {
+    -fx-text-fill: #294941;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.create-dark-btn,
+.create-primary-btn,
+.create-secondary-btn {
+    -fx-background-radius: 16;
+    -fx-padding: 10 16 10 16;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.create-dark-btn {
+    -fx-background-color: #183530;
+    -fx-text-fill: #f7f3e9;
+}
+
+.create-primary-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-text-fill: #17352c;
+}
+
+.create-secondary-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: #bccbc3;
+    -fx-border-radius: 16;
+    -fx-text-fill: #294941;
+}
+
+.create-primary-btn:hover,
+.create-secondary-btn:hover,
+.create-dark-btn:hover {
+    -fx-opacity: 0.78;
+}
+
+.create-message-info {
+    -fx-text-fill: #2e4f47;
+}
+
+.create-message-error {
+    -fx-text-fill: #a34f4f;
+    -fx-font-weight: bold;
+}
+
+/* Final Create Listing polish: preview image fills the entire frame, and selectors match the app theme. */
+.create-preview-image-wrap {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 18;
+    -fx-border-color: #dbe7df;
+    -fx-border-radius: 18;
+    -fx-padding: 0;
+    -fx-overflow: hidden;
+}
+
+.create-preview-image {
+    -fx-background-radius: 18;
+}
+
+.create-combo-box {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 15;
+    -fx-border-color: #d9e2db;
+    -fx-border-radius: 15;
+    -fx-padding: 0 12 0 12;
+    -fx-min-height: 50;
+    -fx-pref-height: 50;
+    -fx-cursor: hand;
+}
+
+.create-combo-box:hover {
+    -fx-border-color: #b7c9bf;
+    -fx-effect: dropshadow(gaussian, rgba(31, 62, 55, 0.08), 10, 0.12, 0, 3);
+}
+
+.create-combo-box:focused {
+    -fx-border-color: #a78634;
+}
+
+.create-combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #294941;
+    -fx-font-size: 12px;
+    -fx-padding: 9 4 9 4;
+}
+
+.create-combo-box .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.create-combo-box .arrow {
+    -fx-background-color: #62776f;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 12;
+    -fx-border-color: #d9e2db;
+    -fx-border-radius: 12;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(31, 62, 55, 0.18), 16, 0.12, 0, 6);
+}
+
+.combo-box-popup .list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 10;
+    -fx-text-fill: #294941;
+    -fx-padding: 9 12 9 12;
+}
+
+.combo-box-popup .list-view .list-cell:hover,
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: rgba(209, 177, 93, 0.18);
+    -fx-text-fill: #17352c;
+}
+
+.create-text-area {
+    -fx-background-color: #fbfaf6;
+    -fx-control-inner-background: #fbfaf6;
+}
+
+.create-text-area .content {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 14;
+}

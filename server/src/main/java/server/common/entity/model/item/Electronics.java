@@ -36,7 +36,7 @@ public class Electronics extends Item {
         super(item);
     }
 
-    @Override public String  getCategory()      { return "ELECTRONICS"; }
+    @Override public String  getCategory()      { return "ELECTRONIC"; }
     @Override public boolean validate()         { return brand != null && !brand.isBlank(); }
 
     public String getBrand()          { return brand; }
