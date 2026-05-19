@@ -6,6 +6,7 @@ import server.common.entity.*;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
+import server.common.model.PaymentDTO;
 import server.repository.*;
 import server.service.listeners.AuctionEventListener;
 import server.common.model.BidResultDTO;
@@ -37,6 +38,7 @@ public class AuctionService {
   private final AutoBidConfigDAO   autoBidConfigDAO   = new AutoBidConfigDAO();
   private final ItemDAO            itemDAO            = new ItemDAO();
   private final AccountDAO         accountDAO         = new AccountDAO();
+  private final PaymentDAO         paymentDAO         = new PaymentDAO();
 
   // Singleton domain manager
   private final AuctionManager auctionManager = AuctionManager.getInstance();
@@ -147,6 +149,10 @@ public class AuctionService {
           "Manual cleanup required.", auction.getId());
       return null;
     }
+    // Cập nhật trạng thái item → IN_AUCTION trên cả 2 tầng
+    if (item != null) {
+      item.setStatus(ItemStatus.IN_AUCTION); // Khóa trạng thái trên RAM luôn
+    }
 
     // Bước 3: Cập nhật trạng thái item → IN_AUCTION
     itemDAO.updateStatus(Integer.parseInt(item.getId()), ItemStatus.IN_AUCTION);
@@ -226,8 +232,18 @@ public class AuctionService {
     // BidTransactionDAO đã UPDATE auctions.current_price bên trong transaction của nó.
     // Không cần gọi AuctionDAO.updateCurrentPrice() riêng để tránh BigDecimal-write.
     // Nếu muốn explicit update (ví dụ khi BidTxDAO không update auction table):
-     auctionDAO.updateCurrentPrice(auctionID,
-         Integer.parseInt(bidResult.getCurrentLeaderName()), bidResult.getFinalPrice());
+    // Đúng logic: người dẫn đầu là người đặt auto-bid (nếu wasOutbidByAutoBid() = true),
+    //   ngược lại là manual bidder.
+    int currentLeaderId;
+    if (bidResult.wasOutbidByAutoBid()) {
+      // Auto-bid của người khác đã vượt manual bid → leader là auto-bidder
+      currentLeaderId = Integer.parseInt(bidResult.getAutoBidTransaction().getBidderId());
+    } else {
+      // Manual bidder đang dẫn đầu (hoặc auto-bid của chính họ)
+      currentLeaderId = Integer.parseInt(bidResult.getManualTransaction().getBidderId());
+    }
+
+    auctionDAO.updateCurrentPrice(auctionID, currentLeaderId, bidResult.getFinalPrice());
 
     logger.info("placeBid() — Done. auctionId={}, finalPrice={}, leader={}",
         auctionId, bidResult.getFinalPrice(), bidResult.getCurrentLeaderName());
@@ -253,35 +269,32 @@ public class AuctionService {
    * @return {@code Optional<BidTransaction>} nếu engine đặt bid ngay sau đăng ký.
    */
   public Optional<BidTransaction> registerAutoBid(AutoBidConfig config, User bidder) {
-    int auctionId = Integer.parseInt(config.getAuctionId());
-    int bidderId  = Integer.parseInt(config.getBidderId());
+    int auctionId = Integer.parseInt(config.getAuctionId()); // cite: AutoBidConfig, AuctionService
+    int bidderId  = Integer.parseInt(config.getBidderId()); // cite: AutoBidConfig, AuctionService
 
-    // ── STEP 1: Persist config vào DB ──
-    if (autoBidConfigDAO.hasActiveBid(auctionId, bidderId)) {
-      // Bidder đã có config → update maxBid
-      AutoBidConfig existing = autoBidConfigDAO.getByAuctionAndBidder(auctionId, bidderId);
-      if (existing != null) {
-        boolean updated = autoBidConfigDAO.updateMaxBid(
-            Integer.parseInt(existing.getAuctionId()), config.getMaxBid()
-        );
-        if (!updated) {
-          logger.error("registerAutoBid() — Failed to update maxBid in DB. " +
-              "auctionId={}, bidderId={}", auctionId, bidderId);
-        }
+    // ── STEP 1: Persist hoặc Update cấu hình vào DB ──
+    if (autoBidConfigDAO.hasActiveBid(auctionId, bidderId)) { // cite: AuctionService
+      // Người dùng đã có cấu hình ACTIVE trong phiên này -> Tiến hành cập nhật giá trần mới
+      // FIXca: Sử dụng hàm update mới với cả auctionId và bidderId thay vì truyền nhầm khóa chính
+      boolean updated = autoBidConfigDAO.updateMaxBid(auctionId, bidderId, config.getMaxBid()); // cite: AutoBidConfig
+
+      if (!updated) {
+        logger.error("registerAutoBid() — Failed to update maxBid in DB. auctionId={}, bidderId={}",
+            auctionId, bidderId);
       }
     } else {
-      // Chưa có → tạo mới
-      boolean created = autoBidConfigDAO.create(config);
+      // Chưa có cấu hình nào -> Tạo mới một bản ghi
+      boolean created = autoBidConfigDAO.create(config); // cite: AuctionService
       if (!created) {
-        logger.error("registerAutoBid() — Failed to create AutoBidConfig in DB. " +
-            "auctionId={}, bidderId={}", auctionId, bidderId);
+        logger.error("registerAutoBid() — Failed to create AutoBidConfig in DB. auctionId={}, bidderId={}",
+            auctionId, bidderId);
       }
     }
 
-    // ── STEP 2: Cập nhật engine + trigger (trong AuctionManager) ──
-    Optional<BidTransaction> autoBidTx = auctionManager.registerAutoBid(config, bidder);
+    // ── STEP 2: Cập nhật engine + trigger (giữ nguyên logic cũ của bạn) ──
+    Optional<BidTransaction> autoBidTx = auctionManager.registerAutoBid(config, bidder); // cite: AuctionService
 
-    // ── STEP 3: Nếu engine trigger ngay (trigger kích hoạt return BidTx) → persist bid đó vào DB ──
+    // ── STEP 3: Nếu engine trigger ngay lập tức -> Lưu giao dịch đặt giá tự động đó vào DB ──
     autoBidTx.ifPresent(tx -> {
       boolean saved = bidTransactionDAO.placeBid(
           Integer.parseInt(tx.getAuctionId()),
@@ -290,15 +303,15 @@ public class AuctionService {
           true
       );
       if (!saved) {
-        logger.error("registerAutoBid() — Immediate auto-bid NOT saved to DB. " +
-            "bidderId={}, amount={}", tx.getBidderId(), tx.getAmount());
+        logger.error("registerAutoBid() — Immediate auto-bid NOT saved to DB. bidderId={}, amount={}",
+            tx.getBidderId(), tx.getAmount());
       }
     });
 
     logger.info("registerAutoBid() — Done. auctionId={}, bidderId={}, maxBid={}",
-        auctionId, bidderId, config.getMaxBid());
+        auctionId, bidderId, config.getMaxBid()); // cite: AutoBidConfig
 
-    return autoBidTx;
+    return autoBidTx; // cite: AuctionService
   }
 
   /**
@@ -311,13 +324,15 @@ public class AuctionService {
     // Hủy trong DB
     int auctionIdInt = Integer.parseInt(auctionId);
     int bidderIdInt  = Integer.parseInt(bidder.getId());
-    AutoBidConfig existing = autoBidConfigDAO.getByAuctionAndBidder(auctionIdInt, bidderIdInt);
-    if (existing != null) {
-      // getByAuctionAndBidder trả về config có id = auto_bid_id
-      // Dùng cancelAllByAuction nếu không lưu auto_bid_id trực tiếp:
-      // Hoặc update status = CANCELED cho đúng record
-      autoBidConfigDAO.cancelAllByAuction(auctionIdInt); // ← nếu chỉ 1 config per bidder
-      logger.info("cancelAutoBid() — Canceled in DB. auctionId={}, bidderId={}",
+
+    //Chỉ gọi lệnh hủy chính xác cho cấu hình của đúng đối tượng bidder yêu cầu
+    boolean dbUpdated = autoBidConfigDAO.cancelByAuctionAndBidder(auctionIdInt, bidderIdInt);
+
+    if (dbUpdated) {
+      logger.info("cancelAutoBid() — Successfully synchronized CANCELED state to DB for auctionId={}, bidderId={}",
+          auctionId, bidder.getId());
+    } else {
+      logger.warn("cancelAutoBid() — DB state was not changed (possibly already canceled or none existed). auctionId={}, bidderId={}",
           auctionId, bidder.getId());
     }
   }
@@ -357,9 +372,17 @@ public class AuctionService {
             auctionId);
       }
       // Cập nhật item → SOLD
-      itemDAO.updateStatus(
-          Integer.parseInt(auction.getItem().getId()), ItemStatus.SOLD
-      );
+      // Thêm null-check trước khi cho item lấy ID
+      if (auction.getItem() != null) {
+        // STEP 1: Cập nhật thực thể Item trên RAM trước
+        auction.getItem().setStatus(ItemStatus.SOLD);
+        // STEP 2: Đồng bộ xuống Database
+        itemDAO.updateStatus(
+            Integer.parseInt(auction.getItem().getId()), ItemStatus.SOLD
+        );
+      } else {
+        logger.error("onAuctionClosed() — Auction FINISHED but item is NULL for auctionId={}", auctionId);
+      }
     } else {
       // CANCELED
       boolean canceled = auctionDAO.updateStatus(auctionId, AuctionStatus.CANCELED);
@@ -368,9 +391,17 @@ public class AuctionService {
             auctionId);
       }
       // Cập nhật item → AVAILABLE (quay lại chờ đấu giá tiếp)
-      itemDAO.updateStatus(
-          Integer.parseInt(auction.getItem().getId()), ItemStatus.AVAILABLE
-      );
+      // Thêm null-check trước khi cho item lấy ID
+      if (auction.getItem() != null) {
+        // STEP 1: Trả trạng thái Item trên RAM về trống trải, tự do
+        auction.getItem().setStatus(ItemStatus.AVAILABLE);
+        // STEP 2: Đồng bộ xuống Database
+        itemDAO.updateStatus(
+            Integer.parseInt(auction.getItem().getId()), ItemStatus.AVAILABLE
+        );
+      } else {
+        logger.error("onAuctionClosed() — Auction CANCELED but item is NULL for auctionId={}", auctionId);
+      }
     }
 
     // Hủy toàn bộ auto-bid còn active trong DB
@@ -396,57 +427,133 @@ public class AuctionService {
 
 
   /**
-   * Kích hoạt bắt đầu phiên đấu giá
+   * Bắt đầu phiên đấu giá: Đồng bộ trạng thái in-memory (RAM) trước rồi mới persist xuống DB.
+   * Giải quyết Inconsistency dữ liệu giữa RAM và Cơ sở dữ liệu
    */
-  public boolean startAuction(int auctionId) {
-    Auction auction = auctionDAO.getById(auctionId);
-    if (auction == null) return false;
+  public void startAuction(String auctionId) {
+    int auctionIdInt = Integer.parseInt(auctionId);
 
-    boolean updated = auctionDAO.updateStatus(auctionId, AuctionStatus.RUNNING);
-    if (updated) {
-      notifyAuctionStarted(Integer.parseInt(auction.getSellerId()), auctionId, "Auction #" + auctionId);
-      logger.info("startAuction() - Auction {} is LIVE", auctionId);
+    // Ưu tiên tìm thực thể trên bộ nhớ RAM (AuctionManager) trước ──
+    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
+    Auction auction;
+
+    if (auctionOpt.isPresent()) {
+      // Nếu RAM đã và đang quản lý phiên này, lấy trực tiếp để xử lý
+      auction = auctionOpt.get();
+    } else {
+      // Nếu RAM chưa quản lý (ví dụ: hệ thống mới restart), fallback tải từ DB
+      auction = auctionDAO.getById(auctionIdInt);
+      if (auction == null) {
+        logger.error("startAuction() — CRITICAL: Auction ID {} không tồn tại trong Database.", auctionId);
+        return;
+      }
+      // Nạp thực thể vừa lấy từ DB vào bộ quản lý in-memory của AuctionManager để đồng bộ luồng chạy
+      auctionManager.loadAuction(auction);
     }
-    return updated;
+
+    // Kiểm tra tính hợp lệ trước khi kích hoạt
+    if (auction.getStatus() != AuctionStatus.OPEN) {
+      logger.warn("startAuction() — Phiên đấu giá {} đang ở trạng thái {}, bỏ qua kích hoạt.",
+          auctionId, auction.getStatus());
+      return;
+    }
+
+    try {
+      // STEP 1: Gọi hàm đóng gói chuẩn của lớp Auction để chuyển trạng thái an toàn trên RAM sang RUNNING
+      auction.startRunning();
+    } catch (IllegalStateException e) {
+      logger.error("startAuction() — Lỗi logic vòng đời khi kích hoạt phiên đấu giá ID {}", auctionId, e);
+      return;
+    }
+
+    // STEP 2: Ghi nhận (Persist) trạng thái RUNNING mới này xuống Database
+    boolean dbUpdated = auctionDAO.updateStatus(auctionIdInt, AuctionStatus.RUNNING);
+    if (!dbUpdated) {
+      logger.error("startAuction() — WARN: Cập nhật trạng thái RUNNING xuống DB thất bại cho auctionId={}", auctionId);
+    }
+
+    // STEP 3: Kích hoạt thông báo Realtime cho các bên tham gia dựa trên thông tin vật phẩm
+    String itemName = auction.getItem() != null ? auction.getItem().getName() : "Vật phẩm đấu giá";
+    notifyAuctionStarted(Integer.parseInt(auction.getSellerId()), auctionIdInt, itemName);
+
+    logger.info("startAuction() — SUCCESSFULLY Started Auction. auctionId={}, status=RUNNING", auctionId);
   }
 
   /**
-   * Kết thúc phiên đấu giá và xác định kết quả
+   * Kết thúc phiên đấu giá (Thành công hoặc Không ai mua): Persist trạng thái và phân phối thông báo.
    */
-  public boolean endAuction(int auctionId) {
-    Auction auction = auctionDAO.getById(auctionId);
-    if (auction == null) return false;
+  public void endAuction(String auctionId) {
+    int auctionIdInt = Integer.parseInt(auctionId);
 
-    Integer winnerId = Integer.parseInt(auction.getCurrentLeader().getId());
-    boolean finished = auctionDAO.finishAuction(auctionId, winnerId);
+    // Lấy thông tin phiên đấu giá từ bộ nhớ RAM (Engine quản lý)
+    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
+    if (auctionOpt.isEmpty()) {
+      logger.error("endAuction() — Critical: Auction ID {} not found in memory engine.", auctionId);
+      return;
+    }
+    Auction auction = auctionOpt.get();
 
-    if (!finished) {
-      logger.error("endAuction() - Failed to finalize auction {}", auctionId);
-      return false;
+    // Lấy tên Item theo cấu trúc yêu cầu kèm null-check phòng thủ (Tránh lỗi NullPointerException)
+    String itemName = auction.getItem() != null
+        ? "Auction #" + auctionId + ": " + auction.getItem().getName()
+        : "Auction #" + auctionId + ": Unknown Item";
+
+    // ── Bước 1: Gọi hàm đóng gói sẵn có của lớp Auction để cập nhật trạng thái trên RAM an toàn ──
+    try {
+      auction.closeSession();
+    } catch (IllegalStateException e) {
+      logger.error("endAuction() — Closing session aborted due to invalid state for auctionId={}", auctionId, e);
+      return;
     }
 
-    BigDecimal finalPrice = auction.getCurrentPrice();
-    String itemName = "Auction #" + auctionId + ": " + auction.getItem().getName();
+    // Kiểm tra an toàn xem có người tham gia đặt giá hay không (Null-check Leader) ──
+    if (auction.getCurrentLeader() != null) {
+      // Trường hợp 1: Có người chiến thắng cuộc đua giá
+      int winnerId = Integer.parseInt(auction.getCurrentLeader().getId());
+      BigDecimal finalPrice = auction.getCurrentPrice();
 
-    // 1. Thông báo cho người bán
-    notifyAuctionEnded(Integer.parseInt(auction.getSellerId()), auctionId, itemName, finalPrice);
+      logger.info("endAuction() — Auction {} concluded. winnerId={}, finalPrice={}",
+          auctionId, winnerId, finalPrice);
 
-    // 2. Xử lý thông báo thắng/thua
-      // Thông báo thắng cuộc và yêu cầu thanh toán
-      notifyAuctionWon(winnerId, auctionId, itemName, finalPrice);
-      notifyPaymentDue(winnerId, auctionId, itemName, finalPrice);
+      // Gọi hàm để đồng bộ kết quả (Cập nhật trạng thái FINISHED và đổi Item sang SOLD) xuống DB
+      onAuctionClosed(auction);
 
-      // Gửi thông báo cho những người tham gia nhưng không thắng (Auction Lost)
-      List<Integer> allBidders = bidTransactionDAO.getBiddersByAuctionId(auctionId);
+      // Gửi thông báo kết quả cho người thắng cuộc
+      try {
+        notifyAuctionWon(winnerId, auctionIdInt, itemName, finalPrice);
+        notifyPaymentDue(winnerId, auctionIdInt, itemName, finalPrice);
+      } catch (Exception e) {
+        logger.error("endAuction() — Failed to notify winner user {}", winnerId, e);
+      }
+
+      // Gửi thông báo cho toàn bộ những người còn lại (những người đã thua cuộc)
+      // Dựa theo lớp BidTransactionDAO bạn cung cấp, hàm truy vấn id người dùng là getBiddersByAuctionId
+      List<Integer> allBidders = bidTransactionDAO.getBiddersByAuctionId(auctionIdInt);
       for (Integer bidderId : allBidders) {
         if (!bidderId.equals(winnerId)) {
-          notifyAuctionLost(bidderId, auctionId, itemName);
+          // Bọc try-catch độc lập cho từng người nhận thông báo để không bẻ gãy vòng lặp ── tránh trường hợp 1 bidder lỗi connection, các bidder khác mất notify
+          try {
+            notifyAuctionLost(bidderId, auctionIdInt, itemName);
+          } catch (Exception e) {
+            logger.error("endAuction() — Failed to send lost notification to user {} but continuing loop iteration.", bidderId, e);
+          }
         }
       }
 
+    } else {
+      // Trường hợp 2: Phiên kết thúc mà không một ai đặt giá (Leader bị null)
+      logger.warn("endAuction() — Auction {} ended with NO BIDS. Rolling back item status.", auctionId);
 
-    logger.info("endAuction() - Auction {} closed successfully", auctionId);
-    return true;
+      // Đồng bộ DB (onAuctionClosed sẽ nhận diện không leader và tự động rollback Item status về AVAILABLE)
+      onAuctionClosed(auction);
+    }
+
+    // Phát thông báo sự kiện đóng phòng chung cho toàn bộ hệ thống
+    try {
+      notifyAuctionEnded(Integer.parseInt(auction.getSellerId()), auctionIdInt, itemName, auction.getCurrentPrice());
+    } catch (Exception e) {
+      logger.error("endAuction() — Exception caught during auction ended global broadcast event.", e);
+    }
   }
 
   /**
@@ -466,50 +573,92 @@ public class AuctionService {
 
   /**
    * Xác nhận thanh toán thành công và thông báo cho các bên liên quan.
+   * Đồng bộ dữ liệu trong RAM với DB
    * @param auctionId ID của phiên đấu giá
    * @return true nếu xử lý thành công
    */
   public boolean confirmPayment(int auctionId) {
     try {
-      // 1. Lấy thông tin phiên đấu giá
-      Auction auction = auctionDAO.getById(auctionId);
-      if (auction == null) {
-        logger.warn("confirmPayment() - Auction {} not found", auctionId);
+      String auctionIdStr = String.valueOf(auctionId);
+
+      // ── SỬA ĐỒNG BỘ: Ưu tiên lấy thực thể phiên đấu giá từ bộ nhớ RAM (Engine) trước thay vì lấy thẳng từ DB ──
+      Optional<Auction> auctionOpt = auctionManager.getAuction(auctionIdStr);
+      Auction auction;
+
+      if (auctionOpt.isPresent()) {
+        auction = auctionOpt.get();
+      } else {
+        // Fallback: Nếu RAM chưa quản lý (vd: server vừa restart), tải từ DB rồi đưa ngược lại lên RAM
+        auction = auctionDAO.getById(auctionId);
+        if (auction == null) {
+          logger.warn("confirmPayment() — Auction {} not found in database", auctionId);
+          return false;
+        }
+        auctionManager.loadAuction(auction);
+      }
+
+      // ── FIX BUG-8 (Lỗi 1): Null-check phòng thủ nghiêm ngặt để triệt tiêu hoàn toàn nguy cơ sập luồng NullPointerException ──
+      if (auction.getCurrentLeader() == null) {
+        logger.warn("confirmPayment() — Auction {} ended with NO LEADER or NO BIDS. Payment confirmation aborted.", auctionId);
         return false;
       }
 
-      // 2. Kiểm tra trạng thái (Chỉ cho phép thanh toán khi phiên đã kết thúc và có người thắng)
-      if (auction.getStatus() != AuctionStatus.FINISHED || auction.getCurrentLeader().getId() == null) {
-        logger.warn("confirmPayment() - Auction {} is not in a payable state", auctionId);
+      // Lấy ID người thắng cuộc một cách an toàn sau khi đã qua bước kiểm tra đối tượng tồn tại
+      String buyerIdStr = auction.getCurrentLeader().getId();
+
+      // ── FIX BUG-8 (Lỗi 2): Loại bỏ toán tử ==, sử dụng hàm so sánh giá trị chuỗi an toàn (.trim().isEmpty()) ──
+      if (buyerIdStr == null || buyerIdStr.trim().isEmpty()) {
+        logger.error("confirmPayment() — Critical: Current leader ID value is null or blank for auctionId={}", auctionId);
         return false;
       }
 
-      // 3. Cập nhật trạng thái thanh toán trong Database (giả sử qua PaymentDAO)
-      // Lưu ý: Bạn nên có thêm trường paymentStatus trong DB
-      boolean isUpdated = paymentDAO.updatePaymentStatus(auctionId, true);
+      // Kiểm tra trạng thái vòng đời trên RAM (Chỉ cho phép thanh toán khi phiên đã kết thúc thành công)
+      if (auction.getStatus() != AuctionStatus.FINISHED) {
+        logger.warn("confirmPayment() — Auction {} is currently in status {}, payment conversion skipped.", auctionId, auction.getStatus());
+        return false;
+      }
 
+      // 3. Truy vấn thông tin bản ghi hóa đơn từ DB
+      PaymentDTO payment = paymentDAO.getPaymentByAuctionId(auctionId);
+      if (payment == null) {
+        logger.warn("confirmPayment() — Payment entity not found for auctionId={}", auctionId);
+        return false;
+      }
+
+      // 4. Tiến hành cập nhật trạng thái hóa đơn xuống DB thành hoàn tất (completePayment)
+      boolean isUpdated = paymentDAO.completePayment(payment.getPaymentId());
       if (isUpdated) {
+
+        // ── SỬA ĐỒNG BỘ: Gọi phương thức đóng gói chuẩn để đồng bộ chuyển trạng thái của đối tượng trên RAM sang PAID ──
+        try {
+          auction.markPaid();
+        } catch (IllegalStateException e) {
+          logger.error("confirmPayment() — Lifecycle error when trying to mark auction ID {} as PAID on RAM", auctionId, e);
+          return false;
+        }
+
+        // Đồng bộ cập nhật cột trạng thái trong bảng đấu giá (auctions) dưới Database thành PAID
+        auctionDAO.updateStatus(auctionId, AuctionStatus.PAID);
+
         int sellerId = Integer.parseInt(auction.getSellerId());
-        int buyerId = Integer.parseInt(auction.getCurrentLeader().getId());
+        int buyerId = Integer.parseInt(buyerIdStr);
         String itemName = "Auction #" + auctionId;
         BigDecimal finalPrice = auction.getCurrentPrice();
 
-        logger.info("confirmPayment() - Payment SUCCESS [Auction:{}, Buyer:{}, Seller:{}]",
+        logger.info("confirmPayment() — Payment SUCCESS. [Auction:{}, Buyer:{}, Seller:{}]. Status synchronized to PAID on both RAM and DB layers.",
             auctionId, buyerId, sellerId);
 
-        // 4. Thông báo cho người bán: "Tiền đã về, hãy giao hàng"
+        // 5. Phát tán các thông báo Realtime cho các bên liên quan (Dữ liệu tiếng Anh sạch sẽ)
         notifyPaymentReceived(sellerId, auctionId, itemName, finalPrice);
-
-        // 5. Thông báo cho người mua: "Xác nhận bạn đã thanh toán thành công"
-        notifySystemNotification(buyerId, "Thanh toán thành công",
-            String.format("Bạn đã thanh toán thành công %.2f cho vật phẩm: %s", finalPrice, itemName));
+        notifySystemNotification(buyerId, "Payment Successful",
+            String.format("You have successfully paid %s for item: %s", finalPrice.toString(), itemName));
 
         return true;
       }
 
       return false;
     } catch (Exception e) {
-      logger.error("confirmPayment() - Critical error during payment confirmation", e);
+      logger.error("confirmPayment() — Critical failure caught during payment confirmation workflow execution.", e);
       return false;
     }
   }

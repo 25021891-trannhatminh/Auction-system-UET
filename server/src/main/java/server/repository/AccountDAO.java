@@ -57,7 +57,7 @@ public class AccountDAO {
      * Câu lệnh SELECT cơ bản.
      */
     private static final String SQL_SELECT_BASE = """
-        SELECT user_id, username, email, full_name, phone,
+        SELECT user_id, username,password, email, full_name, phone,
                role, status, last_login, created_at
         FROM accounts
         """;

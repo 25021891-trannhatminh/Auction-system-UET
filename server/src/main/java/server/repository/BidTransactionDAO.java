@@ -1,6 +1,5 @@
 package server.repository;
 
-import server.common.enums.AccountRole;
 import server.common.enums.BidStatus;
 import server.common.entity.BidTransaction;
 import server.database.DBConnection;
@@ -157,7 +156,7 @@ public class BidTransactionDAO {
             pstmt.setInt(1, auctionId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
-                    bidderIds.add(rs.getInt("user_id"));
+                    bidderIds.add(rs.getInt("bidder_id"));
                 }
             }
         } catch (SQLException e) {
@@ -181,7 +180,7 @@ public class BidTransactionDAO {
 
     private BidTransaction getBidTransactionByRow(ResultSet rs) throws SQLException {
         AccountDAO accountDAO = new AccountDAO();
-        String bidderName = accountDAO.getById(rs.getInt("bidder_id")).getFullName();
+        String bidderName = accountDAO.getUserById(rs.getInt("bidder_id")).getFullName();
         return new BidTransaction(
             String.valueOf(rs.getInt("bid_id")),
             String.valueOf(rs.getInt("auction_id")),

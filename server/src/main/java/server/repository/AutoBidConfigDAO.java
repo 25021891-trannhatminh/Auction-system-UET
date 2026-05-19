@@ -428,6 +428,11 @@ public class AutoBidConfigDAO {
         SET status = 'CANCELED', updated_at = NOW()
         WHERE auction_id = ? AND status = 'ACTIVE'
         """;
+  private static final String SQL_UPDATE_MAX_BID_BY_AUCTION_AND_BIDDER =
+      "UPDATE auto_bid_configs SET max_bid = ? WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
+
+  private static final String SQL_CANCEL_BY_AUCTION_AND_BIDDER =
+      "UPDATE auto_bid_configs SET status = 'CANCELED' WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
 
   private static final String SQL_DELETE =
       "DELETE FROM auto_bid_configs WHERE auto_bid_id = ?";
@@ -557,6 +562,41 @@ public class AutoBidConfigDAO {
       logger.error("getByBidder() – DB error for bidderId={}", bidderId, e);
     }
     return results;
+  }
+
+  /**
+   * Hủy cấu hình Auto-Bid của một người dùng cụ thể trong một phiên đấu giá nhất định.
+   * Chuyển trạng thái từ 'ACTIVE' sang 'CANCELED' trực tiếp dưới DB.
+   *
+   * @param auctionId Mã phiên đấu giá (ID hệ thống dạng số)
+   * @param bidderId  Mã người đặt giá muốn hủy cấu hình (ID hệ thống dạng số)
+   * @return {@code true} nếu cập nhật trạng thái thành công dưới DB, {@code false} nếu có lỗi hoặc không tìm thấy dòng thỏa mãn
+   */
+  public boolean cancelByAuctionAndBidder(int auctionId, int bidderId) {
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_CANCEL_BY_AUCTION_AND_BIDDER)) {
+
+      // Gán các tham số cho câu lệnh SQL dựa theo thứ tự dấu chấm hỏi (?)
+      ps.setInt(1, auctionId);
+      ps.setInt(2, bidderId);
+
+      // Thực thi câu lệnh UPDATE
+      boolean updated = ps.executeUpdate() > 0;
+
+      if (updated) {
+        logger.info("cancelByAuctionAndBidder() SUCCESS — Canceled auto-bid for auctionId={}, bidderId={}",
+            auctionId, bidderId);
+      } else {
+        logger.warn("cancelByAuctionAndBidder() — No ACTIVE auto-bid record found to cancel for auctionId={}, bidderId={}",
+            auctionId, bidderId);
+      }
+      return updated;
+
+    } catch (SQLException e) {
+      logger.error("cancelByAuctionAndBidder() CRITICAL ERROR — DB error for auctionId={}, bidderId={}",
+          auctionId, bidderId, e);
+      return false;
+    }
   }
 
   /**
@@ -702,6 +742,40 @@ public class AutoBidConfigDAO {
 
     } catch (SQLException e) {
       logger.error("updateMaxBid() – DB error for autoBidId={}", autoBidId, e);
+      return false;
+    }
+  }
+
+  /**
+   * Cập nhật giá trần (max_bid) mới cho một cấu hình AutoBid đang hoạt động
+   * dựa trên mã phiên đấu giá và mã người đặt giá.
+   *
+   * @param auctionId ID của phiên đấu giá
+   * @param bidderId  ID của người đặt giá tự động
+   * @param newMaxBid Số tiền giá trần mới
+   * @return {@code true} nếu cập nhật thành công ít nhất 1 dòng trong DB
+   */
+  public boolean updateMaxBid(int auctionId, int bidderId, BigDecimal newMaxBid) {
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_MAX_BID_BY_AUCTION_AND_BIDDER)) {
+
+      ps.setBigDecimal(1, newMaxBid);
+      ps.setInt(2, auctionId);
+      ps.setInt(3, bidderId);
+
+      boolean updated = ps.executeUpdate() > 0;
+      if (updated) {
+        logger.info("updateMaxBid() SUCCESS — Updated max_bid to {} for auctionId={}, bidderId={}",
+            newMaxBid, auctionId, bidderId);
+      } else {
+        logger.warn("updateMaxBid() FAILED — No ACTIVE auto-bid record found to update for auctionId={}, bidderId={}",
+            auctionId, bidderId);
+      }
+      return updated;
+
+    } catch (SQLException e) {
+      logger.error("updateMaxBid() CRITICAL ERROR — DB error for auctionId={}, bidderId={}",
+          auctionId, bidderId, e);
       return false;
     }
   }
