@@ -1480,7 +1480,6 @@
     -fx-border-color: #dbe7df;
     -fx-border-radius: 18;
     -fx-padding: 0;
-    -fx-overflow: hidden;
 }
 
 .create-preview-image {
@@ -1552,4 +1551,35 @@
 .create-text-area .content {
     -fx-background-color: #fbfaf6;
     -fx-background-radius: 14;
+}
+
+.create-file-list-scroll,
+.create-file-list-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+}
+
+.create-file-list-scroll .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 7;
+}
+
+.create-file-list-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(39, 75, 69, 0.20);
+    -fx-background-radius: 8;
+}
+
+.create-file-list-scroll .scroll-bar:vertical .track,
+.create-file-list-scroll .scroll-bar:vertical .increment-button,
+.create-file-list-scroll .scroll-bar:vertical .decrement-button {
+    -fx-background-color: transparent;
+}
+
+.create-file-row {
+    -fx-background-color: #fbfaf6;
+    -fx-background-radius: 12;
+    -fx-border-color: #dfe8e1;
+    -fx-border-radius: 12;
+    -fx-padding: 8 10 8 10;
 }

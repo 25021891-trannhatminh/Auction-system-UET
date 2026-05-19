@@ -60,6 +60,13 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
+  private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
+  private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
+  private static final double CREATE_UPLOAD_ZONE_HEIGHT = 220;
+  private static final double CREATE_PREVIEW_IMAGE_HEIGHT = 250;
+  private static final double CREATE_FILE_ROW_HEIGHT = 52;
+  private static final double CREATE_FILE_LIST_MAX_HEIGHT = 118;
+  private static final double CREATE_FILE_LIST_GAP = 8;
   private static final String CREATE_CARD_STYLE = "-fx-background-color: #fbfaf6; "
       + "-fx-background-radius: 20; -fx-border-color: #dde7df; -fx-border-radius: 20; "
       + "-fx-padding: 16;";
@@ -1796,23 +1803,26 @@ public class UserDashboardController extends BaseDashboardController {
 
     GridPane topRow = new GridPane();
     topRow.setHgap(18);
+    topRow.setAlignment(Pos.TOP_CENTER);
     topRow.setMaxWidth(Double.MAX_VALUE);
-    for (int column = 0; column < 2; column++) {
-      ColumnConstraints constraints = new ColumnConstraints();
-      constraints.setPercentWidth(50);
-      constraints.setHgrow(Priority.ALWAYS);
-      constraints.setFillWidth(true);
-      topRow.getColumnConstraints().add(constraints);
-    }
+
+    ColumnConstraints uploadColumn = new ColumnConstraints();
+    uploadColumn.setPercentWidth(52);
+    uploadColumn.setHgrow(Priority.ALWAYS);
+    uploadColumn.setFillWidth(true);
+
+    ColumnConstraints previewColumn = new ColumnConstraints();
+    previewColumn.setPercentWidth(48);
+    previewColumn.setHgrow(Priority.ALWAYS);
+    previewColumn.setFillWidth(true);
+    topRow.getColumnConstraints().addAll(uploadColumn, previewColumn);
 
     VBox uploadPanel = new VBox(12);
     uploadPanel.getStyleClass().add("create-listing-card");
     uploadPanel.setStyle(CREATE_CARD_STYLE);
     uploadPanel.setMinWidth(0);
-    uploadPanel.setMaxWidth(Double.MAX_VALUE);
-    uploadPanel.setMinHeight(540);
-    uploadPanel.setPrefHeight(540);
-    uploadPanel.setMaxHeight(540);
+    uploadPanel.setPrefWidth(CREATE_UPLOAD_CARD_MAX_WIDTH);
+    uploadPanel.setMaxWidth(CREATE_UPLOAD_CARD_MAX_WIDTH);
 
     Label uploadTitle = new Label("Upload File");
     uploadTitle.getStyleClass().add("create-section-title");
@@ -1822,11 +1832,11 @@ public class UserDashboardController extends BaseDashboardController {
     uploadZone.getStyleClass().add("create-upload-zone");
     uploadZone.setStyle("-fx-background-color: linear-gradient(to bottom right, #f8fbf8, #eef5ef); "
         + "-fx-background-radius: 18; -fx-border-color: rgba(39, 75, 69, 0.34); "
-        + "-fx-border-style: segments(8, 8); -fx-border-radius: 18; -fx-padding: 34 42 34 42;"
+        + "-fx-border-style: segments(8, 8); -fx-border-radius: 18; -fx-padding: 24 34 24 34;"
         + "-fx-cursor: hand;");
-    uploadZone.setMinHeight(290);
-    uploadZone.setPrefHeight(290);
-    uploadZone.setMaxHeight(290);
+    uploadZone.setMinHeight(CREATE_UPLOAD_ZONE_HEIGHT);
+    uploadZone.setPrefHeight(CREATE_UPLOAD_ZONE_HEIGHT);
+    uploadZone.setMaxHeight(CREATE_UPLOAD_ZONE_HEIGHT);
     uploadZone.setMaxWidth(Double.MAX_VALUE);
 
     VBox uploadContent = new VBox(12);
@@ -1851,11 +1861,13 @@ public class UserDashboardController extends BaseDashboardController {
     browseButton.getStyleClass().add("create-dark-btn");
     browseButton.setStyle(CREATE_DARK_BUTTON_STYLE);
 
-    Label uploadLimit = new Label("PNG, JPG, JPEG, WEBP · up to " + MAX_CREATE_ITEM_IMAGES + " images");
+    Label uploadLimit = new Label(
+        "PNG, JPG, JPEG, WEBP · up to " + MAX_CREATE_ITEM_IMAGES + " images");
     uploadLimit.getStyleClass().add("create-muted-text");
     uploadLimit.setStyle(CREATE_MUTED_TEXT_STYLE);
 
-    uploadContent.getChildren().addAll(uploadIcon, uploadHint, browseButton, uploadLimit, selectedFileLabel);
+    uploadContent.getChildren().addAll(
+        uploadIcon, uploadHint, browseButton, uploadLimit, selectedFileLabel);
     uploadZone.getChildren().add(uploadContent);
 
     VBox fileListBox = new VBox(8);
@@ -1867,8 +1879,11 @@ public class UserDashboardController extends BaseDashboardController {
     fileListScroll.setFitToWidth(true);
     fileListScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
     fileListScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-    fileListScroll.setPrefHeight(150);
+    fileListScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; "
+        + "-fx-padding: 0;");
+    fileListScroll.setPrefHeight(0);
     fileListScroll.setMinHeight(0);
+    fileListScroll.setMaxHeight(0);
     fileListScroll.setMaxWidth(Double.MAX_VALUE);
     fileListScroll.setVisible(false);
     fileListScroll.setManaged(false);
@@ -1877,7 +1892,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     ImageView previewImage = new ImageView();
     previewImage.getStyleClass().add("create-preview-image");
-    previewImage.setPreserveRatio(true);
+    previewImage.setPreserveRatio(false);
     previewImage.setSmooth(true);
     previewImage.setCache(true);
 
@@ -1889,10 +1904,8 @@ public class UserDashboardController extends BaseDashboardController {
     previewPanel.getStyleClass().add("create-listing-card");
     previewPanel.setStyle(CREATE_CARD_STYLE);
     previewPanel.setMinWidth(0);
-    previewPanel.setMaxWidth(Double.MAX_VALUE);
-    previewPanel.setMinHeight(540);
-    previewPanel.setPrefHeight(540);
-    previewPanel.setMaxHeight(540);
+    previewPanel.setPrefWidth(CREATE_PREVIEW_CARD_MAX_WIDTH);
+    previewPanel.setMaxWidth(CREATE_PREVIEW_CARD_MAX_WIDTH);
 
     Label previewTitle = new Label("Preview File");
     previewTitle.getStyleClass().add("create-section-title");
@@ -1904,11 +1917,15 @@ public class UserDashboardController extends BaseDashboardController {
         + "-fx-border-color: #dbe7df; -fx-border-radius: 18; -fx-padding: 0;");
     previewImageWrap.setMinWidth(0);
     previewImageWrap.setMaxWidth(Double.MAX_VALUE);
-    previewImageWrap.setMinHeight(290);
-    previewImageWrap.setPrefHeight(290);
-    previewImageWrap.setMaxHeight(290);
+    previewImageWrap.setMinHeight(CREATE_PREVIEW_IMAGE_HEIGHT);
+    previewImageWrap.setPrefHeight(CREATE_PREVIEW_IMAGE_HEIGHT);
+    previewImageWrap.setMaxHeight(CREATE_PREVIEW_IMAGE_HEIGHT);
     previewImage.fitWidthProperty().bind(previewImageWrap.widthProperty());
     previewImage.fitHeightProperty().bind(previewImageWrap.heightProperty());
+    previewImage.fitWidthProperty().addListener((observable, oldValue, newValue) ->
+        applyCoverImageViewport(previewImage));
+    previewImage.fitHeightProperty().addListener((observable, oldValue, newValue) ->
+        applyCoverImageViewport(previewImage));
     Rectangle previewClip = new Rectangle();
     previewClip.widthProperty().bind(previewImageWrap.widthProperty());
     previewClip.heightProperty().bind(previewImageWrap.heightProperty());
@@ -1954,10 +1971,12 @@ public class UserDashboardController extends BaseDashboardController {
     );
     topRow.add(uploadPanel, 0, 0);
     topRow.add(previewPanel, 1, 0);
+    GridPane.setFillWidth(uploadPanel, true);
+    GridPane.setFillWidth(previewPanel, true);
     GridPane.setHgrow(uploadPanel, Priority.ALWAYS);
     GridPane.setHgrow(previewPanel, Priority.ALWAYS);
-    GridPane.setHalignment(uploadPanel, HPos.LEFT);
-    GridPane.setHalignment(previewPanel, HPos.RIGHT);
+    GridPane.setHalignment(uploadPanel, HPos.RIGHT);
+    GridPane.setHalignment(previewPanel, HPos.LEFT);
 
     VBox detailsPanel = new VBox(12);
     detailsPanel.getStyleClass().add("create-listing-card");
@@ -2195,7 +2214,8 @@ public class UserDashboardController extends BaseDashboardController {
         index++;
       }
 
-      if (pendingCreateItemPreviewIndex < 0 || pendingCreateItemPreviewIndex >= pendingCreateItemUploads.size()) {
+      if (pendingCreateItemPreviewIndex < 0
+          || pendingCreateItemPreviewIndex >= pendingCreateItemUploads.size()) {
         pendingCreateItemPreviewIndex = 0;
       }
       if (pendingCreateItemUploads.size() == acceptedFiles.size()) {
@@ -2213,7 +2233,8 @@ public class UserDashboardController extends BaseDashboardController {
       refreshCreatePreviewImage(previewImage, previewPlaceholder, imageCounterLabel);
       showCreateMessage(messageLabel, selectedFiles.size() > remainingSlots
           ? "Chỉ thêm được " + acceptedFiles.size() + " ảnh vì mỗi listing tối đa 5 ảnh."
-          : "Đã thêm " + acceptedFiles.size() + " ảnh. Có thể browse tiếp nếu chưa đủ 5 ảnh.", false);
+          : "Đã thêm " + acceptedFiles.size()
+              + " ảnh. Có thể browse tiếp nếu chưa đủ 5 ảnh.", false);
     } catch (IOException exception) {
       showCreateMessage(messageLabel, "Không thể lưu ảnh đã chọn.", true);
       exception.printStackTrace();
@@ -2236,6 +2257,8 @@ public class UserDashboardController extends BaseDashboardController {
     fileListScroll.setVisible(!pendingCreateItemUploads.isEmpty());
     fileListScroll.setManaged(!pendingCreateItemUploads.isEmpty());
 
+    updateCreateFileListHeight(fileListScroll);
+
     for (int index = 0; index < pendingCreateItemUploads.size(); index++) {
       final int imageIndex = index;
       CreateItemUpload upload = pendingCreateItemUploads.get(index);
@@ -2243,6 +2266,9 @@ public class UserDashboardController extends BaseDashboardController {
       HBox fileRow = new HBox(10);
       fileRow.getStyleClass().add("create-file-row");
       fileRow.setAlignment(Pos.CENTER_LEFT);
+      fileRow.setMinHeight(CREATE_FILE_ROW_HEIGHT);
+      fileRow.setPrefHeight(CREATE_FILE_ROW_HEIGHT);
+      fileRow.setMaxHeight(CREATE_FILE_ROW_HEIGHT);
       fileRow.setMaxWidth(Double.MAX_VALUE);
       fileRow.setStyle("-fx-background-color: #fbfaf6; -fx-background-radius: 12; "
           + "-fx-border-color: #dfe8e1; -fx-border-radius: 12; -fx-padding: 8 10 8 10;");
@@ -2333,9 +2359,56 @@ public class UserDashboardController extends BaseDashboardController {
     previewPlaceholder.setVisible(false);
     previewPlaceholder.setManaged(false);
     Image image = new Image(pendingCreateItemUploads.get(pendingCreateItemPreviewIndex).uri, true);
+    setCoverImage(previewImage, image);
+    updateCreatePreviewCounter(imageCounterLabel);
+  }
+
+  private void updateCreateFileListHeight(ScrollPane fileListScroll) {
+    if (fileListScroll == null || pendingCreateItemUploads.isEmpty()) {
+      return;
+    }
+    double rowCount = pendingCreateItemUploads.size();
+    double contentHeight = rowCount * CREATE_FILE_ROW_HEIGHT
+        + Math.max(0, rowCount - 1) * CREATE_FILE_LIST_GAP;
+    double viewportHeight = Math.min(CREATE_FILE_LIST_MAX_HEIGHT, contentHeight);
+    fileListScroll.setMinHeight(viewportHeight);
+    fileListScroll.setPrefHeight(viewportHeight);
+    fileListScroll.setMaxHeight(viewportHeight);
+  }
+
+  private void setCoverImage(ImageView previewImage, Image image) {
     previewImage.setViewport(null);
     previewImage.setImage(image);
-    updateCreatePreviewCounter(imageCounterLabel);
+    image.progressProperty().addListener((observable, oldValue, newValue) -> {
+      if (newValue.doubleValue() >= 1.0) {
+        applyCoverImageViewport(previewImage);
+      }
+    });
+    Platform.runLater(() -> applyCoverImageViewport(previewImage));
+  }
+
+  private void applyCoverImageViewport(ImageView previewImage) {
+    Image image = previewImage.getImage();
+    if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0
+        || previewImage.getFitWidth() <= 0 || previewImage.getFitHeight() <= 0) {
+      return;
+    }
+
+    double targetRatio = previewImage.getFitWidth() / previewImage.getFitHeight();
+    double imageRatio = image.getWidth() / image.getHeight();
+    double viewportWidth = image.getWidth();
+    double viewportHeight = image.getHeight();
+
+    if (imageRatio > targetRatio) {
+      viewportWidth = image.getHeight() * targetRatio;
+    } else if (imageRatio < targetRatio) {
+      viewportHeight = image.getWidth() / targetRatio;
+    }
+
+    double viewportX = (image.getWidth() - viewportWidth) / 2;
+    double viewportY = (image.getHeight() - viewportHeight) / 2;
+    previewImage.setViewport(
+        new Rectangle2D(viewportX, viewportY, viewportWidth, viewportHeight));
   }
 
   private void updateCreatePreviewCounter(Label imageCounterLabel) {
