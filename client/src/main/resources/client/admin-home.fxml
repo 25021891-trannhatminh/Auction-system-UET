@@ -144,23 +144,6 @@
                                             </children>
                                         </VBox>
 
-                                        <VBox spacing="8.0" styleClass="detail-card">
-                                            <children>
-                                                <Label styleClass="detail-kicker" text="SELECTED DETAIL" />
-                                                <Label fx:id="detailTitleLabel" styleClass="detail-title" text="Control Center ready" wrapText="true" />
-                                                <Label fx:id="detailDescriptionLabel" styleClass="detail-desc" text="Pick a row, View button, or ... menu to inspect actions without expanding the table." wrapText="true" />
-
-                                                <VBox spacing="5.0" styleClass="activity-compact-card">
-                                                    <children>
-                                                        <Label styleClass="placeholder-title" text="Recent Activity" />
-                                                        <Label fx:id="activityLine1" styleClass="activity-line" text="6 AVAILABLE items are ready for auction creation." wrapText="true" />
-                                                        <Label fx:id="activityLine2" styleClass="activity-line" text="4 RUNNING auctions need attention." wrapText="true" />
-                                                        <Label fx:id="activityLine3" styleClass="activity-line" text="11 SUSPENDED accounts are waiting for audit." wrapText="true" />
-                                                        <Label fx:id="activityLine4" styleClass="activity-line" text="3 FINISHED auctions need payment follow-up." wrapText="true" />
-                                                    </children>
-                                                </VBox>
-                                            </children>
-                                        </VBox>
                                     </children>
                                 </VBox>
                             </children>

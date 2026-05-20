@@ -52,6 +52,8 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double ACTION_GAP = 6;
     private static final double REVIEW_IMAGE_HEIGHT = 330;
     private static final double AUCTION_IMAGE_HEIGHT = 360;
+    private static final double PREVIEW_IMAGE_WIDTH_RATIO = 1.55;
+    private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 32;
     private static final double THUMB_SIZE = 74;
 
     private final Map<String, SectionContent> sections = buildSections();
@@ -1863,6 +1865,7 @@ public class AdminDashboardController extends BaseDashboardController {
         VBox infoCard = buildReviewInfoCard(data);
         content.add(gallery, 0, 0);
         content.add(infoCard, 1, 0);
+        keepDetailGridChildrenResizable(gallery, infoCard);
 
         shell.getChildren().addAll(title, note, content);
         dataRowsBox.getChildren().add(shell);
@@ -1952,6 +1955,7 @@ public class AdminDashboardController extends BaseDashboardController {
         VBox form = buildCreateAuctionForm(data);
         content.add(gallery, 0, 0);
         content.add(form, 1, 0);
+        keepDetailGridChildrenResizable(gallery, form);
 
         shell.getChildren().addAll(title, note, content);
         dataRowsBox.getChildren().add(shell);
@@ -2015,6 +2019,7 @@ public class AdminDashboardController extends BaseDashboardController {
         grid.getStyleClass().add("review-create-grid");
         grid.setHgap(18);
         grid.setVgap(14);
+        grid.setMinWidth(0);
         grid.setMaxWidth(Double.MAX_VALUE);
 
         ColumnConstraints left = new ColumnConstraints();
@@ -2031,27 +2036,46 @@ public class AdminDashboardController extends BaseDashboardController {
         return grid;
     }
 
+    private void keepDetailGridChildrenResizable(Region leftChild, Region rightChild) {
+        leftChild.setMinWidth(0);
+        rightChild.setMinWidth(0);
+        GridPane.setFillWidth(leftChild, true);
+        GridPane.setFillWidth(rightChild, true);
+        GridPane.setHgrow(leftChild, Priority.ALWAYS);
+        GridPane.setHgrow(rightChild, Priority.ALWAYS);
+    }
+
     private VBox buildItemGallery(AdminRow data, double imageHeight, String titleText) {
+        double maxImageWidth = imageHeight * PREVIEW_IMAGE_WIDTH_RATIO;
+        double maxGalleryWidth = maxImageWidth + PREVIEW_CARD_HORIZONTAL_PADDING;
+
         VBox gallery = new VBox(10);
         gallery.getStyleClass().add("item-gallery-card");
-        gallery.setMaxWidth(Double.MAX_VALUE);
+        gallery.setFillWidth(true);
+        gallery.setMinWidth(0);
+        gallery.setPrefWidth(maxGalleryWidth);
+        gallery.setMaxWidth(maxGalleryWidth);
 
         Label title = new Label(titleText);
         title.getStyleClass().add("placeholder-title");
 
         StackPane mainFrame = new StackPane();
         mainFrame.getStyleClass().add("item-main-image-wrap");
+        mainFrame.setMinWidth(0);
+        mainFrame.setPrefWidth(maxImageWidth);
+        mainFrame.setMaxWidth(maxImageWidth);
         mainFrame.setMinHeight(imageHeight);
         mainFrame.setPrefHeight(imageHeight);
         mainFrame.setMaxHeight(imageHeight);
-        mainFrame.setMaxWidth(Double.MAX_VALUE);
 
         List<String> images = parseMultiline(data.imagePayload);
         displayImage(mainFrame, images.isEmpty() ? "" : images.get(0), "No uploaded image");
 
-        HBox thumbs = new HBox(8);
+        FlowPane thumbs = new FlowPane(8, 8);
         thumbs.setAlignment(Pos.CENTER_LEFT);
         thumbs.getStyleClass().add("item-thumb-row");
+        thumbs.setMinWidth(0);
+        thumbs.setMaxWidth(maxImageWidth);
 
         if (images.isEmpty()) {
             StackPane emptyThumb = new StackPane(new Label("No image"));
@@ -2094,6 +2118,8 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         ImageView imageView = new ImageView(image);
+        imageView.setManaged(false);
+        imageView.setMouseTransparent(true);
         imageView.setSmooth(true);
         imageView.setCache(true);
         imageView.setPreserveRatio(false);
