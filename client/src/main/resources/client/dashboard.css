@@ -1717,3 +1717,53 @@
     -fx-font-weight: bold;
     -fx-padding: 10 16 10 16;
 }
+
+/* Admin item-review/create-auction compact pass */
+.admin-workspace-shell {
+    -fx-padding: 0 0 0 0;
+}
+
+.admin-page-title {
+    -fx-font-size: 23px;
+    -fx-padding: 2 0 4 8;
+}
+
+.item-gallery-card,
+.item-review-card,
+.auction-create-card {
+    -fx-padding: 12;
+}
+
+.item-gallery-card {
+    -fx-alignment: top-center;
+}
+
+.item-main-image-wrap {
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+}
+
+.item-thumb,
+.item-thumb-empty {
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+}
+
+.item-info-title {
+    -fx-font-size: 20px;
+}
+
+.item-info-price {
+    -fx-font-size: 13px;
+}
+
+.auction-info-cell,
+.item-attributes-box {
+    -fx-padding: 8 10 8 10;
+}
+
+.admin-auction-field {
+    -fx-min-height: 38;
+    -fx-pref-height: 38;
+    -fx-padding: 8 12 8 12;
+}

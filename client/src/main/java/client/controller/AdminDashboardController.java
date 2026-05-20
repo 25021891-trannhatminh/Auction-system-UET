@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
@@ -50,11 +51,12 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double ACTION_PRIMARY_WIDTH = 58;
     private static final double ACTION_MORE_WIDTH = 26;
     private static final double ACTION_GAP = 6;
-    private static final double REVIEW_IMAGE_HEIGHT = 330;
-    private static final double AUCTION_IMAGE_HEIGHT = 360;
+    private static final double REVIEW_IMAGE_HEIGHT = 265;
+    private static final double AUCTION_IMAGE_HEIGHT = 310;
     private static final double PREVIEW_IMAGE_WIDTH_RATIO = 1.55;
-    private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 32;
-    private static final double THUMB_SIZE = 74;
+    private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 28;
+    private static final double THUMB_SIZE = 58;
+    private static final Pattern MONEY_PATTERN = Pattern.compile("^[0-9]+(?:\\.[0-9]{1,2})?$");
 
     private final Map<String, SectionContent> sections = buildSections();
     private final List<AdminRow> liveUserRows = new ArrayList<>();
@@ -281,6 +283,23 @@ public class AdminDashboardController extends BaseDashboardController {
             showDetail(
                 "Approve failed",
                 "Server không approve được item. Có thể item không còn ở PENDING_REVIEW."
+            );
+            return;
+        }
+
+        if (msg.startsWith("ADMIN_CREATE_AUCTION_SUCCESS")) {
+            requestLiveAdminData();
+            showDetail(
+                "Auction created",
+                "Đã insert auctions bằng item_id/seller_id thật và chuyển item sang IN_AUCTION."
+            );
+            return;
+        }
+
+        if (msg.startsWith("ADMIN_CREATE_AUCTION_FAIL")) {
+            showDetail(
+                "Create auction failed",
+                decodeJoinedPayload(msg.substring("ADMIN_CREATE_AUCTION_FAIL".length()).trim())
             );
             return;
         }
@@ -1864,13 +1883,15 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void openLinkedAuctionDetail(AdminRow itemData) {
-        String auctionId = itemData.secondValue == null ? "AUC detail" : itemData.secondValue;
+        String auctionId = itemData.auctionId == null || itemData.auctionId.isBlank()
+            ? "AUC detail"
+            : "AUC-" + itemData.auctionId;
         AdminRow linkedAuction = row(
-            auctionId + " - Linked from " + itemData.title,
+            auctionId + " - Linked from ITEM-" + itemData.itemId,
             itemData.meta,
-            "From item",
-            "Linked",
-            itemData.status,
+            fallback(itemData.currentPrice, "From item"),
+            fallback(itemData.bidCount, "0") + " bids",
+            fallback(itemData.auctionStatus, itemData.status),
             itemData.detail,
             "View"
         );
@@ -1883,7 +1904,7 @@ public class AdminDashboardController extends BaseDashboardController {
         clearWorkspaceForDetail();
         addBackButton("Back to Items", "items");
 
-        VBox shell = new VBox(14);
+        VBox shell = new VBox(10);
         shell.getStyleClass().add("admin-workspace-shell");
 
         Label title = new Label("ITEM-" + data.itemId + " - " + data.itemName);
@@ -1904,7 +1925,7 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private VBox buildReviewInfoCard(AdminRow data) {
-        VBox card = new VBox(13);
+        VBox card = new VBox(10);
         card.getStyleClass().add("item-review-card");
         card.setMaxWidth(Double.MAX_VALUE);
 
@@ -1924,7 +1945,7 @@ public class AdminDashboardController extends BaseDashboardController {
         addInfoCell(facts, 1, 0, "Seller", data.sellerName + " (#" + data.sellerId + ")");
         addInfoCell(facts, 0, 1, "Category", data.firstValue);
         addInfoCell(facts, 1, 1, "Submitted", fallback(data.createdAt, "not available"));
-        addInfoCell(facts, 0, 2, "Auction link", fallback(data.secondValue, "No auction"));
+        addInfoCell(facts, 0, 2, "Auction link", auctionLinkText(data));
         addInfoCell(facts, 1, 2, "Database status", data.status);
 
         VBox attributesBox = buildAttributesBox(data.attributes);
@@ -1932,6 +1953,14 @@ public class AdminDashboardController extends BaseDashboardController {
 
         card.getChildren().addAll(statusLine, name, price, facts, attributesBox, actions);
         return card;
+    }
+
+    private String auctionLinkText(AdminRow data) {
+        if (data == null || data.auctionId == null || data.auctionId.isBlank()) {
+            return "No auction";
+        }
+        String status = fallback(data.auctionStatus, "OPEN");
+        return "AUC-" + data.auctionId + " / " + status;
     }
 
     private HBox buildItemDetailActions(AdminRow data) {
@@ -1988,42 +2017,34 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void openCreateAuctionDraft(AdminRow data) {
         currentSectionKey = "createAuction";
-        setTableTitle("Create Auction Room");
+        setTableTitle("");
         clearWorkspaceForDetail();
-        addBackButton("Back to Pending Items", "items");
+        addBackButton("Back to Items", "items");
 
-        VBox shell = new VBox(14);
+        VBox shell = new VBox(10);
         shell.getStyleClass().add("admin-workspace-shell");
 
         Label title = new Label("Create Auction Room");
         title.getStyleClass().add("admin-page-title");
 
-        Label note = new Label(
-            "UI này bám đúng schema auctions: item_id, seller_id, start/end time, "
-                + "min_bid_increment, reserve_price, snipe window và current_price. "
-                + "Nút Create Auction đang disable nên chưa ghi database."
-        );
-        note.getStyleClass().add("admin-page-note");
-        note.setWrapText(true);
-
         GridPane content = createDetailGrid();
-        VBox gallery = buildItemGallery(data, AUCTION_IMAGE_HEIGHT, "Item preview");
+        VBox gallery = buildItemGallery(data, AUCTION_IMAGE_HEIGHT, "");
         VBox form = buildCreateAuctionForm(data);
         content.add(gallery, 0, 0);
         content.add(form, 1, 0);
         keepDetailGridChildrenResizable(gallery, form);
 
-        shell.getChildren().addAll(title, note, content);
+        shell.getChildren().addAll(title, content);
         dataRowsBox.getChildren().add(shell);
 
         showDetail(
-            "Create auction preview",
-            "Item đã được đưa vào màn tạo auction trong admin-home. Create Auction chưa được wire."
+            "Create auction",
+            "Form dùng đúng schema auctions: item_id/seller_id lấy từ item, current_price lấy từ starting_price, status mặc định OPEN."
         );
     }
 
     private VBox buildCreateAuctionForm(AdminRow data) {
-        VBox card = new VBox(13);
+        VBox card = new VBox(10);
         card.getStyleClass().add("auction-create-card");
         card.setMaxWidth(Double.MAX_VALUE);
 
@@ -2048,26 +2069,119 @@ public class AdminDashboardController extends BaseDashboardController {
         addInfoCell(facts, 1, 1, "Current price", data.startingPrice);
 
         GridPane formGrid = createInfoGrid();
-        addFormCell(formGrid, 0, 0, "Start time", "yyyy-MM-dd HH:mm:ss");
-        addFormCell(formGrid, 1, 0, "End time", "yyyy-MM-dd HH:mm:ss");
-        addFormCell(formGrid, 0, 1, "Minimum bid increment", "Example: 10000");
-        addFormCell(formGrid, 1, 1, "Reserve price", stripCurrency(data.startingPrice));
-        addFormCell(formGrid, 0, 2, "Snipe window seconds", "300");
-        addFormCell(formGrid, 1, 2, "Snipe extension seconds", "60");
+        TextField startField = addFormCell(formGrid, 0, 0, "Start time", "yyyy-MM-dd HH:mm:ss");
+        TextField endField = addFormCell(formGrid, 1, 0, "End time", "yyyy-MM-dd HH:mm:ss");
+        TextField incrementField = addFormCell(formGrid, 0, 1, "Minimum bid increment", "Example: 10000");
+        TextField reserveField = addFormCell(formGrid, 1, 1, "Reserve price", stripCurrency(data.startingPrice));
+        TextField windowField = addFormCell(formGrid, 0, 2, "Snipe window seconds", "300");
+        TextField extensionField = addFormCell(formGrid, 1, 2, "Snipe extension seconds", "60");
+        windowField.setText("300");
+        extensionField.setText("60");
 
         Button create = new Button("Create Auction");
         create.setMnemonicParsing(false);
-        create.getStyleClass().add("admin-disabled-primary-btn");
-        create.setDisable(true);
+        create.getStyleClass().add("create-primary-btn");
+        create.setOnAction(event -> handleCreateAuction(
+            data,
+            startField.getText(),
+            endField.getText(),
+            incrementField.getText(),
+            reserveField.getText(),
+            windowField.getText(),
+            extensionField.getText()
+        ));
 
-        Label disabledNote = new Label(
-            "Create Auction đang bị disable: phần này mới dựng UI, chưa insert vào bảng auctions."
-        );
-        disabledNote.getStyleClass().add("admin-page-note");
-        disabledNote.setWrapText(true);
-
-        card.getChildren().addAll(titleLine, name, price, facts, formGrid, create, disabledNote);
+        card.getChildren().addAll(titleLine, name, price, facts, formGrid, create);
         return card;
+    }
+
+    private void handleCreateAuction(
+        AdminRow data,
+        String startTime,
+        String endTime,
+        String minimumBidIncrement,
+        String reservePrice,
+        String snipeWindowSeconds,
+        String snipeExtensionSeconds) {
+        if (adminNetworkManager == null) {
+            showDetail("Create auction failed", "Client chưa kết nối server.");
+            return;
+        }
+
+        String validationError = validateAuctionForm(
+            data,
+            startTime,
+            endTime,
+            minimumBidIncrement,
+            reservePrice,
+            snipeWindowSeconds,
+            snipeExtensionSeconds
+        );
+        if (!validationError.isBlank()) {
+            showDetail("Create auction failed", validationError);
+            return;
+        }
+
+        adminNetworkManager.send("ADMIN_CREATE_AUCTION " + fields(
+            data.itemId,
+            data.sellerId,
+            startTime.trim(),
+            endTime.trim(),
+            sanitizeMoney(minimumBidIncrement),
+            sanitizeMoney(reservePrice),
+            snipeWindowSeconds.trim(),
+            snipeExtensionSeconds.trim()
+        ));
+        showDetail("Creating auction", "Đã gửi ADMIN_CREATE_AUCTION tới server để insert bảng auctions.");
+    }
+
+    private String validateAuctionForm(
+        AdminRow data,
+        String startTime,
+        String endTime,
+        String minimumBidIncrement,
+        String reservePrice,
+        String snipeWindowSeconds,
+        String snipeExtensionSeconds) {
+        if (data == null || data.itemId.isBlank() || data.sellerId.isBlank()) {
+            return "Thiếu item_id hoặc seller_id từ database.";
+        }
+        if (startTime == null || startTime.isBlank() || endTime == null || endTime.isBlank()) {
+            return "Start time và End time là bắt buộc theo schema auctions.";
+        }
+        if (!isMoney(minimumBidIncrement)) {
+            return "Minimum bid increment phải là số hợp lệ, ví dụ 10000.";
+        }
+        if (reservePrice != null && !reservePrice.isBlank() && !isMoney(reservePrice)) {
+            return "Reserve price phải để trống hoặc là số hợp lệ.";
+        }
+        if (!isPositiveOrZeroInteger(snipeWindowSeconds) || !isPositiveOrZeroInteger(snipeExtensionSeconds)) {
+            return "Snipe window và snipe extension phải là số giây không âm.";
+        }
+        return "";
+    }
+
+    private boolean isMoney(String value) {
+        String sanitized = sanitizeMoney(value);
+        return !sanitized.isBlank() && MONEY_PATTERN.matcher(sanitized).matches();
+    }
+
+    private String sanitizeMoney(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace(",", "").trim();
+    }
+
+    private boolean isPositiveOrZeroInteger(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(value.trim()) >= 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private GridPane createDetailGrid() {
@@ -2105,7 +2219,7 @@ public class AdminDashboardController extends BaseDashboardController {
         double maxImageWidth = imageHeight * PREVIEW_IMAGE_WIDTH_RATIO;
         double maxGalleryWidth = maxImageWidth + PREVIEW_CARD_HORIZONTAL_PADDING;
 
-        VBox gallery = new VBox(10);
+        VBox gallery = new VBox(8);
         gallery.getStyleClass().add("item-gallery-card");
         gallery.setFillWidth(true);
         gallery.setMinWidth(0);
@@ -2136,24 +2250,19 @@ public class AdminDashboardController extends BaseDashboardController {
         thumbs.setMinWidth(0);
         thumbs.setMaxWidth(maxImageWidth);
 
-        if (images.isEmpty()) {
-            StackPane emptyThumb = new StackPane(new Label("No image"));
-            emptyThumb.getStyleClass().add("item-thumb-empty");
-            emptyThumb.setMinSize(THUMB_SIZE, THUMB_SIZE);
-            emptyThumb.setPrefSize(THUMB_SIZE, THUMB_SIZE);
-            emptyThumb.setMaxSize(THUMB_SIZE, THUMB_SIZE);
-            thumbs.getChildren().add(emptyThumb);
-        } else {
+        if (!images.isEmpty()) {
             for (String imageUrl : images) {
                 StackPane thumb = buildThumb(imageUrl, mainFrame);
                 thumbs.getChildren().add(thumb);
             }
         }
 
-        if (title == null) {
-            gallery.getChildren().addAll(mainFrame, thumbs);
-        } else {
-            gallery.getChildren().addAll(title, mainFrame, thumbs);
+        if (title != null) {
+            gallery.getChildren().add(title);
+        }
+        gallery.getChildren().add(mainFrame);
+        if (!thumbs.getChildren().isEmpty()) {
+            gallery.getChildren().add(thumbs);
         }
         return gallery;
     }
@@ -2286,8 +2395,8 @@ public class AdminDashboardController extends BaseDashboardController {
         grid.add(cell, column, row);
     }
 
-    private void addFormCell(GridPane grid, int column, int row, String label, String prompt) {
-        VBox box = new VBox(5);
+    private TextField addFormCell(GridPane grid, int column, int row, String label, String prompt) {
+        VBox box = new VBox(4);
         Label key = new Label(label);
         key.getStyleClass().add("create-field-label");
         TextField field = new TextField();
@@ -2296,6 +2405,7 @@ public class AdminDashboardController extends BaseDashboardController {
         field.setMaxWidth(Double.MAX_VALUE);
         box.getChildren().addAll(key, field);
         grid.add(box, column, row);
+        return field;
     }
 
     private VBox buildAttributesBox(String attributes) {
@@ -2484,6 +2594,25 @@ public class AdminDashboardController extends BaseDashboardController {
         }
     }
 
+
+    private String fields(Object... values) {
+        List<String> encoded = new ArrayList<>();
+        for (Object value : values) {
+            encoded.add(encodeField(value));
+        }
+        return String.join("|", encoded);
+    }
+
+    private String encodeField(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return String.valueOf(value)
+            .replace("\\", "\\\\")
+            .replace("|", "\\p")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
+    }
 
     private String safeField(List<String> fields, int index) {
         return index >= 0 && index < fields.size() ? fields.get(index) : "";

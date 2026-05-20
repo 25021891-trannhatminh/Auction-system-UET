@@ -6,10 +6,16 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -37,6 +43,8 @@ import server.service.ServerAuthService;
 
 public class ClientHandler implements Runnable {
     private static final int GLOBAL_USER_ID = -1;
+    private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private Socket socket;
     private BufferedReader in;
@@ -150,6 +158,12 @@ public class ClientHandler implements Runnable {
                 sendAdminAuctions();
                 break;
 
+            case "ADMIN_CREATE_AUCTION":
+                handleAdminCreateAuction(msg.length() > "ADMIN_CREATE_AUCTION".length()
+                    ? msg.substring("ADMIN_CREATE_AUCTION".length()).trim()
+                    : "");
+                break;
+
             case "LIST":
                 //✅ Lấy từ DB thay vì RAM
                 List<Auction> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
@@ -232,6 +246,275 @@ public class ClientHandler implements Runnable {
                 send("UNKNOWN_COMMAND");
                 break;
         }
+    }
+
+    private void handleAdminCreateAuction(String payload) {
+        List<String> fields = splitPayload(payload);
+        if (fields.size() < 8) {
+            send("ADMIN_CREATE_AUCTION_FAIL " + fields("INVALID_PAYLOAD"));
+            return;
+        }
+        if (!isActiveAdmin(this.userId)) {
+            send("ADMIN_CREATE_AUCTION_FAIL " + fields("NOT_ADMIN"));
+            return;
+        }
+
+        int itemId = parseIntOrDefault(safeField(fields, 0), 0);
+        int sellerId = parseIntOrDefault(safeField(fields, 1), 0);
+        LocalDateTime startTime = parseAuctionTime(safeField(fields, 2));
+        LocalDateTime endTime = parseAuctionTime(safeField(fields, 3));
+        BigDecimal minimumBidIncrement = parseBigDecimal(safeField(fields, 4));
+        BigDecimal reservePrice = parseNullableBigDecimal(safeField(fields, 5));
+        int snipeWindowSeconds = parseIntOrDefault(safeField(fields, 6), -1);
+        int snipeExtensionSeconds = parseIntOrDefault(safeField(fields, 7), -1);
+
+        String validationError = validateCreateAuctionRequest(
+            itemId,
+            sellerId,
+            startTime,
+            endTime,
+            minimumBidIncrement,
+            reservePrice,
+            snipeWindowSeconds,
+            snipeExtensionSeconds
+        );
+        if (!validationError.isBlank()) {
+            send("ADMIN_CREATE_AUCTION_FAIL " + fields(validationError));
+            return;
+        }
+
+        CreateAuctionResult result = insertAuctionFromAvailableItem(
+            itemId,
+            sellerId,
+            startTime,
+            endTime,
+            minimumBidIncrement,
+            reservePrice,
+            snipeWindowSeconds,
+            snipeExtensionSeconds
+        );
+
+        if (result.success) {
+            send("ADMIN_CREATE_AUCTION_SUCCESS " + fields(result.auctionId, itemId));
+            ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
+            return;
+        }
+        send("ADMIN_CREATE_AUCTION_FAIL " + fields(result.message));
+    }
+
+    private String validateCreateAuctionRequest(
+        int itemId,
+        int sellerId,
+        LocalDateTime startTime,
+        LocalDateTime endTime,
+        BigDecimal minimumBidIncrement,
+        BigDecimal reservePrice,
+        int snipeWindowSeconds,
+        int snipeExtensionSeconds) {
+        if (itemId <= 0 || sellerId <= 0) {
+            return "item_id hoặc seller_id không hợp lệ";
+        }
+        if (startTime == null || endTime == null) {
+            return "start_time/end_time phải đúng format yyyy-MM-dd HH:mm:ss";
+        }
+        if (!endTime.isAfter(startTime)) {
+            return "end_time phải sau start_time";
+        }
+        if (minimumBidIncrement == null || minimumBidIncrement.compareTo(BigDecimal.ZERO) < 0) {
+            return "min_bid_increment phải là số không âm";
+        }
+        if (reservePrice != null && reservePrice.compareTo(BigDecimal.ZERO) < 0) {
+            return "reserve_price phải để trống hoặc là số không âm";
+        }
+        if (snipeWindowSeconds < 0 || snipeExtensionSeconds < 0) {
+            return "snipe_window_seconds và snipe_extension_seconds phải không âm";
+        }
+        return "";
+    }
+
+    private CreateAuctionResult insertAuctionFromAvailableItem(
+        int itemId,
+        int sellerId,
+        LocalDateTime startTime,
+        LocalDateTime endTime,
+        BigDecimal minimumBidIncrement,
+        BigDecimal reservePrice,
+        int snipeWindowSeconds,
+        int snipeExtensionSeconds) {
+        String selectSql = """
+            SELECT seller_id, starting_price, status
+            FROM items
+            WHERE item_id = ?
+            FOR UPDATE
+            """;
+        String insertSql = """
+            INSERT INTO auctions (
+                item_id, seller_id, start_time, end_time,
+                min_bid_increment, reserve_price,
+                snipe_window_seconds, snipe_extension_seconds,
+                current_price, current_winner_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'OPEN')
+            """;
+        String updateSql = "UPDATE items SET status = 'IN_AUCTION' WHERE item_id = ?";
+
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                BigDecimal startingPrice;
+                try (PreparedStatement selectPs = conn.prepareStatement(selectSql)) {
+                    selectPs.setInt(1, itemId);
+                    try (ResultSet rs = selectPs.executeQuery()) {
+                        if (!rs.next()) {
+                            conn.rollback();
+                            return CreateAuctionResult.fail("ITEM_NOT_FOUND");
+                        }
+                        int databaseSellerId = rs.getInt("seller_id");
+                        if (databaseSellerId != sellerId) {
+                            conn.rollback();
+                            return CreateAuctionResult.fail("SELLER_MISMATCH");
+                        }
+                        String itemStatus = rs.getString("status");
+                        if (!"AVAILABLE".equalsIgnoreCase(itemStatus)) {
+                            conn.rollback();
+                            return CreateAuctionResult.fail("ITEM_NOT_AVAILABLE");
+                        }
+                        startingPrice = rs.getBigDecimal("starting_price");
+                    }
+                }
+
+                int auctionId = 0;
+                try (PreparedStatement insertPs = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
+                    insertPs.setInt(1, itemId);
+                    insertPs.setInt(2, sellerId);
+                    insertPs.setTimestamp(3, Timestamp.valueOf(startTime));
+                    insertPs.setTimestamp(4, Timestamp.valueOf(endTime));
+                    insertPs.setBigDecimal(5, minimumBidIncrement);
+                    if (reservePrice == null) {
+                        insertPs.setNull(6, Types.DECIMAL);
+                    } else {
+                        insertPs.setBigDecimal(6, reservePrice);
+                    }
+                    insertPs.setShort(7, (short) snipeWindowSeconds);
+                    insertPs.setShort(8, (short) snipeExtensionSeconds);
+                    insertPs.setBigDecimal(9, startingPrice);
+                    insertPs.executeUpdate();
+
+                    try (ResultSet keys = insertPs.getGeneratedKeys()) {
+                        if (keys.next()) {
+                            auctionId = keys.getInt(1);
+                        }
+                    }
+                }
+
+                try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
+                    updatePs.setInt(1, itemId);
+                    updatePs.executeUpdate();
+                }
+
+                conn.commit();
+                return CreateAuctionResult.ok(auctionId);
+            } catch (SQLException e) {
+                conn.rollback();
+                return CreateAuctionResult.fail(e.getMessage());
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            return CreateAuctionResult.fail(e.getMessage());
+        }
+    }
+
+    private boolean isActiveAdmin(int userId) {
+        if (userId <= 0) {
+            return false;
+        }
+        String sql = "SELECT role, status FROM accounts WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next()
+                    && "ADMIN".equalsIgnoreCase(rs.getString("role"))
+                    && "ACTIVE".equalsIgnoreCase(rs.getString("status"));
+            }
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    private LocalDateTime parseAuctionTime(String value) {
+        try {
+            return value == null || value.isBlank()
+                ? null
+                : LocalDateTime.parse(value.trim(), AUCTION_TIME_FORMATTER);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private BigDecimal parseNullableBigDecimal(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return parseBigDecimal(value);
+    }
+
+    private BigDecimal parseBigDecimal(String value) {
+        try {
+            return value == null || value.isBlank()
+                ? null
+                : new BigDecimal(value.replace(",", "").trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int parseIntOrDefault(String value, int fallbackValue) {
+        try {
+            return value == null || value.isBlank() ? fallbackValue : Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallbackValue;
+        }
+    }
+
+    private List<String> splitPayload(String payload) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean escaped = false;
+
+        for (int i = 0; i < payload.length(); i++) {
+            char character = payload.charAt(i);
+            if (escaped) {
+                switch (character) {
+                    case 'p' -> current.append('|');
+                    case 'n' -> current.append('\n');
+                    case 'r' -> current.append('\r');
+                    case '\\' -> current.append('\\');
+                    default -> current.append(character);
+                }
+                escaped = false;
+                continue;
+            }
+            if (character == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (character == '|') {
+                fields.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(character);
+        }
+        if (escaped) {
+            current.append('\\');
+        }
+        fields.add(current.toString());
+        return fields;
+    }
+
+    private String safeField(List<String> fields, int index) {
+        return index >= 0 && index < fields.size() ? fields.get(index) : "";
     }
 
     private void sendAdminUsers() {
@@ -384,4 +667,24 @@ public class ClientHandler implements Runnable {
             .replace("\n", "\\n")
             .replace("\r", "\\r");
     }
+    private static final class CreateAuctionResult {
+        private final boolean success;
+        private final int auctionId;
+        private final String message;
+
+        private CreateAuctionResult(boolean success, int auctionId, String message) {
+            this.success = success;
+            this.auctionId = auctionId;
+            this.message = message;
+        }
+
+        private static CreateAuctionResult ok(int auctionId) {
+            return new CreateAuctionResult(true, auctionId, "");
+        }
+
+        private static CreateAuctionResult fail(String message) {
+            return new CreateAuctionResult(false, 0, message == null ? "SAVE_ERROR" : message);
+        }
+    }
+
 }
