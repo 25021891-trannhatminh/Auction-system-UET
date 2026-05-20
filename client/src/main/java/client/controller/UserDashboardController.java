@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
@@ -108,7 +109,10 @@ public class UserDashboardController extends BaseDashboardController {
    * persisted session user id in the payload. The server prefers the authenticated socket user
    * when available and falls back to this id only for this dashboard-created connection.</p>
    */
+  // Tạo một biến instance trong lớp để tí nữa có thể remove khi logout/chuyển cảnh
+  private Consumer<String> userNetworkHandler;
   private NetworkManager createItemNetworkManager;
+  private java.util.function.Consumer<String> createItemHandler;
   private final List<CreateItemUpload> pendingCreateItemUploads = new ArrayList<>();
   private int pendingCreateItemPreviewIndex;
   private boolean sellerItemStatsLoaded;
@@ -122,6 +126,7 @@ public class UserDashboardController extends BaseDashboardController {
   private int auctionPage = 1;
 
 
+
   @Override
   @FXML
   protected void initialize() {
@@ -129,6 +134,18 @@ public class UserDashboardController extends BaseDashboardController {
     setupCreateItemNetwork();
     setupCreateListingFloatingButton();
     super.initialize();
+
+    this.networkManager = NetworkManager.getInstance();
+    this.userNetworkHandler = msg -> {
+      if (msg != null && msg.startsWith("PUSH_NOTIF|")) {
+        javafx.application.Platform.runLater(() -> {
+          new client.service.NotificationUIHandler().handle(msg);
+        });
+      }
+    };
+    // Thêm vào danh sách lắng nghe chung của hệ thống
+    this.networkManager.addMessageHandler(userNetworkHandler);
+
   }
 
   private void setupCreateListingFloatingButton() {
@@ -152,8 +169,8 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void setupCreateItemNetwork() {
-    createItemNetworkManager = new NetworkManager();
-    createItemNetworkManager.setMessageHandler(
+    createItemNetworkManager = NetworkManager.getInstance();
+    createItemNetworkManager.addMessageHandler(
         message -> Platform.runLater(() -> handleCreateItemServerMessage(message))
     );
     requestCreateListingMetadata();
@@ -179,9 +196,17 @@ public class UserDashboardController extends BaseDashboardController {
 
   @Override
   protected void handleLogout() {
-    if (createItemNetworkManager != null) {
-      createItemNetworkManager.disconnect();
+    // 1. Dọn dẹp, gỡ bỏ bộ lắng nghe Real-time của User khỏi danh sách tổng
+    if (networkManager != null && userNetworkHandler != null) {
+      networkManager.removeMessageHandler(userNetworkHandler);
     }
+
+    // 2. Gỡ bỏ bộ lắng nghe nghiệp vụ Tạo sản phẩm khỏi danh sách tổng
+    if (createItemNetworkManager != null && createItemHandler != null) {
+      createItemNetworkManager.removeMessageHandler(createItemHandler);
+    }
+
+    // 3. Gọi hàm logout của lớp cha BaseDashboardController để xóa Session và chuyển Scene về auth.fxml
     super.handleLogout();
   }
 

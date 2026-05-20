@@ -28,7 +28,7 @@ public class WalletDAO {
     // ============================================================
 
     private static final String SQL_SELECT_BASE =
-        "SELECT wallet_id, user_id, balance, updated_at FROM WALLETS";
+        "SELECT wallet_id, user_id, balance, updated_at FROM wallets";
 
     private static final String SQL_SELECT_BY_ID =
         SQL_SELECT_BASE + " WHERE wallet_id = ?";
@@ -37,18 +37,18 @@ public class WalletDAO {
         SQL_SELECT_BASE + " WHERE user_id = ?";
 
     private static final String SQL_SELECT_BALANCE =
-        "SELECT balance FROM WALLETS WHERE user_id = ?";
+        "SELECT balance FROM wallets WHERE wallet_id = ?";
 
     private static final String SQL_INSERT =
-        "INSERT INTO WALLETS (user_id, balance) VALUES (?, 0.00)";
+        "INSERT INTO wallets (user_id, balance) VALUES (?, 0.00)";
 
     private static final String SQL_DEPOSIT =
-        "UPDATE WALLETS SET balance = balance + ?, updated_at = NOW() WHERE wallet_id = ?";
+        "UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE wallet_id = ?";
 
     private static final String SQL_WITHDRAW = """
-        UPDATE WALLETS 
+        UPDATE wallets 
         SET balance = balance - ?, updated_at = NOW()
-        WHERE user_id = ? AND balance >= ?
+        WHERE wallet_id = ? AND balance >= ?
         """;
 
     // ============================================================

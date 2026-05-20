@@ -40,7 +40,7 @@
 //    public void removeListedItem(String itemId) { listedItemIds.remove(itemId); }
 //
 //    public double          getRating()       { return rating; }
-//    public List<String>    getListedItemIds(){ return Collections.unmodifiableList(listedItemIds); }    // Return 1 tham chiếu (view) đến List (nhưng đã Override các phương thức để không thể sửa đổi)
+//   public List<String>    getListedItemIds(){ return Collections.unmodifiableList(listedItemIds); }    // Return 1 tham chiếu (view) đến List (nhưng đã Override các phương thức để không thể sửa đổi)
 //
 //    public void updateRating(double newRating) {
 //        if (newRating < 0 || newRating > 5)

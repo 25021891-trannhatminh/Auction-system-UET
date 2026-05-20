@@ -7,7 +7,7 @@ import server.common.model.NotificationEvent;
 import server.network.NotificationDispatcher;
 import server.repository.NotificationDAO;
 import server.common.enums.NotificationType;
-import server.common.model.NotificationDTO;
+
 
 public class NotificationService {
   private final NotificationDAO notificationDAO = new NotificationDAO();

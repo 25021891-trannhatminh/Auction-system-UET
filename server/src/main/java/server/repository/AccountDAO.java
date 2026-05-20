@@ -57,7 +57,7 @@ public class AccountDAO {
      * Câu lệnh SELECT cơ bản.
      */
     private static final String SQL_SELECT_BASE = """
-        SELECT user_id, username,password, email, full_name, phone,
+        SELECT user_id, username, email, full_name, phone,
                role, status, last_login, created_at
         FROM accounts
         """;
@@ -218,7 +218,7 @@ public class AccountDAO {
     public Admin getAdminById(int adminId) {
 
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(SQL_GET_BY_ID)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_GET_BY_ID)) {
 
             ps.setInt(1, adminId);
 
@@ -300,23 +300,26 @@ public class AccountDAO {
     }
 
     /**
-     * Mapping dữ liệu từ ResultSet sang đối tượng User.
+     * Mapping dữ liệu từ ResultSet sang đối tượng User không chứa passwordHash.
      *
      * @param rs ResultSet hiện tại
      * @return đối tượng User
      * @throws SQLException nếu lỗi truy xuất dữ liệu
      */
-    private User getUserByRow(ResultSet rs) throws SQLException {
+    private User getUserByRow(ResultSet rs)
+        throws SQLException {
+
         Timestamp lastLoginTs = rs.getTimestamp("last_login");
-        AccountRole role = AccountRole.valueOf(rs.getString("role"));
-        return new User(String.valueOf(rs.getInt("user_id")),
+
+        return new User(
+            String.valueOf(rs.getInt("user_id")),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
             rs.getString("email"),
-            rs.getString("password"),
+            null,
             rs.getString("full_name"),
             rs.getString("phone"),
-            role,
+            AccountRole.valueOf(rs.getString("role")),
             UserStatus.valueOf(rs.getString("status")),
             lastLoginTs != null ? lastLoginTs.toLocalDateTime() : null,
             5.0,
@@ -324,15 +327,16 @@ public class AccountDAO {
         );
     }
 
+
     private Admin getAdminByRow(ResultSet rs) throws SQLException {
         Timestamp lastLoginTs = rs.getTimestamp("last_login");
         AccountRole role = AccountRole.valueOf(rs.getString("role"));
-        if (role.equals(AccountRole.ADMIN)) {
+        if (role == AccountRole.ADMIN) {
             return new Admin(String.valueOf(rs.getInt("user_id")),
                 rs.getTimestamp("created_at").toLocalDateTime(),
                 rs.getString("username"),
                 rs.getString("email"),
-                rs.getString("password"),
+                null,
                 rs.getString("full_name"),
                 rs.getString("phone"),
                 UserStatus.valueOf(rs.getString("status")),

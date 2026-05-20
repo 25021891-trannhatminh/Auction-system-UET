@@ -14,6 +14,7 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -73,6 +74,7 @@ public class CreateItemController {
   private final List<Path> persistedImagePaths = new ArrayList<>();
   private int currentPreviewImageIndex;
   private NetworkManager networkManager;
+  private final Consumer<String> serverMessageHandler = this::handleServerMessage;
 
   /**
    * Khởi tạo form, preview realtime và kết nối network riêng cho màn create item.
@@ -86,8 +88,8 @@ public class CreateItemController {
     updatePreviewNavigation();
     loadUserMeta();
 
-    networkManager = new NetworkManager();
-    networkManager.setMessageHandler(this::handleServerMessage);
+    this.networkManager = NetworkManager.getInstance();
+    this.networkManager.addMessageHandler(this.serverMessageHandler);
   }
 
 
@@ -485,7 +487,7 @@ public class CreateItemController {
   private void navigateToUserHome() {
     try {
       if (networkManager != null) {
-        networkManager.disconnect();
+        this.networkManager.removeMessageHandler(this.serverMessageHandler);
       }
       FXMLLoader loader = new FXMLLoader(getClass().getResource("/client/user-home.fxml"));
       Parent root = loader.load();

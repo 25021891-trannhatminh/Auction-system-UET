@@ -27,7 +27,7 @@ public class NotificationDAO {
   private static final String SQL_SELECT_BASE = """
         SELECT notif_id, user_id, type, title, content,
                is_read, related_id, created_at
-        FROM NOTIFICATIONS
+        FROM notifications
         """;
 
   private static final String SQL_SELECT_BY_USER_LIMIT =

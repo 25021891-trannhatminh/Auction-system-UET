@@ -424,7 +424,7 @@ public class AutoBidConfigDAO {
 
   // Hủy tất cả auto bid ACTIVE của một phiên (khi phiên kết thúc)
   private static final String SQL_CANCEL_ALL_BY_AUCTION = """
-        UPDATE auto_bids
+        UPDATE auto_bid_configs
         SET status = 'CANCELED', updated_at = NOW()
         WHERE auction_id = ? AND status = 'ACTIVE'
         """;

@@ -44,7 +44,7 @@ public class BidTransactionDAO {
             FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time DESC
             """;
     private static final String SELECT_DISTINCT_BIDDERS =
-        "SELECT DISTINCT user_id FROM bid_transactions WHERE auction_id = ?";
+        "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
     /**
      * Đặt giá đấu giá - Đảm bảo tính nguyên tử và chống Race Condition.
      */

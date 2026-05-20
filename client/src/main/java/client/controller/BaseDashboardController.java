@@ -2,12 +2,15 @@ package client.controller;
 
 import client.SceneNavigator;
 import client.model.User;
+import client.service.NetworkManager;
+import client.service.NotificationUIHandler;
 import client.service.SessionManager;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -21,6 +24,11 @@ import javafx.stage.Stage;
  * Shared base controller for role-specific dashboards.
  */
 public abstract class BaseDashboardController {
+    // Khởi tạo đối tượng xử lý Pop-up Alert bạn đã làm
+    protected final NotificationUIHandler notifUIHandler = new NotificationUIHandler();
+
+    protected NetworkManager networkManager;
+    private java.util.function.Consumer<String> realtimeNotificationHandler;
 
     protected static class SectionContent {
         protected final String title;
@@ -154,6 +162,52 @@ public abstract class BaseDashboardController {
         collectDisplayLabels();
         registerNavigationButtons();
         showSection(getDefaultSectionKey());
+
+        this.networkManager = NetworkManager.getInstance();
+    }
+
+    /**
+     * Hàm này được gọi ngay sau khi User/Admin đăng nhập thành công
+     * và chuyển sang màn hình Dashboard.
+     */
+    public void setupRealtimeListener() {
+        this.networkManager = NetworkManager.getInstance();
+
+        if (this.networkManager != null) {
+            // SỬA: Định nghĩa bộ lắng nghe độc lập thông qua biến Consumer
+            this.realtimeNotificationHandler = msg -> {
+                if (msg == null || msg.isBlank()) return;
+
+                if (msg.startsWith("PUSH_NOTIF|")) {
+                    // 1. Hiển thị Pop-up thông báo real-time lên màn hình ngay lập tức
+                    Platform.runLater(() -> notifUIHandler.handle(msg));
+
+                    // 2. Đẩy chuỗi xuống cho Controller con xử lý thay đổi UI (nếu cần)
+                    Platform.runLater(() -> handleRealtimeNotification(msg));
+                } else {
+                    // Xử lý các phản hồi nghiệp vụ thông thường
+                    Platform.runLater(() -> handleBusinessResponse(msg));
+                }
+            };
+
+            // SỬA: Sử dụng .addMessageHandler() để chạy song song, KHÔNG DÙNG setMessageHandler()
+            this.networkManager.addMessageHandler(realtimeNotificationHandler);
+        }
+    }
+
+    /**
+     * Lớp con (Admin/User Controller) sẽ override hàm này nếu muốn
+     * tự động thêm/xóa dòng hoặc cập nhật số dư, giá tiền trên UI theo thời gian thực.
+     */
+    protected void handleRealtimeNotification(String rawMessage) {
+        // Mặc định không làm gì, lớp con sẽ ghi đè logic
+    }
+
+    /**
+     * Xử lý phản hồi nghiệp vụ trực tiếp (kết quả của gói tin request chủ động gửi lên)
+     */
+    protected void handleBusinessResponse(String msg) {
+        // Mặc định không làm gì, lớp con sẽ ghi đè logic
     }
 
     /**
@@ -334,6 +388,13 @@ public abstract class BaseDashboardController {
 
     @FXML
     protected void handleLogout() {
+        // Dọn dẹp bộ lắng nghe thông báo real-time (nếu có)
+        // Giả sử realtimeNotificationHandler là biến bạn đã khai báo trong Controller
+        if (this.networkManager != null && this.realtimeNotificationHandler != null) {
+            this.networkManager.removeMessageHandler(this.realtimeNotificationHandler);
+            this.realtimeNotificationHandler = null; // Reset để tránh dọn dẹp nhầm lần sau
+        }
+
         SessionManager.clear();
 
         try {
