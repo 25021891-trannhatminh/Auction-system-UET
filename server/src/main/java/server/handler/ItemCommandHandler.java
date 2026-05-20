@@ -153,7 +153,9 @@ public class ItemCommandHandler {
                    COALESCE(i.category, 'Uncategorized') AS category_name,
                    i.name, i.description, i.starting_price, i.status, i.created_at,
                    a.auction_id, a.status AS auction_status, a.current_price,
-                   COALESCE(bid_counts.bid_count, 0) AS bid_count
+                   COALESCE(bid_counts.bid_count, 0) AS bid_count,
+                   COALESCE(imgs.image_urls, '') AS image_urls,
+                   COALESCE(attrs.attribute_lines, '') AS attribute_lines
             FROM items i
             LEFT JOIN accounts seller ON seller.user_id = i.seller_id
             LEFT JOIN auctions a ON a.item_id = i.item_id
@@ -162,6 +164,20 @@ public class ItemCommandHandler {
                 FROM bid_transactions
                 GROUP BY auction_id
             ) bid_counts ON bid_counts.auction_id = a.auction_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                                    SEPARATOR '\\n') AS image_urls
+                FROM item_images
+                GROUP BY item_id
+            ) imgs ON imgs.item_id = i.item_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(CONCAT(attr_key, ': ', attr_value) ORDER BY attr_id ASC
+                                    SEPARATOR '\\n') AS attribute_lines
+                FROM item_attributes
+                GROUP BY item_id
+            ) attrs ON attrs.item_id = i.item_id
             ORDER BY i.created_at DESC, i.item_id DESC
             """;
 
@@ -183,7 +199,9 @@ public class ItemCommandHandler {
                     nullableInt(rs, "auction_id"),
                     rs.getString("auction_status"),
                     rs.getBigDecimal("current_price"),
-                    rs.getInt("bid_count")
+                    rs.getInt("bid_count"),
+                    rs.getString("image_urls"),
+                    rs.getString("attribute_lines")
                 ));
             }
         } catch (SQLException e) {

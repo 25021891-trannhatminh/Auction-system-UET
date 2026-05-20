@@ -7,6 +7,7 @@ import client.model.User;
 import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,18 +15,24 @@ import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.OverrunStyle;
+import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
 
 /**
  * Controller for the administrator dashboard and moderation workspace.
@@ -42,11 +49,15 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double ACTION_PRIMARY_WIDTH = 58;
     private static final double ACTION_MORE_WIDTH = 26;
     private static final double ACTION_GAP = 6;
+    private static final double REVIEW_IMAGE_HEIGHT = 330;
+    private static final double AUCTION_IMAGE_HEIGHT = 360;
+    private static final double THUMB_SIZE = 74;
 
     private final Map<String, SectionContent> sections = buildSections();
     private final List<AdminRow> liveUserRows = new ArrayList<>();
     private final List<AdminRow> liveItemRows = new ArrayList<>();
     private final List<AdminRow> liveAuctionRows = new ArrayList<>();
+    private final Map<String, Image> adminImageCache = new HashMap<>();
 
     private List<AdminRow> incomingUserRows = new ArrayList<>();
     private List<AdminRow> incomingItemRows = new ArrayList<>();
@@ -234,6 +245,24 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
+        if (msg.equals("ADMIN_APPROVE_SUCCESS")) {
+            requestLiveAdminData();
+            showDetail(
+                "Item approved",
+                "Database đã chuyển item từ PENDING_REVIEW sang AVAILABLE. "
+                    + "Create Auction đang mở ở chế độ UI preview, chưa ghi bảng auctions."
+            );
+            return;
+        }
+
+        if (msg.startsWith("ADMIN_APPROVE_FAIL")) {
+            showDetail(
+                "Approve failed",
+                "Server không approve được item. Có thể item không còn ở PENDING_REVIEW."
+            );
+            return;
+        }
+
         if (msg.startsWith("ADMIN_DATA_ERROR ")) {
             handleAdminDataError(msg.substring("ADMIN_DATA_ERROR ".length()));
         }
@@ -403,69 +432,60 @@ public class AdminDashboardController extends BaseDashboardController {
             return null;
         }
 
-        String itemId = fields.get(0);
-        String sellerId = fields.get(1);
-        String seller = fields.get(2);
-        String category = fallback(fields.get(3), "Uncategorized");
-        String itemName = fields.get(4);
-        String description = fields.get(5);
-        String startingPrice = formatMoney(fields.get(6));
-        String status = fields.get(7);
-        String createdAt = shortTimestamp(fields.get(8));
-        String auctionId = fields.get(9);
-        String auctionStatus = fields.get(10);
-        String currentPrice = formatMoney(fields.get(11));
-        String bidCount = fallback(fields.get(12), "0");
+        String itemId = safeField(fields, 0);
+        String sellerId = safeField(fields, 1);
+        String seller = safeField(fields, 2);
+        String category = fallback(safeField(fields, 3), "Uncategorized");
+        String itemName = fallback(safeField(fields, 4), "Untitled item");
+        String description = safeField(fields, 5);
+        String startingPrice = formatMoney(safeField(fields, 6));
+
+        int statusIndex = isItemStatusValue(safeField(fields, 7)) ? 7 : 8;
+        String status = safeField(fields, statusIndex);
+        String createdAt = shortTimestamp(safeField(fields, statusIndex + 1));
+        String auctionId = safeField(fields, statusIndex + 2);
+        String auctionStatus = safeField(fields, statusIndex + 3);
+        String currentPrice = formatMoney(safeField(fields, statusIndex + 4));
+        String bidCount = fallback(safeField(fields, statusIndex + 5), "0");
+        String imagePayload = safeField(fields, statusIndex + 6);
+        String attributes = safeField(fields, statusIndex + 7);
         String auctionLink = auctionId.isBlank() ? "No auction" : "AUC-" + auctionId;
 
-        String meta = "Seller " + fallback(seller, "#" + sellerId)
+        String sellerLabel = fallback(seller, "#" + sellerId);
+        String meta = "Seller " + sellerLabel
             + " - Starting " + startingPrice
             + " - Created " + fallback(createdAt, "not available")
-            + (auctionId.isBlank() ? " - No auction" : " - " + auctionLink + " " + auctionStatus +
-            " - " + bidCount + " bids");
+            + (auctionId.isBlank() ? " - No auction" : " - " + auctionLink + " " + auctionStatus
+            + " - " + bidCount + " bids");
 
         String detail = "ITEM-" + itemId
             + " - " + fallback(description, "no description")
             + ". Seller ID #" + sellerId
             + ". Current auction link: " + auctionLink
             + (auctionId.isBlank() ? "." : " - current price " + currentPrice + ".")
-            + " Item Review đang đọc từ bảng items/auctions của cloud database.";
+            + " Dữ liệu review đọc trực tiếp từ items, item_images, item_attributes "
+            + "và auctions trong cloud database.";
 
-        String normalizedStatus = normalize(status);
-
-        if (auctionId.isBlank()) {
-            if (normalizedStatus.equals("pending review")) {
-                return row(
-                    "ITEM-" + itemId + " - " + itemName,
-                    meta,
-                    category,
-                    auctionLink,
-                    status,
-                    detail,
-                    "Review"
-                );
-            }
-            return row(
-                "ITEM-" + itemId + " - " + itemName,
-                meta,
-                category,
-                auctionLink,
-                status,
-                detail,
-                "View",
-                "Create Auction"
-            );
-        }
-
-        return row(
+        return itemRow(
             "ITEM-" + itemId + " - " + itemName,
             meta,
             category,
-            auctionLink,
+            startingPrice,
             status,
             detail,
-            "View",
-            "View Auction"
+            itemId,
+            sellerId,
+            sellerLabel,
+            itemName,
+            description,
+            startingPrice,
+            createdAt,
+            auctionId,
+            auctionStatus,
+            currentPrice,
+            bidCount,
+            imagePayload,
+            attributes
         );
     }
 
@@ -943,38 +963,29 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void renderItems(String filter) {
-        setTableTitle("Item Review Queue");
-        renderChips(
-            filter,
-            "Pending Approval",
-            "All",
-            "DRAFT",
-            "AVAILABLE",
-            "IN_AUCTION",
-            "SOLD",
-            "REMOVED",
-            "No auction"
-        );
+        setTableTitle("Pending Item Review");
+        renderChips(filter, "Pending Approval");
 
         List<AdminRow> rows = currentItemRows();
+        List<AdminRow> pendingRows = pendingItemRows(rows);
         updateStats(
             new String[] {
+                String.valueOf(pendingRows.size()),
                 String.valueOf(rows.size()),
-                String.valueOf(countStatus(rows, "PENDING_REVIEW")),
                 String.valueOf(countStatus(rows, "AVAILABLE")),
                 String.valueOf(countStatus(rows, "IN_AUCTION"))
             },
-            new String[]{"Items", "Pending", "Available", "In Auction"}
+            new String[]{"Pending", "Items", "Available", "In Auction"}
         );
 
-        addHeader("Item", "Category", "Auction Link");
-        addFilteredRows(rows, filter);
+        addHeader("Pending Item", "Category", "Starting Price", "Status", "");
+        addFilteredRows(pendingRows, filter);
 
         showDetail(
-            "Item review",
+            "Pending item review",
             dataSourceNote(itemsLoaded) +
-                " Pending Approval đọc status PENDING_REVIEW từ items. AVAILABLE mới là hàng sẵn " +
-                "sàng tạo auction."
+                " Bảng này chỉ hiện items có status PENDING_REVIEW. Bấm vào một dòng để mở " +
+                "màn review đầy đủ, không dùng detail preview ở dưới bảng nữa."
         );
     }
 
@@ -1135,6 +1146,22 @@ public class AdminDashboardController extends BaseDashboardController {
             return new ArrayList<>(liveItemRows);
         }
         return defaultItemRows();
+    }
+
+    private List<AdminRow> pendingItemRows(List<AdminRow> rows) {
+        List<AdminRow> pendingRows = new ArrayList<>();
+        for (AdminRow row : rows) {
+            if (isPendingItemRow(row)) {
+                pendingRows.add(row);
+            }
+        }
+        return pendingRows;
+    }
+
+    private boolean isPendingItemRow(AdminRow row) {
+        return row != null
+            && row.itemData
+            && normalize(row.status).equals("pending review");
     }
 
     private List<AdminRow> currentAuctionRows() {
@@ -1304,13 +1331,22 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void addHeader(String main, String first, String second) {
+        addHeader(main, first, second, "Status", "Action");
+    }
+
+    private void addHeader(
+        String main,
+        String first,
+        String second,
+        String statusText,
+        String actionText) {
         GridPane header = createTableGrid("data-header");
 
         Label mainHeader = headerLabel(main, HPos.LEFT);
         Label firstHeader = headerLabel(first, HPos.CENTER);
         Label secondHeader = headerLabel(second, HPos.CENTER);
-        Label statusHeader = headerLabel("Status", HPos.CENTER);
-        Label actionHeader = headerLabel("Action", HPos.CENTER);
+        Label statusHeader = headerLabel(statusText, HPos.CENTER);
+        Label actionHeader = headerLabel(actionText, HPos.CENTER);
 
         header.add(mainHeader, 0, 0);
         header.add(firstHeader, 1, 0);
@@ -1381,6 +1417,49 @@ public class AdminDashboardController extends BaseDashboardController {
         return new AdminRow(title, meta, firstValue, secondValue, status, detail, actions);
     }
 
+    private AdminRow itemRow(
+        String title,
+        String meta,
+        String firstValue,
+        String secondValue,
+        String status,
+        String detail,
+        String itemId,
+        String sellerId,
+        String sellerName,
+        String itemName,
+        String description,
+        String startingPrice,
+        String createdAt,
+        String auctionId,
+        String auctionStatus,
+        String currentPrice,
+        String bidCount,
+        String imagePayload,
+        String attributes) {
+        return new AdminRow(
+            title,
+            meta,
+            firstValue,
+            secondValue,
+            status,
+            detail,
+            itemId,
+            sellerId,
+            sellerName,
+            itemName,
+            description,
+            startingPrice,
+            createdAt,
+            auctionId,
+            auctionStatus,
+            currentPrice,
+            bidCount,
+            imagePayload,
+            attributes
+        );
+    }
+
     private void addFilteredRows(List<AdminRow> rows, String filter) {
         int count = 0;
 
@@ -1438,6 +1517,16 @@ public class AdminDashboardController extends BaseDashboardController {
             || normalized.equals("general");
     }
 
+    private boolean isItemStatusValue(String value) {
+        String normalized = value == null ? "" : value.trim().toUpperCase();
+        return normalized.equals("DRAFT")
+            || normalized.equals("PENDING_REVIEW")
+            || normalized.equals("AVAILABLE")
+            || normalized.equals("IN_AUCTION")
+            || normalized.equals("SOLD")
+            || normalized.equals("REMOVED");
+    }
+
     private String normalize(String value) {
         return value == null ? "" : value.toLowerCase().trim().replace("_", " ");
     }
@@ -1457,20 +1546,36 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void addRow(AdminRow data) {
         GridPane row = createTableGrid("data-row");
-        row.setOnMouseClicked(event -> showDetail(data.title, data.detail));
+        row.setOnMouseClicked(event -> {
+            if (isPendingItemRow(data)) {
+                openItemReview(data);
+                return;
+            }
+            showDetail(data.title, data.detail);
+        });
 
         VBox mainCell = new VBox(2);
         mainCell.setMinWidth(0);
         mainCell.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(mainCell, Priority.ALWAYS);
 
-        Button link = new Button(data.title);
-        link.setMnemonicParsing(false);
-        link.getStyleClass().add("row-link");
-        link.setMinWidth(0);
-        link.setMaxWidth(Double.MAX_VALUE);
-        link.setTextOverrun(OverrunStyle.ELLIPSIS);
-        link.setOnAction(event -> handlePrimaryAction(resolvePrimaryAction(data), data));
+        if (data.actions.length > 0) {
+            Button link = new Button(data.title);
+            link.setMnemonicParsing(false);
+            link.getStyleClass().add("row-link");
+            link.setMinWidth(0);
+            link.setMaxWidth(Double.MAX_VALUE);
+            link.setTextOverrun(OverrunStyle.ELLIPSIS);
+            link.setOnAction(event -> handlePrimaryAction(resolvePrimaryAction(data), data));
+            mainCell.getChildren().add(link);
+        } else {
+            Label title = new Label(data.title);
+            title.getStyleClass().add("row-link");
+            title.setMinWidth(0);
+            title.setMaxWidth(Double.MAX_VALUE);
+            title.setTextOverrun(OverrunStyle.ELLIPSIS);
+            mainCell.getChildren().add(title);
+        }
 
         Label meta = new Label(data.meta);
         meta.getStyleClass().add("row-meta");
@@ -1479,7 +1584,7 @@ public class AdminDashboardController extends BaseDashboardController {
         meta.setMaxWidth(Double.MAX_VALUE);
         meta.setTextOverrun(OverrunStyle.ELLIPSIS);
 
-        mainCell.getChildren().addAll(link, meta);
+        mainCell.getChildren().add(meta);
 
         Label firstMetric = rowMetric(data.firstValue);
         Label secondMetric = rowMetric(data.secondValue);
@@ -1515,6 +1620,15 @@ public class AdminDashboardController extends BaseDashboardController {
             fixedColumn(ACTION_PRIMARY_WIDTH),
             fixedColumn(ACTION_MORE_WIDTH)
         );
+
+        if (data.actions.length == 0) {
+            Region emptyAction = new Region();
+            emptyAction.setMinWidth(ACTION_PRIMARY_WIDTH + ACTION_MORE_WIDTH + ACTION_GAP);
+            emptyAction.setPrefWidth(ACTION_PRIMARY_WIDTH + ACTION_MORE_WIDTH + ACTION_GAP);
+            GridPane.setColumnSpan(emptyAction, 2);
+            actions.add(emptyAction, 0, 0);
+            return actions;
+        }
 
         String primaryAction = resolvePrimaryAction(data);
 
@@ -1576,14 +1690,20 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
-        if ("items".equals(currentSectionKey)
+        if (("items".equals(currentSectionKey) || "itemReview".equals(currentSectionKey))
             && (normalizedAction.equals("view") || normalizedAction.equals("review"))) {
-            openItemDetail(data);
+            openItemReview(data);
             return;
         }
 
-        if ("items".equals(currentSectionKey) && normalizedAction.equals("view auction")) {
+        if (("items".equals(currentSectionKey) || "itemReview".equals(currentSectionKey))
+            && normalizedAction.equals("view auction")) {
             openLinkedAuctionDetail(data);
+            return;
+        }
+
+        if (normalizedAction.equals("create auction") && data.itemData) {
+            openCreateAuctionDraft(data);
             return;
         }
 
@@ -1700,38 +1820,419 @@ public class AdminDashboardController extends BaseDashboardController {
         openAuctionDetail(linkedAuction);
     }
 
-    private void openItemDetail(AdminRow data) {
-        setTableTitle("Item Detail");
+    private void openItemReview(AdminRow data) {
+        currentSectionKey = "itemReview";
+        setTableTitle("Review Item");
         clearWorkspaceForDetail();
-        addBackButton("Back to Item Review", "items");
-        addDetailAction("Approve / Reject", data);
-        addDetailAction("Create Auction", data);
-        addDetailAction("Seller History", data);
-        addDetailAction("Moderation Notes", data);
+        addBackButton("Back to Pending Items", "items");
 
-        addDetailHero(data.title, data.status, data.firstValue, data.secondValue, data.meta);
-        addDetailBlock("Overview", "Status: " + data.status, "Category: " +
-            data.firstValue, "Auction link: " + data.secondValue);
-        addDetailBlock(
-            "Seller & Quality",
-            data.meta,
-            "Inspect images, description, starting price, and category before approval."
+        VBox shell = new VBox(14);
+        shell.getStyleClass().add("admin-workspace-shell");
+
+        Label title = new Label("Review Pending Item");
+        title.getStyleClass().add("admin-page-title");
+
+        Label note = new Label(
+            "Review dữ liệu thật từ bảng items, item_images và item_attributes trước khi approve."
         );
-        addDetailBlock(
-            "Auction Readiness",
-            "AVAILABLE items can create OPEN auctions.",
-            "IN_AUCTION and SOLD items should link back to an auction session."
-        );
-        addDetailBlock(
-            "Moderation",
-            "REMOVED items keep report reason and audit notes. DRAFT items should not be auctioned."
-        );
+        note.getStyleClass().add("admin-page-note");
+        note.setWrapText(true);
+
+        GridPane content = createDetailGrid();
+        VBox gallery = buildItemGallery(data, REVIEW_IMAGE_HEIGHT, "Uploaded item images");
+        VBox infoCard = buildReviewInfoCard(data);
+        content.add(gallery, 0, 0);
+        content.add(infoCard, 1, 0);
+
+        shell.getChildren().addAll(title, note, content);
+        dataRowsBox.getChildren().add(shell);
 
         showDetail(
-            data.title,
-            "Đang ở màn Item Detail. Items là listing/catalog review; Auctions là phiên đấu giá " +
-                "sinh ra từ item đã đủ điều kiện."
+            "Reviewing ITEM-" + data.itemId,
+            "Accept sẽ chuyển item PENDING_REVIEW -> AVAILABLE rồi mở màn Create Auction UI."
         );
+    }
+
+    private VBox buildReviewInfoCard(AdminRow data) {
+        VBox card = new VBox(13);
+        card.getStyleClass().add("item-review-card");
+        card.setMaxWidth(Double.MAX_VALUE);
+
+        HBox statusLine = new HBox(8);
+        statusLine.setAlignment(Pos.CENTER_LEFT);
+        statusLine.getChildren().addAll(statusBadge(data.status), statusBadge(data.firstValue));
+
+        Label name = new Label(data.itemName);
+        name.getStyleClass().add("item-info-title");
+        name.setWrapText(true);
+
+        Label price = new Label(data.startingPrice);
+        price.getStyleClass().add("item-info-price");
+
+        Label description = new Label(fallback(data.description, "No description provided."));
+        description.getStyleClass().add("item-info-description");
+        description.setWrapText(true);
+
+        GridPane facts = createInfoGrid();
+        addInfoCell(facts, 0, 0, "Item ID", "ITEM-" + data.itemId);
+        addInfoCell(facts, 1, 0, "Seller", data.sellerName + " (#" + data.sellerId + ")");
+        addInfoCell(facts, 0, 1, "Category", data.firstValue);
+        addInfoCell(facts, 1, 1, "Submitted", fallback(data.createdAt, "not available"));
+        addInfoCell(facts, 0, 2, "Auction link", fallback(data.secondValue, "No auction"));
+        addInfoCell(facts, 1, 2, "Database status", data.status);
+
+        VBox attributesBox = buildAttributesBox(data.attributes);
+
+        HBox actions = new HBox(10);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        Button reject = new Button("Reject later");
+        reject.setMnemonicParsing(false);
+        reject.getStyleClass().add("create-secondary-btn");
+        reject.setDisable(true);
+
+        Button accept = new Button("Accept & Create Auction");
+        accept.setMnemonicParsing(false);
+        accept.getStyleClass().add("create-primary-btn");
+        accept.setOnAction(event -> handleAcceptAndOpenCreateAuction(data));
+        actions.getChildren().addAll(reject, accept);
+
+        card.getChildren().addAll(statusLine, name, price, description, facts, attributesBox, actions);
+        return card;
+    }
+
+    private void handleAcceptAndOpenCreateAuction(AdminRow data) {
+        if (adminNetworkManager != null && data.itemId != null && !data.itemId.isBlank()) {
+            adminNetworkManager.send("ADMIN_APPROVE_ITEM " + data.itemId);
+        }
+        openCreateAuctionDraft(data);
+    }
+
+    private void openCreateAuctionDraft(AdminRow data) {
+        currentSectionKey = "createAuction";
+        setTableTitle("Create Auction Room");
+        clearWorkspaceForDetail();
+        addBackButton("Back to Pending Items", "items");
+
+        VBox shell = new VBox(14);
+        shell.getStyleClass().add("admin-workspace-shell");
+
+        Label title = new Label("Create Auction Room");
+        title.getStyleClass().add("admin-page-title");
+
+        Label note = new Label(
+            "UI này bám đúng schema auctions: item_id, seller_id, start/end time, "
+                + "min_bid_increment, reserve_price, snipe window và current_price. "
+                + "Nút Create Auction đang disable nên chưa ghi database."
+        );
+        note.getStyleClass().add("admin-page-note");
+        note.setWrapText(true);
+
+        GridPane content = createDetailGrid();
+        VBox gallery = buildItemGallery(data, AUCTION_IMAGE_HEIGHT, "Item preview");
+        VBox form = buildCreateAuctionForm(data);
+        content.add(gallery, 0, 0);
+        content.add(form, 1, 0);
+
+        shell.getChildren().addAll(title, note, content);
+        dataRowsBox.getChildren().add(shell);
+
+        showDetail(
+            "Create auction preview",
+            "Item đã được đưa vào màn tạo auction trong admin-home. Create Auction chưa được wire."
+        );
+    }
+
+    private VBox buildCreateAuctionForm(AdminRow data) {
+        VBox card = new VBox(13);
+        card.getStyleClass().add("auction-create-card");
+        card.setMaxWidth(Double.MAX_VALUE);
+
+        HBox titleLine = new HBox(8);
+        titleLine.setAlignment(Pos.CENTER_LEFT);
+        Label itemId = new Label("ITEM-" + data.itemId);
+        itemId.getStyleClass().add("auction-kicker");
+        Label status = statusBadge("AVAILABLE");
+        titleLine.getChildren().addAll(itemId, status);
+
+        Label name = new Label(data.itemName);
+        name.getStyleClass().add("item-info-title");
+        name.setWrapText(true);
+
+        Label price = new Label("Starting price: " + data.startingPrice);
+        price.getStyleClass().add("item-info-price");
+
+        GridPane facts = createInfoGrid();
+        addInfoCell(facts, 0, 0, "Seller", data.sellerName + " (#" + data.sellerId + ")");
+        addInfoCell(facts, 1, 0, "Category", data.firstValue);
+        addInfoCell(facts, 0, 1, "Auction status", "OPEN");
+        addInfoCell(facts, 1, 1, "Current price", data.startingPrice);
+
+        GridPane formGrid = createInfoGrid();
+        addFormCell(formGrid, 0, 0, "Start time", "yyyy-MM-dd HH:mm:ss");
+        addFormCell(formGrid, 1, 0, "End time", "yyyy-MM-dd HH:mm:ss");
+        addFormCell(formGrid, 0, 1, "Minimum bid increment", "Example: 10000");
+        addFormCell(formGrid, 1, 1, "Reserve price", stripCurrency(data.startingPrice));
+        addFormCell(formGrid, 0, 2, "Snipe window seconds", "300");
+        addFormCell(formGrid, 1, 2, "Snipe extension seconds", "60");
+
+        Button create = new Button("Create Auction");
+        create.setMnemonicParsing(false);
+        create.getStyleClass().add("admin-disabled-primary-btn");
+        create.setDisable(true);
+
+        Label disabledNote = new Label(
+            "Create Auction đang bị disable: phần này mới dựng UI, chưa insert vào bảng auctions."
+        );
+        disabledNote.getStyleClass().add("admin-page-note");
+        disabledNote.setWrapText(true);
+
+        card.getChildren().addAll(titleLine, name, price, facts, formGrid, create, disabledNote);
+        return card;
+    }
+
+    private GridPane createDetailGrid() {
+        GridPane grid = new GridPane();
+        grid.getStyleClass().add("review-create-grid");
+        grid.setHgap(18);
+        grid.setVgap(14);
+        grid.setMaxWidth(Double.MAX_VALUE);
+
+        ColumnConstraints left = new ColumnConstraints();
+        left.setPercentWidth(48);
+        left.setHgrow(Priority.ALWAYS);
+        left.setFillWidth(true);
+
+        ColumnConstraints right = new ColumnConstraints();
+        right.setPercentWidth(52);
+        right.setHgrow(Priority.ALWAYS);
+        right.setFillWidth(true);
+
+        grid.getColumnConstraints().addAll(left, right);
+        return grid;
+    }
+
+    private VBox buildItemGallery(AdminRow data, double imageHeight, String titleText) {
+        VBox gallery = new VBox(10);
+        gallery.getStyleClass().add("item-gallery-card");
+        gallery.setMaxWidth(Double.MAX_VALUE);
+
+        Label title = new Label(titleText);
+        title.getStyleClass().add("placeholder-title");
+
+        StackPane mainFrame = new StackPane();
+        mainFrame.getStyleClass().add("item-main-image-wrap");
+        mainFrame.setMinHeight(imageHeight);
+        mainFrame.setPrefHeight(imageHeight);
+        mainFrame.setMaxHeight(imageHeight);
+        mainFrame.setMaxWidth(Double.MAX_VALUE);
+
+        List<String> images = parseMultiline(data.imagePayload);
+        displayImage(mainFrame, images.isEmpty() ? "" : images.get(0), "No uploaded image");
+
+        HBox thumbs = new HBox(8);
+        thumbs.setAlignment(Pos.CENTER_LEFT);
+        thumbs.getStyleClass().add("item-thumb-row");
+
+        if (images.isEmpty()) {
+            StackPane emptyThumb = new StackPane(new Label("No image"));
+            emptyThumb.getStyleClass().add("item-thumb-empty");
+            emptyThumb.setMinSize(THUMB_SIZE, THUMB_SIZE);
+            emptyThumb.setPrefSize(THUMB_SIZE, THUMB_SIZE);
+            emptyThumb.setMaxSize(THUMB_SIZE, THUMB_SIZE);
+            thumbs.getChildren().add(emptyThumb);
+        } else {
+            for (String imageUrl : images) {
+                StackPane thumb = buildThumb(imageUrl, mainFrame);
+                thumbs.getChildren().add(thumb);
+            }
+        }
+
+        gallery.getChildren().addAll(title, mainFrame, thumbs);
+        return gallery;
+    }
+
+    private StackPane buildThumb(String imageUrl, StackPane mainFrame) {
+        StackPane thumb = new StackPane();
+        thumb.getStyleClass().add("item-thumb");
+        thumb.setMinSize(THUMB_SIZE, THUMB_SIZE);
+        thumb.setPrefSize(THUMB_SIZE, THUMB_SIZE);
+        thumb.setMaxSize(THUMB_SIZE, THUMB_SIZE);
+        displayImage(thumb, imageUrl, "");
+        thumb.setOnMouseClicked(event -> displayImage(mainFrame, imageUrl, "No uploaded image"));
+        return thumb;
+    }
+
+    private void displayImage(StackPane frame, String imageUrl, String placeholderText) {
+        frame.getChildren().clear();
+        Image image = loadAdminImage(imageUrl);
+        if (image == null || image.isError()) {
+            Label placeholder = new Label(placeholderText == null ? "" : placeholderText);
+            placeholder.getStyleClass().add("item-image-placeholder");
+            placeholder.setWrapText(true);
+            frame.getChildren().add(placeholder);
+            return;
+        }
+
+        ImageView imageView = new ImageView(image);
+        imageView.setSmooth(true);
+        imageView.setCache(true);
+        imageView.setPreserveRatio(false);
+        imageView.fitWidthProperty().bind(frame.widthProperty());
+        imageView.fitHeightProperty().bind(frame.heightProperty());
+
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(frame.widthProperty());
+        clip.heightProperty().bind(frame.heightProperty());
+        frame.setClip(clip);
+
+        frame.widthProperty().addListener((observable, oldValue, newValue) ->
+            updateCoverViewport(imageView, frame));
+        frame.heightProperty().addListener((observable, oldValue, newValue) ->
+            updateCoverViewport(imageView, frame));
+        image.progressProperty().addListener((observable, oldValue, newValue) ->
+            updateCoverViewport(imageView, frame));
+        frame.getChildren().add(imageView);
+        frame.applyCss();
+        frame.layout();
+        updateCoverViewport(imageView, frame);
+    }
+
+    private Image loadAdminImage(String imagePath) {
+        if (imagePath == null || imagePath.isBlank()) {
+            return null;
+        }
+        if (adminImageCache.containsKey(imagePath)) {
+            return adminImageCache.get(imagePath);
+        }
+
+        Image image = null;
+        try {
+            if (imagePath.startsWith("file:") || imagePath.startsWith("http:")) {
+                image = new Image(imagePath, false);
+            } else if (imagePath.startsWith("https:")) {
+                image = new Image(imagePath, true);
+            } else if (getClass().getResource(imagePath) != null) {
+                image = new Image(getClass().getResource(imagePath).toExternalForm(), false);
+            } else {
+                image = new Image("file:" + imagePath, false);
+            }
+        } catch (IllegalArgumentException ignored) {
+            image = null;
+        }
+        adminImageCache.put(imagePath, image);
+        return image;
+    }
+
+    private void updateCoverViewport(ImageView imageView, Region container) {
+        Image image = imageView.getImage();
+        if (image == null
+            || image.getWidth() <= 0
+            || image.getHeight() <= 0
+            || container.getWidth() <= 0
+            || container.getHeight() <= 0) {
+            return;
+        }
+
+        double imageRatio = image.getWidth() / image.getHeight();
+        double targetRatio = container.getWidth() / container.getHeight();
+        double viewportWidth = image.getWidth();
+        double viewportHeight = image.getHeight();
+
+        if (imageRatio > targetRatio) {
+            viewportWidth = image.getHeight() * targetRatio;
+        } else {
+            viewportHeight = image.getWidth() / targetRatio;
+        }
+
+        double x = (image.getWidth() - viewportWidth) / 2;
+        double y = (image.getHeight() - viewportHeight) / 2;
+        imageView.setViewport(new Rectangle2D(x, y, viewportWidth, viewportHeight));
+    }
+
+    private GridPane createInfoGrid() {
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setMaxWidth(Double.MAX_VALUE);
+
+        ColumnConstraints left = new ColumnConstraints();
+        left.setPercentWidth(50);
+        left.setHgrow(Priority.ALWAYS);
+        ColumnConstraints right = new ColumnConstraints();
+        right.setPercentWidth(50);
+        right.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(left, right);
+        return grid;
+    }
+
+    private void addInfoCell(GridPane grid, int column, int row, String label, String value) {
+        VBox cell = new VBox(3);
+        cell.getStyleClass().add("auction-info-cell");
+        Label key = new Label(label);
+        key.getStyleClass().add("auction-info-key");
+        Label val = new Label(fallback(value, "not available"));
+        val.getStyleClass().add("auction-info-value");
+        val.setWrapText(true);
+        cell.getChildren().addAll(key, val);
+        grid.add(cell, column, row);
+    }
+
+    private void addFormCell(GridPane grid, int column, int row, String label, String prompt) {
+        VBox box = new VBox(5);
+        Label key = new Label(label);
+        key.getStyleClass().add("create-field-label");
+        TextField field = new TextField();
+        field.getStyleClass().add("admin-auction-field");
+        field.setPromptText(prompt);
+        field.setMaxWidth(Double.MAX_VALUE);
+        box.getChildren().addAll(key, field);
+        grid.add(box, column, row);
+    }
+
+    private VBox buildAttributesBox(String attributes) {
+        VBox box = new VBox(5);
+        box.getStyleClass().add("item-attributes-box");
+        Label title = new Label("Item attributes");
+        title.getStyleClass().add("placeholder-title");
+        box.getChildren().add(title);
+
+        List<String> lines = parseMultiline(attributes);
+        if (lines.isEmpty()) {
+            Label empty = new Label("No extra attributes stored for this item.");
+            empty.getStyleClass().add("detail-page-line");
+            empty.setWrapText(true);
+            box.getChildren().add(empty);
+            return box;
+        }
+
+        for (String line : lines) {
+            Label label = new Label(line);
+            label.getStyleClass().add("detail-page-line");
+            label.setWrapText(true);
+            box.getChildren().add(label);
+        }
+        return box;
+    }
+
+    private List<String> parseMultiline(String payload) {
+        List<String> values = new ArrayList<>();
+        if (payload == null || payload.isBlank()) {
+            return values;
+        }
+        String normalizedPayload = payload.replace("\\n", "\n");
+        for (String value : normalizedPayload.split("\\R")) {
+            if (value != null && !value.isBlank()) {
+                values.add(value.trim());
+            }
+        }
+        return values;
+    }
+
+    private String stripCurrency(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("VND", "").replace(",", "").trim();
     }
 
     private void clearWorkspaceForDetail() {
@@ -1954,6 +2455,20 @@ public class AdminDashboardController extends BaseDashboardController {
         private final String status;
         private final String detail;
         private final String[] actions;
+        private final boolean itemData;
+        private final String itemId;
+        private final String sellerId;
+        private final String sellerName;
+        private final String itemName;
+        private final String description;
+        private final String startingPrice;
+        private final String createdAt;
+        private final String auctionId;
+        private final String auctionStatus;
+        private final String currentPrice;
+        private final String bidCount;
+        private final String imagePayload;
+        private final String attributes;
 
         private AdminRow(
             String title,
@@ -1970,6 +2485,63 @@ public class AdminDashboardController extends BaseDashboardController {
             this.status = status;
             this.detail = detail;
             this.actions = actions;
+            this.itemData = false;
+            this.itemId = "";
+            this.sellerId = "";
+            this.sellerName = "";
+            this.itemName = title;
+            this.description = detail;
+            this.startingPrice = secondValue;
+            this.createdAt = "";
+            this.auctionId = "";
+            this.auctionStatus = "";
+            this.currentPrice = "";
+            this.bidCount = "";
+            this.imagePayload = "";
+            this.attributes = "";
+        }
+
+        private AdminRow(
+            String title,
+            String meta,
+            String firstValue,
+            String secondValue,
+            String status,
+            String detail,
+            String itemId,
+            String sellerId,
+            String sellerName,
+            String itemName,
+            String description,
+            String startingPrice,
+            String createdAt,
+            String auctionId,
+            String auctionStatus,
+            String currentPrice,
+            String bidCount,
+            String imagePayload,
+            String attributes) {
+            this.title = title;
+            this.meta = meta;
+            this.firstValue = firstValue;
+            this.secondValue = secondValue;
+            this.status = status;
+            this.detail = detail;
+            this.actions = new String[0];
+            this.itemData = true;
+            this.itemId = itemId;
+            this.sellerId = sellerId;
+            this.sellerName = sellerName;
+            this.itemName = itemName;
+            this.description = description;
+            this.startingPrice = startingPrice;
+            this.createdAt = createdAt;
+            this.auctionId = auctionId;
+            this.auctionStatus = auctionStatus;
+            this.currentPrice = currentPrice;
+            this.bidCount = bidCount;
+            this.imagePayload = imagePayload;
+            this.attributes = attributes;
         }
     }
 }
