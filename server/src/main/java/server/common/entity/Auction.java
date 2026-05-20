@@ -304,7 +304,10 @@ public class Auction extends Entity {
             if (status != AuctionStatus.RUNNING)
                 throw new IllegalStateException("Can only close a RUNNING auction. Current: " + status);
 
+            // Có bid nào đặt không ?
             boolean hasBids     = !bidHistory.isEmpty();
+
+            // Có chạm giá sàn (Reserve Price) không ?
             boolean meetsReserve = (reservePrice.compareTo(BigDecimal.ZERO) == 0) || (currentPrice.compareTo(reservePrice) >= 0);
 
             if (!hasBids || !meetsReserve) {
