@@ -30,6 +30,7 @@ import server.network.ClientManager;
 import server.repository.AuctionDAO;
 import server.repository.AccountDAO;
 import server.repository.BidTransactionDAO;
+import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
 import server.service.ServerAuthService;
@@ -53,6 +54,7 @@ public class ClientHandler implements Runnable {
     private final ServerAuthService authService = new ServerAuthService();
     private final ItemService itemService = new ItemService();
     private final AuctionService auctionService = new AuctionService();
+    private final AdminService adminService = new AdminService(auctionService);
     private final ItemCommandHandler itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
 
     public ClientHandler(Socket socket) {
@@ -191,7 +193,7 @@ public class ClientHandler implements Runnable {
                     int targetUserId = Integer.parseInt(request[1]);
                     // Tạo 1 Array từ request[2] đến hết + nối các element trong Array bởi " " => String reason
                     String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
-                    boolean banUserSuccess = auctionService.getAdminService().banUser(this.userId, targetUserId, reason);
+                    boolean banUserSuccess = adminService.banUser(this.userId, targetUserId, reason);
                     send(banUserSuccess ? "ADMIN_BAN_SUCCESS" : "ADMIN_BAN_FAIL");
                 }
                 break;
@@ -199,7 +201,7 @@ public class ClientHandler implements Runnable {
             case "ADMIN_UNBAN_USER":
                 if (request.length > 1) {
                     int targetUserId = Integer.parseInt(request[1]);
-                    boolean unbanUserSuccess = auctionService.getAdminService().unbanUser(this.userId, targetUserId);
+                    boolean unbanUserSuccess = adminService.unbanUser(this.userId, targetUserId);
                     send(unbanUserSuccess ? "ADMIN_UNBAN_SUCCESS" : "ADMIN_UNBAN_FAIL");
                 } else {
                     send("ADMIN_UNBAN_FAIL INVALID_FORMAT");
@@ -210,7 +212,7 @@ public class ClientHandler implements Runnable {
                 if (request.length > 2) {
                     String auctionId = request[1];
                     String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
-                    boolean forceCloseSuccess = auctionService.getAdminService().forceCloseAuction(this.userId, auctionId, reason);
+                    boolean forceCloseSuccess = adminService.forceCloseAuction(this.userId, auctionId, reason);
                     send(forceCloseSuccess ? "ADMIN_CLOSE_SUCCESS" : "ADMIN_CLOSE_FAIL");
                 }
                 break;

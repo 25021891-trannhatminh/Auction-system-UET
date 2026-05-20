@@ -78,15 +78,22 @@ public class AuctionManager {
     /** AutoBidEngine xử lý auto-bid */
     private final AutoBidEngine autoBidEngine = new AutoBidEngine();
 
-    /** Service layer callback — inject sau khi khởi tạo để tránh circular dependency
-     *  Circular dependency : A call B , B call A
+    /**
+     * Service layer callbacks — inject sau khi khởi tạo để tránh circular dependency.
      *
-     *
+     * AuctionService gọi setOnAuctionStartedCallback(this::onAuctionStarted)
+     * và setOnAuctionClosedCallback(this::onAuctionClosed) trong constructor.
      */
+    private volatile Consumer<Auction> onAuctionStartedCallback;
     private volatile Consumer<Auction> onAuctionClosedCallback;
+    public void setOnAuctionStartedCallback(Consumer<Auction> callback) {
+        this.onAuctionStartedCallback = callback;
+    }
     public void setOnAuctionClosedCallback(Consumer<Auction> callback) {
         this.onAuctionClosedCallback = callback;
     }
+
+
     /*
     Global observers — nhận sự kiện từ MỌI phiên đấu giá.
       Ví dụ: NotificationService đăng ký ở đây để lưu notification vào DB.
@@ -393,7 +400,8 @@ public class AuctionManager {
 
     /**
      * Admin force-close một phiên đấu giá.
-     * ⚠️  Tầng DAO sau khi gọi method này phải: AuctionDAO.updateStatus()
+     * Sau khi forceCancel(), fire onAuctionClosedCallback để Service xử lý DB và notify.
+     * Caller (AdminService) KHÔNG cần gọi onAuctionClosed() thủ công nữa.
      */
     public void forceCloseAuction(String auctionId, String reason) {
         Auction auction = auctionMap.get(auctionId);
@@ -401,6 +409,10 @@ public class AuctionManager {
             throw new IllegalArgumentException("Auction not found: " + auctionId);
         auction.forceCancel(reason);
         autoBidEngine.cleanupAutoBids(auctionId);
+        // Fire callback — AuctionService sẽ xử lý DB
+        if (onAuctionClosedCallback != null) {
+            onAuctionClosedCallback.accept(auction);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -409,6 +421,9 @@ public class AuctionManager {
 
     /**
      * Lên lịch tự động mở phiên khi đến startTime.
+     * Sau khi OPEN → RUNNING, fire onAuctionStartedCallback để Service persist DB và notify.
+     * AutoBidEngine.trigger() được gọi sau startRunning() — đảm bảo auction đã RUNNING
+     * trước khi engine thử đặt bid.
      */
     private void scheduleOpen(Auction auction) {
         long delaySeconds = ChronoUnit.SECONDS.between(
@@ -420,6 +435,12 @@ public class AuctionManager {
             try {
                 if (auction.getStatus() == AuctionStatus.OPEN) {
                     auction.startRunning();
+                    // Notify Service để persist RUNNING và gửi thông báo
+                    if (onAuctionStartedCallback != null) {
+                        onAuctionStartedCallback.accept(auction);
+                    }
+                    // Gọi Trigger để các AutoBid đăng ký trước đó bắt đầu bid
+                    autoBidEngine.trigger(auction,null);
                     System.out.printf("[Scheduler] Auction %s OPENED%n",
                         auction.getId().substring(0, 8));
                 }
@@ -428,8 +449,7 @@ public class AuctionManager {
             }
         }, delaySeconds, TimeUnit.SECONDS);
 
-        // Gọi Trigger để các AutoBid đăng ký trước đó bắt đầu bid
-        autoBidEngine.trigger(auction,null);
+
     }
 
     /**

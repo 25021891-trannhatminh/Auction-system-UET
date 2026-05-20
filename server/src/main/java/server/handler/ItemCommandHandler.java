@@ -10,10 +10,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import server.common.entity.Admin;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 import server.database.DBConnection;
 import server.network.ClientManager;
+import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
 
@@ -34,11 +36,13 @@ public class ItemCommandHandler {
     private final ClientHandler client;
     private final ItemService itemService;
     private final AuctionService auctionService;
+    private final AdminService adminService;
 
     public ItemCommandHandler(ClientHandler client, ItemService itemService, AuctionService auctionService) {
         this.client = client;
         this.itemService = itemService;
         this.auctionService = auctionService;
+        this.adminService = new AdminService(auctionService);
     }
 
     /**
@@ -217,7 +221,7 @@ public class ItemCommandHandler {
             client.send("ADMIN_APPROVE_FAIL INVALID_FORMAT");
             return;
         }
-        boolean success = auctionService.getAdminService().approveItem(adminId, itemId);
+        boolean success = adminService.approveItem(adminId, itemId);
         client.send(success ? "ADMIN_APPROVE_SUCCESS" : "ADMIN_APPROVE_FAIL");
         if (success) {
             ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
@@ -230,7 +234,7 @@ public class ItemCommandHandler {
             client.send("ADMIN_REJECT_FAIL INVALID_FORMAT");
             return;
         }
-        boolean success = auctionService.getAdminService().rejectItem(adminId, itemId, reason == null ? "" : reason);
+        boolean success = adminService.rejectItem(adminId, itemId, reason == null ? "" : reason);
         client.send(success ? "ADMIN_REJECT_SUCCESS" : "ADMIN_REJECT_FAIL");
         if (success) {
             ClientManager.broadcast("ADMIN_ITEMS_DIRTY");

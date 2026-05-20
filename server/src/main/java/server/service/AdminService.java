@@ -60,8 +60,9 @@ public class AdminService {
     if (admin == null || !admin.hasPermission(AdminPermission.FORCE_CLOSE_AUCTION)) return false;
 
     try {
-      auctionManager.forceCloseAuction(auctionId, reason);
-      auctionService.onAuctionClosed(auctionManager.getAuction(auctionId).orElseThrow());
+      // AuctionManager.forceCloseAuction() đã fire onAuctionClosedCallback bên trong
+      // → AuctionService.onAuctionClosed() tự được gọi, không cần gọi thêm ở đây
+      auctionService.forceCloseAuction(auctionId, reason);
       logger.info("Admin {} force closed auction {} | Reason: {}", adminId, auctionId, reason);
       return true;
     } catch (Exception e) {
