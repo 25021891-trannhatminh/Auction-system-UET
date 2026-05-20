@@ -15,7 +15,7 @@ public class AuctionServer {
     public static void main(String[] args) {
         ServerDiscovery.start();
         int port = 6666;
-
+        PaymentTriggerObserver paymentObserver = null;
         try {
             // Khởi tạo các cục máy xử lý chính
             NotificationService notifService = new NotificationService();
@@ -24,8 +24,10 @@ public class AuctionServer {
 
             // Đăng ký "Người nghe": Khi AuctionService có tin mới, nó sẽ tự báo cho NotificationHandler
             NotificationEventHandler notifHandler = new NotificationEventHandler(notifService);
-            PaymentTriggerObserver paymentObserver = new PaymentTriggerObserver(paymentService);
             auctionService.addListener(notifHandler);
+
+            paymentObserver = new PaymentTriggerObserver(paymentService);
+            auctionService.addListener(paymentObserver);
 
 
             // ── Load trạng thái đang chạy từ DB vào RAM ───────────────────────

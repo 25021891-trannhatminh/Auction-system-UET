@@ -36,9 +36,11 @@ import server.network.ClientManager;
 import server.repository.AuctionDAO;
 import server.repository.AccountDAO;
 import server.repository.BidTransactionDAO;
+import server.repository.WalletDAO;
 import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
+import server.service.PaymentService;
 import server.service.ServerAuthService;
 
 public class ClientHandler implements Runnable {
@@ -55,13 +57,15 @@ public class ClientHandler implements Runnable {
     private int userId = GLOBAL_USER_ID ;   // Default UserID
 
     // DAOs (Refactor sau không cho DAO vào Handler)
-    private BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
-    private AuctionDAO auctionDAO = new AuctionDAO();
+    private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
+    private final AuctionDAO auctionDAO = new AuctionDAO();
+    private final WalletDAO walletDAO = new WalletDAO();
 
     // Services
-    private final ServerAuthService authService = new ServerAuthService();
-    private final ItemService itemService = new ItemService();
+    private final ServerAuthService authService;
+    private final ItemService itemService;
     private final AuctionService auctionService;
+    private final PaymentService paymentService;
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
 
@@ -70,12 +74,16 @@ public class ClientHandler implements Runnable {
      * Nhận thực thể auctionService chung từ AuctionServer để đồng bộ bộ nhớ RAM
      */
     public ClientHandler(Socket socket, AuctionService auctionService) {
-        this.socket = socket;
+        this.socket         = socket;
         this.auctionService = auctionService;
-        this.adminService = new AdminService(auctionService);
+        this.authService    = new ServerAuthService();
+        this.itemService    = new ItemService();
+        this.adminService   = new AdminService(auctionService);
+        this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
+
         try {
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
             out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -143,6 +151,61 @@ public class ClientHandler implements Runnable {
                 // Format mong muốn: REGISTER <user> <pass> <email> <fullName> <phone>
                 send(authService.register(request));
                 break;
+
+            case "CONFIRM_PAYMENT": {
+                // Format: CONFIRM_PAYMENT <auctionId> <itemName...>
+                //
+                // PaymentService xử lý toàn bộ trong 1 DB transaction:
+                //   lock wallets → withdraw buyer → deposit seller
+                //   → log wallet_transactions → update payments → COMMIT
+                // Sau commit: push PUSH_NOTIF + WALLET_UPDATE realtime về buyer và seller.
+                //
+                // Sau khi PaymentService thành công, gọi auctionService.confirmPayment()
+                // để đồng bộ RAM + DB auction status → PAID.
+                if (request.length < 2) {
+                    send("PAYMENT_FAIL INVALID_FORMAT");
+                    break;
+                }
+                try {
+                    int    auctionId = Integer.parseInt(request[1]);
+                    String itemName  = request.length > 2
+                        ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
+                        : "Auction #" + auctionId;
+
+                    boolean ok = paymentService.processPayment(auctionId, itemName);
+                    if (ok) {
+                        send("PAYMENT_SUCCESS " + auctionId);
+                        // Đồng bộ RAM + DB auction status → PAID
+                        auctionService.confirmPayment(auctionId);
+                    } else {
+                        send("PAYMENT_FAIL " + auctionId);
+                    }
+                } catch (NumberFormatException e) {
+                    send("PAYMENT_FAIL INVALID_FORMAT");
+                }
+                break;
+            }
+
+            case "REFUND_PAYMENT": {
+                // Format: REFUND_PAYMENT <auctionId> <itemName...>
+                if (request.length < 2) {
+                    send("REFUND_FAIL INVALID_FORMAT");
+                    break;
+                }
+                try {
+                    int    auctionId = Integer.parseInt(request[1]);
+                    String itemName  = request.length > 2
+                        ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
+                        : "Auction #" + auctionId;
+
+                    boolean ok = paymentService.refundPayment(auctionId, itemName);
+                    send(ok ? "REFUND_SUCCESS " + auctionId : "REFUND_FAIL " + auctionId);
+                } catch (NumberFormatException e) {
+                    send("REFUND_FAIL INVALID_FORMAT");
+                }
+                break;
+            }
+
             case "CREATE_ITEM":
                 itemCommandHandler.handleCreateItem(msg.length() > "CREATE_ITEM".length()
                     ? msg.substring("CREATE_ITEM".length()).trim()
