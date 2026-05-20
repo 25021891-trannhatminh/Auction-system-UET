@@ -1,18 +1,22 @@
 package server.repository;
 
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import server.common.entity.Item;
 import server.common.entity.factory.ItemFactory;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 import server.database.DBConnection;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.math.BigDecimal;
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Data Access Object cho bảng {@code ITEMS}.
@@ -27,6 +31,8 @@ public class ItemDAO {
     // Khởi tạo 1 lần duy nhất thay vì new mỗi lần -> tránh N + 1 obj creation
     private final ItemAttributeDAO itemAttributeDAO = new ItemAttributeDAO();
 
+    private static final String SQL_NEXT_ITEM_ID = "SELECT nextval(seq_items)";
+
     private static final String SQL_SELECT_BASE = """
         SELECT item_id, seller_id, category, name, description,
                starting_price, status, created_at
@@ -34,8 +40,8 @@ public class ItemDAO {
         """;
 
     private static final String SQL_INSERT = """
-        INSERT INTO items (seller_id, category, name, description, starting_price, status)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO items (item_id, seller_id, category, name, description, starting_price, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
 
     private static final String SQL_UPDATE = """
@@ -113,56 +119,77 @@ public class ItemDAO {
     }
 
     /**
-     * Adds a new item and returns the generated {@code item_id}.
+     * Adds a new item to the database and returns its generated item id.
      *
-     * <p>This overload is used by item creation flows that need to insert related rows
-     * into {@code item_images} and {@code item_attributes} immediately after the core
-     * item row is created.</p>
+     * <p>This method opens its own database connection and delegates the actual insert operation to
+     * the transactional {@link #addItem(Connection, int, ItemCategory, String, String, BigDecimal,
+     * ItemStatus)} overload. Use this method when the item does not need to be created together with
+     * images, attributes, or notifications in the same transaction.
+     *
+     * @param sellerId the id of the account that owns the item
+     * @param category the category of the item
+     * @param name the display name of the item
+     * @param description the detailed description of the item
+     * @param startingPrice the initial auction price of the item
+     * @param status the initial item status; defaults to {@code PENDING_REVIEW} when {@code null}
+     * @return the generated item id if the insert succeeds, or {@code -1} if validation or database
+     *     insertion fails
      */
-    public int addItem(int sellerId, ItemCategory category, String name,
-                       String description, BigDecimal startingPrice, ItemStatus status) {
-
-        if (isInvalidItemData(name, startingPrice)) return -1;
-
-        try (Connection conn = DBConnection.getConnection()) {
-            return addItem(conn, sellerId, category, name, description, startingPrice, status);
-        } catch (SQLException e) {
-            logger.error("addItem failed for sellerId={}", sellerId, e);
-            return -1;
-        }
+    public int addItem(int sellerId, ItemCategory category, String name, String description, BigDecimal startingPrice, ItemStatus status) {
+    try (Connection conn = DBConnection.getConnection()) {
+        return addItem(conn, sellerId, category, name, description, startingPrice, status);
+    } catch (SQLException e) {
+        System.err.println("Failed to add item: " + e.getMessage());
+        return -1;
+    }
     }
 
     /**
-     * Adds a new item using an existing transaction connection.
+     * Adds a new item using an existing database connection.
      *
-     * <p>Callers such as {@code ItemService} pass their own connection so the item row,
-     * image rows, attribute rows, and admin notifications can commit or rollback together.</p>
+     * <p>This overload is intended for service-layer workflows that need to keep the item row, item
+     * images, item attributes, and notifications inside the same transaction. The caller owns the
+     * connection and is responsible for committing or rolling back the transaction.
+     *
+     * @param conn the active database connection used for the current transaction
+     * @param sellerId the id of the account that owns the item
+     * @param category the category of the item
+     * @param name the display name of the item
+     * @param description the detailed description of the item
+     * @param startingPrice the initial auction price of the item
+     * @param status the initial item status; defaults to {@code PENDING_REVIEW} when {@code null}
+     * @return the generated item id if the insert succeeds, or {@code -1} if validation fails or no id
+     *     can be generated
+     * @throws SQLException if the id generation or database insertion fails
      */
-    public int addItem(Connection conn, int sellerId, ItemCategory category, String name,
-                       String description, BigDecimal startingPrice, ItemStatus status) throws SQLException {
+    public int addItem(Connection conn, int sellerId, ItemCategory category, String name, String description, BigDecimal startingPrice, ItemStatus status)
+        throws SQLException {
+    if (isInvalidItemData(name, startingPrice)) {
+        return -1;
+    }
 
-        if (isInvalidItemData(name, startingPrice)) return -1;
-
-        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
-
-            ps.setInt(1, sellerId);
-            ps.setString(2, category.name());
-            ps.setString(3, name);
-            ps.setString(4, description);
-            ps.setBigDecimal(5, startingPrice);
-            ps.setString(6, status == null ? ItemStatus.PENDING_REVIEW.name() : status.name());
-
-            if (ps.executeUpdate() <= 0) {
-                return -1;
-            }
-
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    return keys.getInt(1);
-                }
-            }
-            return -1;
+    int itemId;
+    try (PreparedStatement idStatement = conn.prepareStatement(SQL_NEXT_ITEM_ID);
+        ResultSet resultSet = idStatement.executeQuery()) {
+        if (!resultSet.next()) {
+        return -1;
         }
+        itemId = resultSet.getInt(1);
+    }
+
+    ItemStatus initialStatus = status == null ? ItemStatus.PENDING_REVIEW : status;
+
+    try (PreparedStatement statement = conn.prepareStatement(SQL_INSERT)) {
+        statement.setInt(1, itemId);
+        statement.setInt(2, sellerId);
+        statement.setString(3, category.name());
+        statement.setString(4, name.trim());
+        statement.setString(5, description == null ? "" : description.trim());
+        statement.setBigDecimal(6, startingPrice);
+        statement.setString(7, initialStatus.name());
+
+        return statement.executeUpdate() > 0 ? itemId : -1;
+    }
     }
 
     /**
