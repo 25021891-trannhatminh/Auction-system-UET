@@ -460,17 +460,18 @@ public class AdminDashboardController extends BaseDashboardController {
         String category = fallback(safeField(fields, 3), "Uncategorized");
         String itemName = fallback(safeField(fields, 4), "Untitled item");
         String description = safeField(fields, 5);
-        String startingPrice = formatMoney(safeField(fields, 6));
 
         int statusIndex = isItemStatusValue(safeField(fields, 7)) ? 7 : 8;
         String status = safeField(fields, statusIndex);
         String createdAt = shortTimestamp(safeField(fields, statusIndex + 1));
         String auctionId = safeField(fields, statusIndex + 2);
         String auctionStatus = safeField(fields, statusIndex + 3);
-        String currentPrice = formatMoney(safeField(fields, statusIndex + 4));
         String bidCount = fallback(safeField(fields, statusIndex + 5), "0");
         String imagePayload = safeField(fields, statusIndex + 6);
         String attributes = safeField(fields, statusIndex + 7);
+        String currency = extractCurrency(attributes);
+        String startingPrice = formatMoney(safeField(fields, 6), currency);
+        String currentPrice = formatMoney(safeField(fields, statusIndex + 4), currency);
         String auctionLink = auctionId.isBlank() ? "No auction" : "AUC-" + auctionId;
 
         String sellerLabel = fallback(seller, "#" + sellerId);
@@ -481,8 +482,7 @@ public class AdminDashboardController extends BaseDashboardController {
             + " - " + bidCount + " bids");
 
         String detail = "ITEM-" + itemId
-            + " - " + fallback(description, "no description")
-            + ". Seller ID #" + sellerId
+            + " - Seller ID #" + sellerId
             + ". Current auction link: " + auctionLink
             + (auctionId.isBlank() ? "." : " - current price " + currentPrice + ".")
             + " Dữ liệu review đọc trực tiếp từ items, item_images, item_attributes "
@@ -507,7 +507,8 @@ public class AdminDashboardController extends BaseDashboardController {
             currentPrice,
             bidCount,
             imagePayload,
-            attributes
+            attributes,
+            actionsForItem(status, auctionId)
         );
     }
 
@@ -580,6 +581,26 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (normalizedStatus.equals("suspended")) {
             return new String[]{"View", "Restore", "Ban"};
+        }
+
+        return new String[]{"View"};
+    }
+
+    private String[] actionsForItem(String status, String auctionId) {
+        String normalizedStatus = normalize(status);
+        boolean hasAuction = auctionId != null && !auctionId.isBlank();
+
+        if (normalizedStatus.equals("pending review")) {
+            return new String[]{"Review"};
+        }
+
+        if (normalizedStatus.equals("available")) {
+            return new String[]{"Create Auction", "View"};
+        }
+
+        if ((normalizedStatus.equals("in auction") || normalizedStatus.equals("sold"))
+            && hasAuction) {
+            return new String[]{"View Auction", "View"};
         }
 
         return new String[]{"View"};
@@ -800,7 +821,7 @@ public class AdminDashboardController extends BaseDashboardController {
         return switch (sectionKey) {
             case "dashboard" -> "Overview";
             case "reports" -> "Last 7 days";
-            case "items" -> "Pending Approval";
+            case "items" -> "All";
             case "settings" -> "General";
             default -> "All";
         };
@@ -823,9 +844,9 @@ public class AdminDashboardController extends BaseDashboardController {
                 "Create an OPEN auction from an AVAILABLE item after admin review."
             );
             case "items" -> configurePrimaryAction(
-                "Review Items",
-                "Review queue",
-                "Open AVAILABLE and REMOVED item review queue."
+                "Refresh Items",
+                "Refresh items",
+                "Request latest item rows from the shared cloud database."
             );
             case "reports" -> configurePrimaryAction(
                 "Export CSV",
@@ -848,7 +869,9 @@ public class AdminDashboardController extends BaseDashboardController {
     private void configurePrimaryAction(String text, String detailTitle, String detailDescription) {
         primaryActionButton.setText(text);
         primaryActionButton.setOnAction(event -> {
-            if ("Refresh Users".equals(text) || "Refresh".equals(text)) {
+            if ("Refresh Users".equals(text)
+                || "Refresh Items".equals(text)
+                || "Refresh".equals(text)) {
                 requestLiveAdminData();
             }
             showDetail(detailTitle, detailDescription);
@@ -985,29 +1008,38 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void renderItems(String filter) {
-        setTableTitle("Pending Item Review");
-        renderChips(filter, "Pending Approval");
+        setTableTitle("Item Review");
+        renderChips(
+            filter,
+            "All",
+            "PENDING_REVIEW",
+            "AVAILABLE",
+            "IN_AUCTION",
+            "SOLD",
+            "REMOVED",
+            "DRAFT",
+            "No Auction"
+        );
 
         List<AdminRow> rows = currentItemRows();
-        List<AdminRow> pendingRows = pendingItemRows(rows);
         updateStats(
             new String[] {
-                String.valueOf(pendingRows.size()),
                 String.valueOf(rows.size()),
+                String.valueOf(countStatus(rows, "PENDING_REVIEW")),
                 String.valueOf(countStatus(rows, "AVAILABLE")),
                 String.valueOf(countStatus(rows, "IN_AUCTION"))
             },
-            new String[]{"Pending", "Items", "Available", "In Auction"}
+            new String[]{"Items", "Pending", "Available", "In Auction"}
         );
 
-        addHeader("Pending Item", "Category", "Starting Price", "Status", "");
-        addFilteredRows(pendingRows, filter);
+        addHeader("Item", "Category", "Starting Price", "Status", "Action");
+        addFilteredRows(rows, filter);
 
         showDetail(
-            "Pending item review",
+            "Item review",
             dataSourceNote(itemsLoaded) +
-                " Bảng này chỉ hiện items có status PENDING_REVIEW. Bấm vào một dòng để mở " +
-                "màn review đầy đủ, không dùng detail preview ở dưới bảng nữa."
+                " Table đang đọc items thật từ database và lọc theo đúng enum trạng thái: "
+                    + "DRAFT, PENDING_REVIEW, AVAILABLE, IN_AUCTION, SOLD, REMOVED."
         );
     }
 
@@ -1458,7 +1490,8 @@ public class AdminDashboardController extends BaseDashboardController {
         String currentPrice,
         String bidCount,
         String imagePayload,
-        String attributes) {
+        String attributes,
+        String... actions) {
         return new AdminRow(
             title,
             meta,
@@ -1478,7 +1511,8 @@ public class AdminDashboardController extends BaseDashboardController {
             currentPrice,
             bidCount,
             imagePayload,
-            attributes
+            attributes,
+            actions
         );
     }
 
@@ -1569,7 +1603,7 @@ public class AdminDashboardController extends BaseDashboardController {
     private void addRow(AdminRow data) {
         GridPane row = createTableGrid("data-row");
         row.setOnMouseClicked(event -> {
-            if (isPendingItemRow(data)) {
+            if (data.itemData) {
                 openItemReview(data);
                 return;
             }
@@ -1781,6 +1815,7 @@ public class AdminDashboardController extends BaseDashboardController {
             label.getStyleClass().add("status-danger");
         } else if (normalized.contains("open")
             || normalized.contains("draft")
+            || normalized.contains("pending")
             || normalized.contains("loading")
             || normalized.contains("finished")) {
             label.getStyleClass().add("status-warn");
@@ -1844,36 +1879,28 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void openItemReview(AdminRow data) {
         currentSectionKey = "itemReview";
-        setTableTitle("Review Item");
+        setTableTitle("");
         clearWorkspaceForDetail();
-        addBackButton("Back to Pending Items", "items");
+        addBackButton("Back to Items", "items");
 
         VBox shell = new VBox(14);
         shell.getStyleClass().add("admin-workspace-shell");
 
-        Label title = new Label("Review Pending Item");
+        Label title = new Label("ITEM-" + data.itemId + " - " + data.itemName);
         title.getStyleClass().add("admin-page-title");
-
-        Label note = new Label(
-            "Review dữ liệu thật từ bảng items, item_images và item_attributes trước khi approve."
-        );
-        note.getStyleClass().add("admin-page-note");
-        note.setWrapText(true);
+        title.setWrapText(true);
 
         GridPane content = createDetailGrid();
-        VBox gallery = buildItemGallery(data, REVIEW_IMAGE_HEIGHT, "Uploaded item images");
+        VBox gallery = buildItemGallery(data, REVIEW_IMAGE_HEIGHT, "");
         VBox infoCard = buildReviewInfoCard(data);
         content.add(gallery, 0, 0);
         content.add(infoCard, 1, 0);
         keepDetailGridChildrenResizable(gallery, infoCard);
 
-        shell.getChildren().addAll(title, note, content);
+        shell.getChildren().addAll(title, content);
         dataRowsBox.getChildren().add(shell);
 
-        showDetail(
-            "Reviewing ITEM-" + data.itemId,
-            "Accept sẽ chuyển item PENDING_REVIEW -> AVAILABLE rồi mở màn Create Auction UI."
-        );
+        showDetail(data.itemName, "");
     }
 
     private VBox buildReviewInfoCard(AdminRow data) {
@@ -1892,10 +1919,6 @@ public class AdminDashboardController extends BaseDashboardController {
         Label price = new Label(data.startingPrice);
         price.getStyleClass().add("item-info-price");
 
-        Label description = new Label(fallback(data.description, "No description provided."));
-        description.getStyleClass().add("item-info-description");
-        description.setWrapText(true);
-
         GridPane facts = createInfoGrid();
         addInfoCell(facts, 0, 0, "Item ID", "ITEM-" + data.itemId);
         addInfoCell(facts, 1, 0, "Seller", data.sellerName + " (#" + data.sellerId + ")");
@@ -1905,22 +1928,55 @@ public class AdminDashboardController extends BaseDashboardController {
         addInfoCell(facts, 1, 2, "Database status", data.status);
 
         VBox attributesBox = buildAttributesBox(data.attributes);
+        HBox actions = buildItemDetailActions(data);
 
+        card.getChildren().addAll(statusLine, name, price, facts, attributesBox, actions);
+        return card;
+    }
+
+    private HBox buildItemDetailActions(AdminRow data) {
         HBox actions = new HBox(10);
         actions.setAlignment(Pos.CENTER_RIGHT);
-        Button reject = new Button("Reject later");
-        reject.setMnemonicParsing(false);
-        reject.getStyleClass().add("create-secondary-btn");
-        reject.setDisable(true);
+        String normalizedStatus = normalize(data.status);
 
-        Button accept = new Button("Accept & Create Auction");
-        accept.setMnemonicParsing(false);
-        accept.getStyleClass().add("create-primary-btn");
-        accept.setOnAction(event -> handleAcceptAndOpenCreateAuction(data));
-        actions.getChildren().addAll(reject, accept);
+        if (normalizedStatus.equals("pending review")) {
+            Button reject = new Button("Reject later");
+            reject.setMnemonicParsing(false);
+            reject.getStyleClass().add("create-secondary-btn");
+            reject.setDisable(true);
 
-        card.getChildren().addAll(statusLine, name, price, description, facts, attributesBox, actions);
-        return card;
+            Button accept = new Button("Accept & Create Auction");
+            accept.setMnemonicParsing(false);
+            accept.getStyleClass().add("create-primary-btn");
+            accept.setOnAction(event -> handleAcceptAndOpenCreateAuction(data));
+            actions.getChildren().addAll(reject, accept);
+            return actions;
+        }
+
+        if (normalizedStatus.equals("available")) {
+            Button createAuction = new Button("Create Auction");
+            createAuction.setMnemonicParsing(false);
+            createAuction.getStyleClass().add("create-primary-btn");
+            createAuction.setOnAction(event -> openCreateAuctionDraft(data));
+            actions.getChildren().add(createAuction);
+            return actions;
+        }
+
+        if (data.auctionId != null && !data.auctionId.isBlank()) {
+            Button viewAuction = new Button("View Auction");
+            viewAuction.setMnemonicParsing(false);
+            viewAuction.getStyleClass().add("create-primary-btn");
+            viewAuction.setOnAction(event -> openLinkedAuctionDetail(data));
+            actions.getChildren().add(viewAuction);
+            return actions;
+        }
+
+        Button noAction = new Button("No direct action");
+        noAction.setMnemonicParsing(false);
+        noAction.getStyleClass().add("admin-disabled-primary-btn");
+        noAction.setDisable(true);
+        actions.getChildren().add(noAction);
+        return actions;
     }
 
     private void handleAcceptAndOpenCreateAuction(AdminRow data) {
@@ -2056,8 +2112,11 @@ public class AdminDashboardController extends BaseDashboardController {
         gallery.setPrefWidth(maxGalleryWidth);
         gallery.setMaxWidth(maxGalleryWidth);
 
-        Label title = new Label(titleText);
-        title.getStyleClass().add("placeholder-title");
+        Label title = null;
+        if (titleText != null && !titleText.isBlank()) {
+            title = new Label(titleText);
+            title.getStyleClass().add("placeholder-title");
+        }
 
         StackPane mainFrame = new StackPane();
         mainFrame.getStyleClass().add("item-main-image-wrap");
@@ -2091,7 +2150,11 @@ public class AdminDashboardController extends BaseDashboardController {
             }
         }
 
-        gallery.getChildren().addAll(title, mainFrame, thumbs);
+        if (title == null) {
+            gallery.getChildren().addAll(mainFrame, thumbs);
+        } else {
+            gallery.getChildren().addAll(title, mainFrame, thumbs);
+        }
         return gallery;
     }
 
@@ -2278,7 +2341,7 @@ public class AdminDashboardController extends BaseDashboardController {
         if (value == null) {
             return "";
         }
-        return value.replace("VND", "").replace(",", "").trim();
+        return value.replaceAll("(?i)\\b(VND|USD)\\b", "").replace(",", "").trim();
     }
 
     private void clearWorkspaceForDetail() {
@@ -2466,17 +2529,49 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private String formatMoney(String value) {
+        return formatMoney(value, "VND");
+    }
+
+    private String formatMoney(String value, String currency) {
+        String safeCurrency = normalizeCurrency(currency);
         if (value == null || value.isBlank() || value.equalsIgnoreCase("null")) {
-            return "0 VND";
+            return "0 " + safeCurrency;
         }
 
         try {
             String integerPart = value.split("\\.")[0];
             long amount = Long.parseLong(integerPart);
-            return String.format("%,d VND", amount);
+            return String.format("%,d %s", amount, safeCurrency);
         } catch (Exception ignored) {
-            return value.endsWith("VND") ? value : value + " VND";
+            String trimmed = value.trim();
+            return endsWithKnownCurrency(trimmed) ? trimmed : trimmed + " " + safeCurrency;
         }
+    }
+
+    private String extractCurrency(String attributes) {
+        for (String line : parseMultiline(attributes)) {
+            int separator = line.indexOf(':');
+            if (separator <= 0) {
+                continue;
+            }
+            String key = line.substring(0, separator).trim();
+            String value = line.substring(separator + 1).trim();
+            if (key.equalsIgnoreCase("currency") && !value.isBlank()) {
+                return normalizeCurrency(value);
+            }
+        }
+        return "VND";
+    }
+
+    private String normalizeCurrency(String currency) {
+        String normalized = currency == null ? "" : currency.trim().toUpperCase();
+        return normalized.isBlank() ? "VND" : normalized;
+    }
+
+    private boolean endsWithKnownCurrency(String value) {
+        String normalized = value == null ? "" : value.trim().toUpperCase();
+        return normalized.endsWith(" VND")
+            || normalized.endsWith(" USD");
     }
 
     private String fallback(String value, String fallback) {
@@ -2566,14 +2661,15 @@ public class AdminDashboardController extends BaseDashboardController {
             String currentPrice,
             String bidCount,
             String imagePayload,
-            String attributes) {
+            String attributes,
+            String... actions) {
             this.title = title;
             this.meta = meta;
             this.firstValue = firstValue;
             this.secondValue = secondValue;
             this.status = status;
             this.detail = detail;
-            this.actions = new String[0];
+            this.actions = actions;
             this.itemData = true;
             this.itemId = itemId;
             this.sellerId = sellerId;

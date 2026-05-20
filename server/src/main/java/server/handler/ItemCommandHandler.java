@@ -72,7 +72,7 @@ public class ItemCommandHandler {
         String size = safeField(fields, 7);
         String property = safeField(fields, 8);
         String royalty = safeField(fields, 9);
-        String currency = safeField(fields, 10);
+        String currency = normalizeCurrency(safeField(fields, 10));
         String imagePayload = safeField(fields, 11);
 
         if (category == null || name.isBlank()
@@ -235,6 +235,11 @@ public class ItemCommandHandler {
         if (success) {
             ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
         }
+    }
+
+    private String normalizeCurrency(String currency) {
+        String normalized = currency == null ? "" : currency.trim().toUpperCase();
+        return normalized.isBlank() ? "VND" : normalized;
     }
 
     private List<String> parseImageUrls(String imagePayload) {

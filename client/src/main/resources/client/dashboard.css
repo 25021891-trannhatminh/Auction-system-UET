@@ -1587,13 +1587,14 @@
 /* Admin item review + create auction preview */
 .admin-workspace-shell {
     -fx-background-color: transparent;
-    -fx-padding: 2 0 2 0;
+    -fx-padding: 0 0 2 0;
 }
 
 .admin-page-title {
     -fx-text-fill: #1f3e37;
     -fx-font-size: 24px;
     -fx-font-weight: bold;
+    -fx-padding: 0 0 6 10;
 }
 
 .admin-page-note {
