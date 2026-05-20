@@ -61,12 +61,19 @@ public class ClientHandler implements Runnable {
     // Services
     private final ServerAuthService authService = new ServerAuthService();
     private final ItemService itemService = new ItemService();
-    private final AuctionService auctionService = new AuctionService();
-    private final AdminService adminService = new AdminService(auctionService);
-    private final ItemCommandHandler itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
+    private final AuctionService auctionService;
+    private final AdminService adminService;
+    private final ItemCommandHandler itemCommandHandler;
 
-    public ClientHandler(Socket socket) {
+    /**
+     * CONSTRUCTOR ĐÃ ĐƯỢC CHỈNH SỬA:
+     * Nhận thực thể auctionService chung từ AuctionServer để đồng bộ bộ nhớ RAM
+     */
+    public ClientHandler(Socket socket, AuctionService auctionService) {
         this.socket = socket;
+        this.auctionService = auctionService;
+        this.adminService = new AdminService(auctionService);
+        this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
         try {
             in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);

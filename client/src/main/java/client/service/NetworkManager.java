@@ -58,7 +58,9 @@ public class NetworkManager {
      * @param handler callback invoked for each non-heartbeat server message
      */
     public void addMessageHandler(Consumer<String> handler) {
-        handlers.add(handler);
+        if (handler != null && !handlers.contains(handler)) {
+            handlers.add(handler);
+        }
     }
 
     public void removeMessageHandler(Consumer<String> handler) {
@@ -141,6 +143,10 @@ public class NetworkManager {
         } finally {
             connected = false;
             closeSocket();
+
+            if (shouldReconnect) {
+                connect();
+            }
         }
     }
 

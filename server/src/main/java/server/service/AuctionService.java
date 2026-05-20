@@ -39,18 +39,19 @@ public class AuctionService {
   private final ItemDAO            itemDAO            = new ItemDAO();
   private final AccountDAO         accountDAO         = new AccountDAO();
   private final PaymentDAO         paymentDAO         = new PaymentDAO();
-
   // Singleton domain manager
   private final AuctionManager auctionManager = AuctionManager.getInstance();
-
+  private final PaymentService paymentService = new PaymentService();
   // Support
   private final ObserverToNotificationEventAdapter domainAdapter;
+  private final AdminService adminService;
 
   public AuctionService() {
     this.domainAdapter = new ObserverToNotificationEventAdapter(this);
 
     // Đăng ký adapter vào AuctionManager ngay khi tạo service
     AuctionManager.getInstance().addGlobalObserver(domainAdapter);
+    this.adminService = new AdminService(this);
 
     logger.info("AuctionService initialized with ObserverToNotificationEventAdapter");
   }
@@ -74,14 +75,13 @@ public class AuctionService {
   public void loadAllFromDatabase() {
     logger.info("loadAllFromDatabase() — Loading active auctions from DB...");
 
-    // 1. Load auction đang chạy hoặc chờ mở
     List<Auction> runningAuctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
     List<Auction> openAuctions   = auctionDAO.getByStatus(AuctionStatus.OPEN);
     runningAuctions.addAll(openAuctions);
 
     for (Auction auction : runningAuctions) {
       loadAutoBidsForAuction(auction);
-      auctionManager.loadAuction(auction); // scheduleClose() được gọi bên trong
+      auctionManager.loadAuction(auction);
       logger.info("loadAllFromDatabase() — Loaded auction id={}, status={}",
           auction.getId(), auction.getStatus());
     }
@@ -98,14 +98,12 @@ public class AuctionService {
     List<AutoBidConfig> configs = autoBidConfigDAO.getByAuction(auctionId);
 
     for (AutoBidConfig config : configs) {
-      // Load User object để engine có thể gọi auction.placeBid(user, ...)
       User bidder = accountDAO.getUserById(Integer.parseInt(config.getBidderId()));
       if (bidder == null) {
         logger.warn("loadAutoBidsForAuction() — Bidder {} not found, skipping config",
             config.getBidderId());
         continue;
       }
-      // Đăng ký vào engine (không trigger vì auction chưa hoàn toàn load xong)
       auctionManager.getAutoBidEngine().register(config, bidder);
       logger.debug("loadAutoBidsForAuction() — Registered AutoBid bidderId={}, auctionId={}",
           config.getBidderId(), auction.getId());
@@ -124,9 +122,9 @@ public class AuctionService {
    * @return Auction vừa tạo, hoặc null nếu DB write thất bại.
    */
   public Auction createAuction(Item item, String sellerId,
-                               LocalDateTime startTime, LocalDateTime endTime,
-                               BigDecimal minBidIncrement, BigDecimal reservePrice,
-                               int snipeWindowSeconds, int snipeExtensionSeconds) {
+      LocalDateTime startTime, LocalDateTime endTime,
+      BigDecimal minBidIncrement, BigDecimal reservePrice,
+      int snipeWindowSeconds, int snipeExtensionSeconds) {
 
     // Bước 1: Tạo in-memory (lên lịch scheduleOpen/Close ngay)
     Auction auction = auctionManager.createAuction(
@@ -438,7 +436,7 @@ public class AuctionService {
     logger.info("onAuctionClosed() — auctionId={}, status={}, canceledAutoBids={}",
         auctionId, auction.getStatus(), canceledCount);
 
-  // Notify AUCTION.FINISHED hoặc AUCTION.CANCELED
+    // Notify AUCTION.FINISHED hoặc AUCTION.CANCELED
     int sellerId    = Integer.parseInt(auction.getSellerId());
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown Item";
     BigDecimal finalPrice = auction.getCurrentPrice();
@@ -460,6 +458,15 @@ public class AuctionService {
    */
   public void forceCloseAuction(String auctionId, String reason) {
     auctionManager.forceCloseAuction(auctionId, reason);
+
+    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
+    auctionOpt.ifPresent(auction -> {
+      if (auction.getStatus() == AuctionStatus.FINISHED || auction.getStatus() == AuctionStatus.CANCELED) {
+        onAuctionClosed(auction);
+      } else {
+        logger.warn("forceCloseAuction() — Auction {} still in status {} after force close, skipping onAuctionClosed.", auctionId, auction.getStatus());
+      }
+    });
   }
 
 
@@ -546,6 +553,13 @@ public class AuctionService {
 
         // Đồng bộ cập nhật cột trạng thái trong bảng đấu giá (auctions) dưới Database thành PAID
         auctionDAO.updateStatus(auctionId, AuctionStatus.PAID);
+        List<PaymentDTO> pendingList = paymentDAO.getPendingPayments();
+        for (PaymentDTO p : pendingList) {
+          if (p.getAuctionId() == auctionId) {
+            paymentDAO.completePayment(p.getPaymentId()); // Chuyển từ PENDING -> COMPLETED
+            break;
+          }
+        }
 
         int sellerId = Integer.parseInt(auction.getSellerId());
         int buyerId = Integer.parseInt(buyerIdStr);
@@ -581,8 +595,8 @@ public class AuctionService {
    *   - Seller  : onAuctionEnded
    */
   private void dispatchFinishedNotifications(Auction auction, int auctionId,
-                                             int sellerId, String itemName,
-                                             BigDecimal finalPrice) {
+      int sellerId, String itemName,
+      BigDecimal finalPrice) {
     if (auction.getCurrentLeader() == null) {
       // Không xảy ra theo logic closeSession(), nhưng phòng thủ
       logger.warn("dispatchFinishedNotifications() — FINISHED but no leader for auctionId={}", auctionId);
@@ -625,11 +639,88 @@ public class AuctionService {
    *   - Seller: onAuctionEnded với finalPrice = startingPrice (không có bid hợp lệ)
    */
   private void dispatchCanceledNotifications(int auctionId, int sellerId,
-                                             String itemName, BigDecimal finalPrice) {
+      String itemName, BigDecimal finalPrice) {
     try {
       notifyAuctionEnded(sellerId, auctionId, itemName, finalPrice);
     } catch (Exception e) {
       logger.error("dispatchCanceledNotifications() — Failed to notify seller={}", sellerId, e);
+    }
+  }
+
+  /**
+   * Kết thúc phiên đấu giá (Thành công hoặc Không ai mua): Persist trạng thái và phân phối thông báo.
+   */
+  public void endAuction(String auctionId) {
+    int auctionIdInt = Integer.parseInt(auctionId);
+
+    // Lấy thông tin phiên đấu giá từ bộ nhớ RAM (Engine quản lý)
+    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
+    if (auctionOpt.isEmpty()) {
+      logger.error("endAuction() — Critical: Auction ID {} not found in memory engine.", auctionId);
+      return;
+    }
+    Auction auction = auctionOpt.get();
+
+    // Lấy tên Item theo cấu trúc yêu cầu kèm null-check phòng thủ (Tránh lỗi NullPointerException)
+    String itemName = auction.getItem() != null
+        ? "Auction #" + auctionId + ": " + auction.getItem().getName()
+        : "Auction #" + auctionId + ": Unknown Item";
+
+    // ── Bước 1: Gọi hàm đóng gói sẵn có của lớp Auction để cập nhật trạng thái trên RAM an toàn ──
+    try {
+      auction.closeSession();
+    } catch (IllegalStateException e) {
+      logger.error("endAuction() — Closing session aborted due to invalid state for auctionId={}", auctionId, e);
+      return;
+    }
+
+    // Kiểm tra an toàn xem có người tham gia đặt giá hay không (Null-check Leader) ──
+    if (auction.getCurrentLeader() != null) {
+      // Trường hợp 1: Có người chiến thắng cuộc đua giá
+      int winnerId = Integer.parseInt(auction.getCurrentLeader().getId());
+      BigDecimal finalPrice = auction.getCurrentPrice();
+
+      logger.info("endAuction() — Auction {} concluded. winnerId={}, finalPrice={}",
+          auctionId, winnerId, finalPrice);
+
+      // Gọi hàm để đồng bộ kết quả (Cập nhật trạng thái FINISHED và đổi Item sang SOLD) xuống DB
+      onAuctionClosed(auction);
+
+      // Gửi thông báo kết quả cho người thắng cuộc
+      try {
+        notifyAuctionWon(winnerId, auctionIdInt, itemName, finalPrice);
+        notifyPaymentDue(winnerId, auctionIdInt, itemName, finalPrice);
+      } catch (Exception e) {
+        logger.error("endAuction() — Failed to notify winner user {}", winnerId, e);
+      }
+
+      // Gửi thông báo cho toàn bộ những người còn lại (những người đã thua cuộc)
+      // Dựa theo lớp BidTransactionDAO bạn cung cấp, hàm truy vấn id người dùng là getBiddersByAuctionId
+      List<Integer> allBidders = bidTransactionDAO.getBiddersByAuctionId(auctionIdInt);
+      for (Integer bidderId : allBidders) {
+        if (!bidderId.equals(winnerId)) {
+          // Bọc try-catch độc lập cho từng người nhận thông báo để không bẻ gãy vòng lặp ── tránh trường hợp 1 bidder lỗi connection, các bidder khác mất notify
+          try {
+            notifyAuctionLost(bidderId, auctionIdInt, itemName);
+          } catch (Exception e) {
+            logger.error("endAuction() — Failed to send lost notification to user {} but continuing loop iteration.", bidderId, e);
+          }
+        }
+      }
+
+    } else {
+      // Trường hợp 2: Phiên kết thúc mà không một ai đặt giá (Leader bị null)
+      logger.warn("endAuction() — Auction {} ended with NO BIDS. Rolling back item status.", auctionId);
+
+      // Đồng bộ DB (onAuctionClosed sẽ nhận diện không leader và tự động rollback Item status về AVAILABLE)
+      onAuctionClosed(auction);
+    }
+
+    // Phát thông báo sự kiện đóng phòng chung cho toàn bộ hệ thống
+    try {
+      notifyAuctionEnded(Integer.parseInt(auction.getSellerId()), auctionIdInt, itemName, auction.getCurrentPrice());
+    } catch (Exception e) {
+      logger.error("endAuction() — Exception caught during auction ended global broadcast event.", e);
     }
   }
 

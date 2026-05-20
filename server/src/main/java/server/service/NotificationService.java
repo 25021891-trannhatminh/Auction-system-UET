@@ -15,14 +15,16 @@ public class NotificationService {
   // 1. Gửi thông báo mới (Real-time)
   public void push(int userId, String title, String message, NotificationType type,Integer relatedId) {
     // 1. Lưu vào Database (Để người dùng xem lại lịch sử sau này)
-    Notification notification = new Notification();
-    notification.setUserId(userId);
-    notification.setTitle(title);
-    notification.setContent(message);
-    notification.setType(type);
-    notification.setRead(false);
-    notification.setRelatedId(relatedId);
-    notificationDAO.insert(notification);
+    if (userId != -1) {
+      Notification notification = new Notification();
+      notification.setUserId(userId);
+      notification.setTitle(title);
+      notification.setContent(message);
+      notification.setType(type);
+      notification.setRead(false);
+      notification.setRelatedId(relatedId);
+      notificationDAO.insert(notification);
+    }
 
     NotificationDispatcher.getInstance().submit(
         new NotificationEvent(userId, title, message, type)

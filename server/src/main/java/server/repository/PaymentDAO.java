@@ -14,8 +14,27 @@ import java.util.List;
 /**
  * Data Access Object cho bảng {@code PAYMENTS}.
  *
- * <p>Quản lý các giao dịch tài chính liên quan đến phiên đấu giá, bao gồm các trạng thái:
- * PENDING, COMPLETED, FAILED, và REFUNDED. Mọi lỗi {@link SQLException} được ghi log qua SLF4J.</p>
+ * <h2>Nguyên tắc thiết kế</h2>
+ * <p>PaymentDAO chỉ đọc/ghi bảng {@code payments}.
+ * Mọi logic nghiệp vụ (chuyển tiền wallet, ghi log wallet_transactions,
+ * push notification) đều thuộc về {@link server.service.PaymentService}.</p>
+ *
+ * <h2>Hai nhóm method UPDATE</h2>
+ * <ul>
+ *   <li><b>Standalone</b> ({@link #completePayment}, {@link #failPayment},
+ *       {@link #refundPayment}): tự quản lý Connection, dùng cho các trường
+ *       hợp cần cập nhật status đơn lẻ (admin override, scheduled job...).</li>
+ *   <li><b>In-transaction</b> ({@link #completePaymentInTx}, {@link #failPaymentInTx},
+ *       {@link #refundPaymentInTx}): nhận Connection từ PaymentService, không
+ *       commit/rollback/close — để toàn bộ thanh toán nằm trong 1 transaction.</li>
+ * </ul>
+ *
+ * <h2>State machine</h2>
+ * <pre>
+ *   PENDING ──→ COMPLETED  (buyer thanh toán thành công)
+ *   PENDING ──→ FAILED     (buyer không đủ tiền hoặc timeout)
+ *   COMPLETED ──→ REFUNDED (admin hoàn tiền)
+ * </pre>
  */
 public class PaymentDAO {
 
@@ -35,13 +54,18 @@ public class PaymentDAO {
         VALUES (?, ?, ?, ?, ?)
         """;
 
-    private static final String SQL_COMPLETE = """
-        UPDATE payments SET status = ?, paid_at = CURRENT_TIMESTAMP
-        WHERE payment_id = ? AND status = ?
-        """;
+    /** PENDING → COMPLETED: ghi nhận thời gian thanh toán, chặn double-processing bằng AND status = PENDING */
+    private static final String SQL_COMPLETE =
+        "UPDATE payments SET status = 'COMPLETED', paid_at = CURRENT_TIMESTAMP " +
+            "WHERE payment_id = ? AND status = 'PENDING'";
 
-    private static final String SQL_UPDATE_STATUS =
-        "UPDATE payments SET status = ? WHERE payment_id = ? AND status = ?";
+    /** PENDING → FAILED: chỉ áp dụng khi còn PENDING */
+    private static final String SQL_FAIL =
+        "UPDATE payments SET status = 'FAILED' WHERE payment_id = ? AND status = 'PENDING'";
+
+    /** COMPLETED → REFUNDED: chỉ hoàn tiền khi đã COMPLETED */
+    private static final String SQL_REFUND =
+        "UPDATE payments SET status = 'REFUNDED' WHERE payment_id = ? AND status = 'COMPLETED'";
 
     private static final String SQL_SELECT_BY_AUCTION =
         SQL_SELECT_BASE + " WHERE auction_id = ?";
@@ -56,20 +80,21 @@ public class PaymentDAO {
         SQL_SELECT_BASE + " WHERE seller_id = ? ORDER BY created_at DESC";
 
     private static final String SQL_SELECT_PENDING =
-        SQL_SELECT_BASE + " WHERE status = ? ORDER BY created_at ASC";
+        SQL_SELECT_BASE + " WHERE status = 'PENDING' ORDER BY created_at ASC";
 
     // ============================================================
-    // INSERT Methods
+    // INSERT Method
     // ============================================================
 
     /**
-     * Tạo mới một bản ghi thanh toán với trạng thái mặc định là PENDING.
+     * Tạo bản ghi thanh toán mới ở trạng thái PENDING.
+     * Gọi từ {@code AuctionService.onAuctionClosed()} khi có người thắng.
      *
-     * @param auctionId ID của phiên đấu giá liên quan.
-     * @param buyerId   ID của người mua (người thắng cuộc).
-     * @param sellerId  ID của người bán.
-     * @param amount    Số tiền cần thanh toán.
-     * @return {@code true} nếu tạo thành công bản ghi.
+     * @param auctionId ID phiên đấu giá
+     * @param buyerId   ID người mua (người thắng)
+     * @param sellerId  ID người bán
+     * @param amount    Số tiền phải thanh toán
+     * @return {@code true} nếu tạo thành công
      */
     public boolean createPayment(int auctionId, int buyerId, int sellerId, BigDecimal amount) {
         try (Connection conn = DBConnection.getConnection();
@@ -83,78 +108,120 @@ public class PaymentDAO {
 
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("createPayment failed for auctionId={}", auctionId, e);
+            logger.error("createPayment() failed for auctionId={}", auctionId, e);
             return false;
         }
     }
 
     // ============================================================
-    // UPDATE Methods
+    // Standalone UPDATE Methods
+    // (tự quản lý Connection)
     // ============================================================
 
     /**
-     * Đánh dấu giao dịch là hoàn tất (COMPLETED) và ghi nhận thời gian thanh toán.
-     * Chỉ áp dụng cho các giao dịch đang ở trạng thái PENDING.
-     *
-     * @param paymentId ID của giao dịch.
-     * @return {@code true} nếu cập nhật thành công.
+     * PENDING → COMPLETED (standalone).
+     * Điều kiện {@code AND status = 'PENDING'} chặn double-processing.
      */
     public boolean completePayment(int paymentId) {
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_COMPLETE)) {
 
-            ps.setString(1, PaymentStatus.COMPLETED.name());
-            ps.setInt(2, paymentId);
-            ps.setString(3, PaymentStatus.PENDING.name());
-
+            ps.setInt(1, paymentId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("completePayment failed for paymentId={}", paymentId, e);
+            logger.error("completePayment() failed for paymentId={}", paymentId, e);
             return false;
         }
     }
 
     /**
-     * Chuyển trạng thái giao dịch sang thất bại (FAILED).
-     * Chỉ áp dụng cho các giao dịch đang ở trạng thái PENDING.
-     *
-     * @param paymentId ID của giao dịch.
-     * @return {@code true} nếu cập nhật thành công.
+     * PENDING → FAILED (standalone).
      */
     public boolean failPayment(int paymentId) {
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_STATUS)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_FAIL)) {
 
-            ps.setString(1, PaymentStatus.FAILED.name());
-            ps.setInt(2, paymentId);
-            ps.setString(3, PaymentStatus.PENDING.name());
-
+            ps.setInt(1, paymentId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("failPayment failed for paymentId={}", paymentId, e);
+            logger.error("failPayment() failed for paymentId={}", paymentId, e);
             return false;
         }
     }
 
     /**
-     * Thực hiện hoàn tiền (REFUNDED) cho một giao dịch.
-     * Chỉ áp dụng cho các giao dịch đã hoàn tất (COMPLETED).
-     *
-     * @param paymentId ID của giao dịch.
-     * @return {@code true} nếu cập nhật thành công.
+     * COMPLETED → REFUNDED (standalone).
      */
     public boolean refundPayment(int paymentId) {
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_STATUS)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_REFUND)) {
 
-            ps.setString(1, PaymentStatus.REFUNDED.name());
-            ps.setInt(2, paymentId);
-            ps.setString(3, PaymentStatus.COMPLETED.name());
-
+            ps.setInt(1, paymentId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("refundPayment failed for paymentId={}", paymentId, e);
+            logger.error("refundPayment() failed for paymentId={}", paymentId, e);
             return false;
+        }
+    }
+
+    // ============================================================
+    // In-Transaction UPDATE Methods
+    // (nhận Connection từ ngoài — KHÔNG commit/rollback/close)
+    // Dùng từ PaymentService để gộp vào 1 transaction với wallet operations
+    // ============================================================
+
+    /**
+     * PENDING → COMPLETED trong transaction đang mở.
+     *
+     * <p>Trả về {@code false} nếu payment không còn ở PENDING
+     * (ví dụ: luồng khác đã xử lý trước — concurrent race condition).</p>
+     *
+     * <p><b>Không gọi commit/rollback/close.</b></p>
+     *
+     * @param conn      Connection đang trong transaction
+     * @param paymentId ID payment cần cập nhật
+     * @return {@code true} nếu update thành công (đúng 1 row bị ảnh hưởng)
+     * @throws SQLException nếu có lỗi DB
+     */
+    public boolean completePaymentInTx(Connection conn, int paymentId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_COMPLETE)) {
+            ps.setInt(1, paymentId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * PENDING → FAILED trong transaction đang mở.
+     *
+     * <p><b>Không gọi commit/rollback/close.</b></p>
+     *
+     * @param conn      Connection đang trong transaction
+     * @param paymentId ID payment cần cập nhật
+     * @throws SQLException nếu có lỗi DB
+     */
+    public void failPaymentInTx(Connection conn, int paymentId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_FAIL)) {
+            ps.setInt(1, paymentId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * COMPLETED → REFUNDED trong transaction đang mở.
+     *
+     * <p>Trả về {@code false} nếu payment không còn ở COMPLETED.</p>
+     *
+     * <p><b>Không gọi commit/rollback/close.</b></p>
+     *
+     * @param conn      Connection đang trong transaction
+     * @param paymentId ID payment cần cập nhật
+     * @return {@code true} nếu update thành công
+     * @throws SQLException nếu có lỗi DB
+     */
+    public boolean refundPaymentInTx(Connection conn, int paymentId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_REFUND)) {
+            ps.setInt(1, paymentId);
+            return ps.executeUpdate() > 0;
         }
     }
 
@@ -163,10 +230,8 @@ public class PaymentDAO {
     // ============================================================
 
     /**
-     * Tìm kiếm thông tin thanh toán dựa trên ID phiên đấu giá.
-     *
-     * @param auctionId ID của phiên đấu giá.
-     * @return Đối tượng {@link PaymentDTO} hoặc {@code null} nếu không tìm thấy.
+     * Tìm payment theo auctionId.
+     * Vì auction_id là UNIQUE trong bảng payments, luôn trả về nhiều nhất 1 bản ghi.
      */
     public PaymentDTO getPaymentByAuctionId(int auctionId) {
         try (Connection conn = DBConnection.getConnection();
@@ -177,16 +242,13 @@ public class PaymentDAO {
                 if (rs.next()) return mapRow(rs);
             }
         } catch (SQLException e) {
-            logger.error("getPaymentByAuctionId failed for auctionId={}", auctionId, e);
+            logger.error("getPaymentByAuctionId() failed for auctionId={}", auctionId, e);
         }
         return null;
     }
 
     /**
-     * Truy vấn thông tin giao dịch theo ID định danh.
-     *
-     * @param paymentId ID của giao dịch.
-     * @return Đối tượng {@link PaymentDTO} hoặc {@code null} nếu không tồn tại.
+     * Tìm payment theo paymentId.
      */
     public PaymentDTO getPaymentById(int paymentId) {
         try (Connection conn = DBConnection.getConnection();
@@ -197,16 +259,13 @@ public class PaymentDAO {
                 if (rs.next()) return mapRow(rs);
             }
         } catch (SQLException e) {
-            logger.error("getPaymentById failed for paymentId={}", paymentId, e);
+            logger.error("getPaymentById() failed for paymentId={}", paymentId, e);
         }
         return null;
     }
 
     /**
-     * Lấy danh sách lịch sử thanh toán của người mua.
-     *
-     * @param buyerId ID của người mua.
-     * @return Danh sách {@link PaymentDTO} sắp xếp theo thời gian mới nhất.
+     * Lịch sử thanh toán của buyer, mới nhất trước.
      */
     public List<PaymentDTO> getPaymentsByBuyer(int buyerId) {
         List<PaymentDTO> list = new ArrayList<>();
@@ -218,16 +277,13 @@ public class PaymentDAO {
                 while (rs.next()) list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            logger.error("getPaymentsByBuyer failed for buyerId={}", buyerId, e);
+            logger.error("getPaymentsByBuyer() failed for buyerId={}", buyerId, e);
         }
         return list;
     }
 
     /**
-     * Lấy danh sách lịch sử giao dịch liên quan đến một người bán.
-     *
-     * @param sellerId ID của người bán.
-     * @return Danh sách {@link PaymentDTO} sắp xếp theo thời gian mới nhất.
+     * Lịch sử giao dịch của seller, mới nhất trước.
      */
     public List<PaymentDTO> getPaymentsBySeller(int sellerId) {
         List<PaymentDTO> list = new ArrayList<>();
@@ -239,28 +295,24 @@ public class PaymentDAO {
                 while (rs.next()) list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            logger.error("getPaymentsBySeller failed for sellerId={}", sellerId, e);
+            logger.error("getPaymentsBySeller() failed for sellerId={}", sellerId, e);
         }
         return list;
     }
 
     /**
-     * Truy vấn các giao dịch đang chờ xử lý (PENDING).
-     * Thường dùng cho các chức năng quản trị hoặc đối soát hệ thống.
-     *
-     * @return Danh sách các giao dịch ở trạng thái PENDING.
+     * Danh sách các payment đang chờ xử lý (PENDING), cũ nhất trước.
+     * Dùng cho admin dashboard hoặc scheduled job đối soát.
      */
     public List<PaymentDTO> getPendingPayments() {
         List<PaymentDTO> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING)) {
+            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_PENDING);
+            ResultSet rs = ps.executeQuery()) {
 
-            ps.setString(1, PaymentStatus.PENDING.name());
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
-            }
+            while (rs.next()) list.add(mapRow(rs));
         } catch (SQLException e) {
-            logger.error("getPendingPayments failed", e);
+            logger.error("getPendingPayments() failed", e);
         }
         return list;
     }
@@ -269,13 +321,6 @@ public class PaymentDAO {
     // Private Helpers
     // ============================================================
 
-    /**
-     * Ánh xạ một dòng kết quả từ {@link ResultSet} sang đối tượng {@link PaymentDTO}.
-     *
-     * @param rs ResultSet đang trỏ tới bản ghi hiện tại.
-     * @return Đối tượng {@link PaymentDTO} đã điền đủ thông tin.
-     * @throws SQLException Nếu có lỗi khi truy xuất dữ liệu từ các cột.
-     */
     private PaymentDTO mapRow(ResultSet rs) throws SQLException {
         return new PaymentDTO(
             rs.getInt("payment_id"),

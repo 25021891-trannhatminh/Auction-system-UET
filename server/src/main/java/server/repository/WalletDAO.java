@@ -11,13 +11,21 @@ import java.sql.*;
 /**
  * Data Access Object cho bảng {@code WALLETS}.
  *
- * <p>Xử lý toàn bộ các thao tác tài chính cốt lõi:
+ * <h2>Nguyên tắc thiết kế</h2>
+ * <p>WalletDAO chỉ chịu trách nhiệm đọc/ghi bảng {@code wallets}.
+ * Mọi thao tác ghi log vào {@code wallet_transactions} đều do
+ * {@link WalletTransactionDAO} đảm nhận — và được gọi từ
+ * {@link server.service.PaymentService}, không phải từ đây.</p>
+ *
+ * <h2>Hai nhóm method</h2>
  * <ul>
- *     <li>Truy vấn số dư và thông tin ví.</li>
- *     <li>Nạp tiền (Deposit) và Rút tiền (Withdraw).</li>
- *     <li>Chuyển tiền nội bộ giữa các ví (Transfer) với cơ chế Transaction đảm bảo an toàn.</li>
+ *   <li><b>Standalone</b> ({@link #deposit}, {@link #withdraw}, {@link #transfer}):
+ *       tự quản lý Connection, dùng cho nạp tiền / rút tiền đơn lẻ từ admin
+ *       hoặc các flow không liên quan đến thanh toán đấu giá.</li>
+ *   <li><b>In-transaction</b> ({@link #depositInTx}, {@link #withdrawInTx}):
+ *       nhận Connection từ ngoài, không commit/rollback/close — dùng khi
+ *       PaymentService cần gộp nhiều thao tác vào 1 DB transaction duy nhất.</li>
  * </ul>
- * </p>
  */
 public class WalletDAO {
 
@@ -36,30 +44,41 @@ public class WalletDAO {
     private static final String SQL_SELECT_BY_USER_ID =
         SQL_SELECT_BASE + " WHERE user_id = ?";
 
+    /**
+     * FOR UPDATE — dùng trong transaction để lock row, tránh race condition
+     * khi nhiều luồng đọc/ghi cùng 1 ví đồng thời.
+     */
+    private static final String SQL_SELECT_BY_USER_ID_FOR_UPDATE =
+        SQL_SELECT_BASE + " WHERE user_id = ? FOR UPDATE";
+
     private static final String SQL_SELECT_BALANCE =
         "SELECT balance FROM wallets WHERE wallet_id = ?";
 
     private static final String SQL_INSERT =
         "INSERT INTO wallets (user_id, balance) VALUES (?, 0.00)";
 
+    /**
+     * Cộng tiền — dùng cho cả standalone lẫn in-transaction.
+     * Không có điều kiện phụ vì deposit không thể thất bại về mặt logic.
+     */
     private static final String SQL_DEPOSIT =
         "UPDATE wallets SET balance = balance + ?, updated_at = NOW() WHERE wallet_id = ?";
 
-    private static final String SQL_WITHDRAW = """
-        UPDATE wallets 
-        SET balance = balance - ?, updated_at = NOW()
-        WHERE wallet_id = ? AND balance >= ?
-        """;
+    /**
+     * Trừ tiền — điều kiện {@code balance >= amount} nằm tại tầng SQL
+     * để chặn race condition ngay cả khi Java-level check đã qua.
+     * Nếu {@code executeUpdate()} trả về 0 → số dư không đủ.
+     */
+    private static final String SQL_WITHDRAW =
+        "UPDATE wallets SET balance = balance - ?, updated_at = NOW() " +
+            "WHERE wallet_id = ? AND balance >= ?";
 
     // ============================================================
     // SELECT Methods
     // ============================================================
 
     /**
-     * Lấy thông tin ví dựa trên mã định danh ví (walletId).
-     *
-     * @param walletId ID định danh của ví.
-     * @return Đối tượng {@link WalletDTO} hoặc {@code null} nếu không tìm thấy.
+     * Lấy thông tin ví theo walletId.
      */
     public WalletDTO getById(int walletId) {
         try (Connection conn = DBConnection.getConnection();
@@ -76,10 +95,7 @@ public class WalletDAO {
     }
 
     /**
-     * Truy vấn ví điện tử thuộc sở hữu của một người dùng cụ thể.
-     *
-     * @param userId ID định danh của người dùng.
-     * @return Đối tượng {@link WalletDTO} hoặc {@code null} nếu người dùng chưa có ví.
+     * Lấy thông tin ví theo userId.
      */
     public WalletDTO getByUserId(int userId) {
         try (Connection conn = DBConnection.getConnection();
@@ -96,10 +112,8 @@ public class WalletDAO {
     }
 
     /**
-     * Lấy số dư hiện tại của ví một cách nhanh chóng.
-     *
-     * @param walletId ID định danh của ví.
-     * @return {@link BigDecimal} số dư ví, mặc định trả về {@code 0.00} nếu có lỗi hoặc không tìm thấy.
+     * Lấy số dư nhanh theo walletId (không lấy toàn bộ WalletDTO).
+     * Trả về {@code 0.00} nếu có lỗi hoặc không tìm thấy.
      */
     public BigDecimal getBalance(int walletId) {
         try (Connection conn = DBConnection.getConnection();
@@ -116,14 +130,13 @@ public class WalletDAO {
     }
 
     // ============================================================
-    // INSERT / UPDATE Methods
+    // INSERT Method
     // ============================================================
 
     /**
-     * Khởi tạo một ví điện tử mới cho người dùng với số dư ban đầu bằng 0.
+     * Tạo ví mới với số dư ban đầu = 0.
      *
-     * @param userId ID người dùng cần tạo ví.
-     * @return Mã ID của ví mới được tạo, hoặc {@code -1} nếu thao tác thất bại.
+     * @return walletId vừa tạo, hoặc {@code -1} nếu thất bại.
      */
     public int createWallet(int userId) {
         try (Connection conn = DBConnection.getConnection();
@@ -141,19 +154,23 @@ public class WalletDAO {
         return -1;
     }
 
+    // ============================================================
+    // Standalone UPDATE Methods
+    // (tự quản lý Connection — dùng cho nạp tiền / rút tiền đơn lẻ)
+    // ============================================================
+
     /**
-     * Nạp thêm tiền vào ví.
+     * Nạp tiền vào ví (standalone — tự commit).
      *
-     * @param walletId ID ví nhận tiền.
-     * @param amount   Số tiền nạp (phải lớn hơn 0).
-     * @return {@code true} nếu nạp tiền thành công.
+     * @param walletId ID ví nhận tiền
+     * @param amount   Số tiền nạp (phải > 0)
+     * @return {@code true} nếu thành công
      */
     public boolean deposit(int walletId, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            logger.warn("Deposit aborted: invalid amount={}", amount);
+        if (isInvalidAmount(amount)) {
+            logger.warn("deposit() aborted: invalid amount={}", amount);
             return false;
         }
-
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_DEPOSIT)) {
 
@@ -161,95 +178,160 @@ public class WalletDAO {
             ps.setInt(2, walletId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("Deposit failed for walletId={}", walletId, e);
+            logger.error("deposit() failed for walletId={}", walletId, e);
             return false;
         }
     }
 
     /**
-     * Rút tiền từ ví. Chỉ thành công khi số dư ví lớn hơn hoặc bằng số tiền cần rút.
+     * Rút tiền từ ví (standalone — tự commit).
+     * Chỉ thành công khi {@code balance >= amount}.
      *
-     * @param walletId ID ví thực hiện rút tiền.
-     * @param amount   Số tiền cần rút (phải lớn hơn 0).
-     * @return {@code true} nếu rút tiền thành công.
+     * @param walletId ID ví rút tiền
+     * @param amount   Số tiền rút (phải > 0)
+     * @return {@code true} nếu thành công; {@code false} nếu không đủ số dư
      */
     public boolean withdraw(int walletId, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            logger.warn("Withdraw aborted: invalid amount={}", amount);
+        if (isInvalidAmount(amount)) {
+            logger.warn("withdraw() aborted: invalid amount={}", amount);
             return false;
         }
-
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_WITHDRAW)) {
 
             ps.setBigDecimal(1, amount);
             ps.setInt(2, walletId);
-            ps.setBigDecimal(3, amount); // Dùng để check balance >= amount ở tầng SQL
+            ps.setBigDecimal(3, amount); // check balance >= amount tại SQL
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            logger.error("Withdraw failed for walletId={}", walletId, e);
+            logger.error("withdraw() failed for walletId={}", walletId, e);
             return false;
         }
     }
 
     /**
-     * Chuyển tiền giữa hai ví nội bộ.
-     * Sử dụng Database Transaction để đảm bảo tiền không bị mất mát nếu một trong hai bước thất bại.
+     * Chuyển tiền giữa hai ví (standalone — tự quản lý transaction).
      *
-     * @param fromWalletId ID ví gửi.
-     * @param toWalletId   ID ví nhận.
-     * @param amount       Số tiền chuyển.
-     * @return {@code true} nếu giao dịch hoàn tất thành công.
+     * <p>Dùng cho các flow không liên quan đến payment đấu giá (ví dụ: admin
+     * điều chỉnh ví). Nếu cần gộp với update payments trong 1 transaction,
+     * dùng {@link #withdrawInTx} và {@link #depositInTx} thay thế.</p>
+     *
+     * @param fromWalletId ID ví gửi
+     * @param toWalletId   ID ví nhận
+     * @param amount       Số tiền chuyển
+     * @return {@code true} nếu hoàn tất
      */
     public boolean transfer(int fromWalletId, int toWalletId, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            logger.warn("Transfer aborted: invalid amount={}", amount);
+        if (isInvalidAmount(amount)) {
+            logger.warn("transfer() aborted: invalid amount={}", amount);
+            return false;
+        }
+        if (fromWalletId == toWalletId) {
+            logger.warn("transfer() aborted: fromWalletId == toWalletId = {}", fromWalletId);
             return false;
         }
 
         Connection conn = null;
         try {
             conn = DBConnection.getConnection();
-            conn.setAutoCommit(false); // Bắt đầu Transaction
+            conn.setAutoCommit(false);
 
-            // Bước 1: Trừ tiền ví gửi
-            try (PreparedStatement psWithdraw = conn.prepareStatement(SQL_WITHDRAW)) {
-                psWithdraw.setBigDecimal(1, amount);
-                psWithdraw.setInt(2, fromWalletId);
-                psWithdraw.setBigDecimal(3, amount);
-
-                if (psWithdraw.executeUpdate() == 0) {
-                    logger.warn("Transfer failed: Insufficient balance in walletId={}", fromWalletId);
+            // Trừ ví gửi (check balance >= amount tại SQL)
+            try (PreparedStatement ps = conn.prepareStatement(SQL_WITHDRAW)) {
+                ps.setBigDecimal(1, amount);
+                ps.setInt(2, fromWalletId);
+                ps.setBigDecimal(3, amount);
+                if (ps.executeUpdate() == 0) {
+                    logger.warn("transfer() failed: insufficient balance in walletId={}", fromWalletId);
                     conn.rollback();
                     return false;
                 }
             }
 
-            // Bước 2: Cộng tiền ví nhận
-            try (PreparedStatement psDeposit = conn.prepareStatement(SQL_DEPOSIT)) {
-                psDeposit.setBigDecimal(1, amount);
-                psDeposit.setInt(2, toWalletId);
-                psDeposit.executeUpdate();
+            // Cộng ví nhận
+            try (PreparedStatement ps = conn.prepareStatement(SQL_DEPOSIT)) {
+                ps.setBigDecimal(1, amount);
+                ps.setInt(2, toWalletId);
+                ps.executeUpdate();
             }
 
-            conn.commit(); // Hoàn tất Transaction
+            conn.commit();
+            logger.info("transfer() SUCCESS: from={}, to={}, amount={}", fromWalletId, toWalletId, amount);
             return true;
 
         } catch (SQLException e) {
-            logger.error("Transfer failed between wallet {} and {}", fromWalletId, toWalletId, e);
-            try {
-                if (conn != null) conn.rollback();
-            } catch (SQLException ex) {
-                logger.error("Rollback failed", ex);
-            }
+            logger.error("transfer() failed between walletId={} and walletId={}", fromWalletId, toWalletId, e);
+            rollbackQuietly(conn);
             return false;
         } finally {
-            try {
-                if (conn != null) {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                }
-            } catch (SQLException ignored) {}
+            closeQuietly(conn);
+        }
+    }
+
+    // ============================================================
+    // In-Transaction Methods
+    // (nhận Connection từ ngoài — KHÔNG commit/rollback/close)
+    // Dùng khi PaymentService cần gộp nhiều thao tác vào 1 transaction
+    // ============================================================
+
+    /**
+     * Khóa row ví của {@code userId} bằng {@code SELECT FOR UPDATE}.
+     *
+     * <p>Phải gọi method này trong transaction đang mở (autoCommit = false)
+     * TRƯỚC khi đọc balance để đảm bảo không có luồng nào khác thay đổi
+     * số dư trong khoảng thời gian từ lúc đọc đến lúc ghi.</p>
+     *
+     * @param conn   Connection đang trong transaction
+     * @param userId ID của user cần lock ví
+     * @return {@link WalletDTO} với số dư đã được lock, hoặc {@code null} nếu không tìm thấy
+     * @throws SQLException nếu có lỗi DB
+     */
+    public WalletDTO lockByUserId(Connection conn, int userId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_USER_ID_FOR_UPDATE)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return mapRow(rs);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Cộng tiền vào ví trong transaction đang mở.
+     *
+     * <p><b>Không gọi commit/rollback/close — trách nhiệm của caller.</b></p>
+     *
+     * @param conn     Connection đang trong transaction
+     * @param walletId ID ví nhận tiền
+     * @param amount   Số tiền cộng thêm
+     * @throws SQLException nếu có lỗi DB
+     */
+    public void depositInTx(Connection conn, int walletId, BigDecimal amount) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_DEPOSIT)) {
+            ps.setBigDecimal(1, amount);
+            ps.setInt(2, walletId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Trừ tiền khỏi ví trong transaction đang mở.
+     * Điều kiện {@code balance >= amount} nằm tại tầng SQL.
+     *
+     * <p><b>Không gọi commit/rollback/close — trách nhiệm của caller.</b></p>
+     *
+     * @param conn     Connection đang trong transaction
+     * @param walletId ID ví bị trừ tiền
+     * @param amount   Số tiền cần trừ
+     * @return {@code true} nếu trừ thành công; {@code false} nếu số dư không đủ
+     * @throws SQLException nếu có lỗi DB
+     */
+    public boolean withdrawInTx(Connection conn, int walletId, BigDecimal amount) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_WITHDRAW)) {
+            ps.setBigDecimal(1, amount);
+            ps.setInt(2, walletId);
+            ps.setBigDecimal(3, amount); // check balance >= amount tại SQL
+            return ps.executeUpdate() > 0;
         }
     }
 
@@ -257,13 +339,25 @@ public class WalletDAO {
     // Private Helpers
     // ============================================================
 
-    /**
-     * Ánh xạ một dòng dữ liệu từ {@link ResultSet} sang thực thể {@link WalletDTO}.
-     *
-     * @param rs ResultSet đang trỏ tới dòng hiện tại.
-     * @return Đối tượng WalletDTO đã điền đủ thông tin.
-     * @throws SQLException Nếu có lỗi khi truy xuất dữ liệu từ các cột.
-     */
+    private boolean isInvalidAmount(BigDecimal amount) {
+        return amount == null || amount.compareTo(BigDecimal.ZERO) <= 0;
+    }
+
+    private void rollbackQuietly(Connection conn) {
+        if (conn == null) return;
+        try { conn.rollback(); } catch (SQLException e) {
+            logger.error("rollback failed", e);
+        }
+    }
+
+    private void closeQuietly(Connection conn) {
+        if (conn == null) return;
+        try {
+            conn.setAutoCommit(true);
+            conn.close();
+        } catch (SQLException ignored) {}
+    }
+
     private WalletDTO mapRow(ResultSet rs) throws SQLException {
         return new WalletDTO(
             rs.getInt("wallet_id"),

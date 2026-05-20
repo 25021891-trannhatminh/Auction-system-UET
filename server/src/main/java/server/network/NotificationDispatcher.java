@@ -6,6 +6,7 @@ import server.common.model.NotificationEvent;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import server.common.model.WalletUpdateEvent;
 
 public class NotificationDispatcher implements Runnable {
 
@@ -68,7 +69,24 @@ public class NotificationDispatcher implements Runnable {
    */
   private void dispatch(NotificationEvent event) {
     try {
-      // 1. Kiểm tra format (tránh null title/message gây lỗi chuỗi)
+      // ── Nhánh 1: WalletUpdateEvent → gửi WALLET_UPDATE thay vì PUSH_NOTIF ──
+      if (event instanceof WalletUpdateEvent walletEvent) {
+        String msg = String.format("WALLET_UPDATE|%d|%s",
+            walletEvent.getUserId(),
+            walletEvent.getNewBalance().toPlainString());
+
+        if (walletEvent.getUserId() == -1) {
+          ClientManager.broadcast(msg);
+        } else {
+          ClientManager.sendToUser(walletEvent.getUserId(), msg);
+        }
+
+        logger.debug("Dispatcher – WALLET_UPDATE sent to userId={}, balance={}",
+            walletEvent.getUserId(), walletEvent.getNewBalance());
+        return;
+      }
+
+      // ── Nhánh 2: NotificationEvent thông thường → PUSH_NOTIF ──────────────
       String type = event.getType() != null ? event.getType().name() : "INFO";
       String title = event.getTitle() != null ? event.getTitle() : "";
       String content = event.getMessage() != null ? event.getMessage() : "";

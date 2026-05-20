@@ -100,9 +100,9 @@ public class Auction extends Entity {
     // ─────────────────────────────────────────────────────────────────────────
 
     public Auction(Item item, String sellerId,
-                   LocalDateTime startTime, LocalDateTime endTime,
-                   BigDecimal minBidIncrement, BigDecimal reservePrice,
-                   int snipeWindowSeconds, int snipeExtensionSeconds) {
+        LocalDateTime startTime, LocalDateTime endTime,
+        BigDecimal minBidIncrement, BigDecimal reservePrice,
+        int snipeWindowSeconds, int snipeExtensionSeconds) {
 
         super();
         validateTimes(startTime, endTime);
@@ -126,14 +126,14 @@ public class Auction extends Entity {
 
     /** Constructor load từ DB — truyền vào state đã lưu */
     public Auction(String id, LocalDateTime createdAt,
-                   Item item, String sellerId,
-                   LocalDateTime startTime, LocalDateTime endTime,
-                   LocalDateTime lastBidTime,
-                    BigDecimal currentPrice,
-                   BigDecimal minBidIncrement, BigDecimal reservePrice,
-                   int snipeWindowSeconds, int snipeExtensionSeconds,
-                   AuctionStatus status, User currentLeader
-                   ) {
+        Item item, String sellerId,
+        LocalDateTime startTime, LocalDateTime endTime,
+        LocalDateTime lastBidTime,
+        BigDecimal currentPrice,
+        BigDecimal minBidIncrement, BigDecimal reservePrice,
+        int snipeWindowSeconds, int snipeExtensionSeconds,
+        AuctionStatus status, User currentLeader
+    ) {
         super(id,createdAt);
         this.item                  = item;
         this.sellerId                = sellerId;
@@ -266,8 +266,8 @@ public class Auction extends Entity {
         if (minBidIncrement.compareTo(BigDecimal.ZERO) > 0 && (amount.subtract(currentPrice).compareTo(minBidIncrement) < 0)) {
             throw new InvalidBidException(
                 String.format("Bid must be at least %.2f above current price (%.2f). " +
-                              "Minimum next bid: %.2f",
-                              minBidIncrement, currentPrice, currentPrice.add(minBidIncrement)),
+                        "Minimum next bid: %.2f",
+                    minBidIncrement, currentPrice, currentPrice.add(minBidIncrement)),
                 amount, currentPrice
             );
         }
@@ -421,17 +421,17 @@ public class Auction extends Entity {
     // ─────────────────────────────────────────────────────────────────────────
     //  Helper queries
     // ─────────────────────────────────────────────────────────────────────────
-  /** Đánh dấu bid WINNING hiện tại thành OUTBID. Gọi trong vùng lock. */
-   private void markCurrentWinnerOutbid() {
-    // Tìm bid đang WINNING và chuyển sang OUTBID
-    for (int i = bidHistory.size() - 1; i >= 0; i--) {
-      BidTransaction tx = bidHistory.get(i);
-      if (tx.getStatus() == BidStatus.WINNING) {
-        tx.markOutbid();
-        break; // Chỉ có tối đa 1 bid WINNING tại mọi thời điểm
-      }
+    /** Đánh dấu bid WINNING hiện tại thành OUTBID. Gọi trong vùng lock. */
+    private void markCurrentWinnerOutbid() {
+        // Tìm bid đang WINNING và chuyển sang OUTBID
+        for (int i = bidHistory.size() - 1; i >= 0; i--) {
+            BidTransaction tx = bidHistory.get(i);
+            if (tx.getStatus() == BidStatus.WINNING) {
+                tx.markOutbid();
+                break; // Chỉ có tối đa 1 bid WINNING tại mọi thời điểm
+            }
+        }
     }
-   }
 
     /** Lấy bid đang ở trạng thái WINNING (chỉ có tối đa 1) */
     public BidTransaction getWinningBid() {
