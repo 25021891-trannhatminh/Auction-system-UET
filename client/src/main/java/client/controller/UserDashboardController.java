@@ -6,19 +6,21 @@ import client.service.SessionManager;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
@@ -46,6 +48,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
+import javafx.util.Duration;
 
 /**
  * Controller for bidder and seller dashboard features shown to regular users.
@@ -136,6 +139,7 @@ public class UserDashboardController extends BaseDashboardController {
   private String currentSectionKey = "dashboard";
   private String activeFilter = "Overview";
   private int auctionPage = 1;
+  private Timeline auctionDetailCountdownTimeline;
 
 
 
@@ -388,6 +392,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   @Override
   protected void handleLogout() {
+    stopAuctionDetailCountdown();
     // 1. Dọn dẹp, gỡ bỏ bộ lắng nghe Real-time của User khỏi danh sách tổng
     if (networkManager != null && userNetworkHandler != null) {
       networkManager.removeMessageHandler(userNetworkHandler);
@@ -419,6 +424,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   @Override
   protected void showSection(String sectionKey) {
+    stopAuctionDetailCountdown();
     currentSectionKey = sectionKey;
     activeFilter = getDefaultFilter(sectionKey);
     auctionPage = 1;
@@ -745,6 +751,7 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void renderWorkspace(String sectionKey, String filter) {
+    stopAuctionDetailCountdown();
     if (workspaceBox == null) {
       return;
     }
@@ -1382,27 +1389,24 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
+    stopAuctionDetailCountdown();
     currentSectionKey = "auctions";
-    setWorkspaceTitle(data.title);
     workspaceBox.getChildren().clear();
+
     if (surfaceTitleLabel != null) {
-      surfaceTitleLabel.setVisible(true);
-      surfaceTitleLabel.setManaged(true);
-      surfaceTitleLabel.setText(data.title);
+      surfaceTitleLabel.setVisible(false);
+      surfaceTitleLabel.setManaged(false);
     }
     if (workspaceTitleLabel != null) {
-      workspaceTitleLabel.setVisible(true);
-      workspaceTitleLabel.setManaged(true);
+      workspaceTitleLabel.setText("");
+      workspaceTitleLabel.setVisible(false);
+      workspaceTitleLabel.setManaged(false);
     }
     if (userActionBar != null) {
       userActionBar.getChildren().clear();
-      Button back = new Button("← Back to Auctions");
-      back.setMnemonicParsing(false);
-      back.getStyleClass().add("filter-chip-active");
-      back.setOnAction(event -> renderWorkspace("auctions", activeFilter));
-      userActionBar.getChildren().add(back);
       userActionBar.setVisible(true);
       userActionBar.setManaged(true);
+      userActionBar.getChildren().add(buildAuctionBreadcrumb(data));
     }
 
     HBox detailShell = new HBox(22);
@@ -1434,103 +1438,227 @@ public class UserDashboardController extends BaseDashboardController {
       thumbnails.getChildren().add(thumb);
     }
 
-    VBox descriptionBox = new VBox(7);
-    descriptionBox.getStyleClass().add("auction-detail-card");
-    Label descTitle = new Label("Description");
-    descTitle.getStyleClass().add("auction-detail-section-title");
-    Label desc = new Label(fallback(data.description, "No description stored for this item."));
-    desc.getStyleClass().add("auction-detail-text");
-    desc.setWrapText(true);
-    descriptionBox.getChildren().addAll(descTitle, desc);
-    if (!data.attributes.isBlank()) {
-      Label attrTitle = new Label("Item Attributes");
-      attrTitle.getStyleClass().add("auction-detail-section-title");
-      Label attr = new Label(data.attributes);
-      attr.getStyleClass().add("auction-detail-text");
-      attr.setWrapText(true);
-      descriptionBox.getChildren().addAll(attrTitle, attr);
-    }
+    Label descriptionLine = new Label(fallback(data.description, "No description stored for this item."));
+    descriptionLine.getStyleClass().add("auction-detail-description-line");
+    descriptionLine.setWrapText(true);
+    descriptionLine.setMaxWidth(Double.MAX_VALUE);
 
-    mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionBox);
+    mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionLine);
 
     VBox infoColumn = new VBox(14);
     infoColumn.getStyleClass().add("auction-detail-info-column");
     infoColumn.setMinWidth(320);
-    infoColumn.setPrefWidth(390);
-    infoColumn.setMaxWidth(430);
-
-    Label timeTitle = new Label("Time Left");
-    timeTitle.getStyleClass().add("auction-detail-heading");
+    infoColumn.setPrefWidth(430);
+    infoColumn.setMaxWidth(470);
 
     HBox countdown = buildCountdown(data.secondsLeft);
 
-    GridPane facts = new GridPane();
-    facts.getStyleClass().add("auction-detail-facts");
-    facts.setHgap(10);
-    facts.setVgap(10);
-    facts.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
-    addAuctionFact(facts, 0, 0, "Auction ID", "AUC-" + data.auctionId);
-    addAuctionFact(facts, 1, 0, "Item ID", "ITEM-" + data.itemId);
-    addAuctionFact(facts, 0, 1, "Category", data.category);
-    addAuctionFact(facts, 1, 1, "Status", data.status);
-    addAuctionFact(facts, 0, 2, "Seller", data.seller);
-    addAuctionFact(facts, 1, 2, "Bids", data.bids);
-    addAuctionFact(facts, 0, 3, "Min increment", data.minimumIncrement);
-    addAuctionFact(facts, 1, 3, "Reserve", data.reservePrice);
-    addAuctionFact(facts, 0, 4, "Start", data.startTime);
-    addAuctionFact(facts, 1, 4, "End", data.endTime);
+    VBox bidPanel = new VBox(14);
+    bidPanel.getStyleClass().add("auction-detail-price-panel");
 
-    VBox pricePanel = new VBox(8);
-    pricePanel.getStyleClass().add("auction-detail-price-panel");
+    HBox metaRow = buildAuctionMetaRow(data);
+
+    VBox priceBox = new VBox(4);
     Label currentLabel = new Label("Current Bid");
     currentLabel.getStyleClass().add("auction-market-label");
     Label price = new Label(data.price);
     price.getStyleClass().add("auction-detail-price");
+    Label bids = new Label(data.bids);
+    bids.getStyleClass().add("auction-detail-text");
+    priceBox.getChildren().addAll(currentLabel, price, bids);
+
+    HBox bidRow = new HBox(10);
+    bidRow.getStyleClass().add("auction-detail-bid-row");
+    TextField bidInput = new TextField();
+    bidInput.setPromptText(data.minimumIncrement);
+    bidInput.setDisable(true);
+    bidInput.getStyleClass().add("auction-detail-bid-input");
+    HBox.setHgrow(bidInput, Priority.ALWAYS);
+
     Button disabledBid = new Button("Place Bid");
     disabledBid.setMnemonicParsing(false);
     disabledBid.getStyleClass().add("auction-market-bid-btn");
     disabledBid.setDisable(true);
-    disabledBid.setMaxWidth(Double.MAX_VALUE);
-    pricePanel.getChildren().addAll(currentLabel, price, disabledBid);
 
-    Label ruleText = new Label("Snipe window: " + data.snipeWindowSeconds
-        + "s • Snipe extension: " + data.snipeExtensionSeconds + "s");
-    ruleText.getStyleClass().add("auction-detail-text");
-    ruleText.setWrapText(true);
+    bidRow.getChildren().addAll(bidInput, disabledBid);
 
-    infoColumn.getChildren().addAll(timeTitle, countdown, facts, pricePanel, ruleText);
+    Label endNote = new Label("This auction will end on " + data.endTime + ".");
+    endNote.getStyleClass().add("auction-detail-end-note");
+    endNote.setWrapText(true);
+
+    bidPanel.getChildren().addAll(metaRow, priceBox, bidRow, endNote);
+
+    infoColumn.getChildren().addAll(countdown, bidPanel);
     detailShell.getChildren().addAll(mediaColumn, infoColumn);
     workspaceBox.getChildren().add(detailShell);
   }
 
+  private HBox buildAuctionBreadcrumb(AuctionCardData data) {
+    HBox breadcrumb = new HBox(9);
+    breadcrumb.getStyleClass().add("auction-breadcrumb");
+    breadcrumb.setAlignment(Pos.CENTER_LEFT);
+    breadcrumb.setMaxWidth(Double.MAX_VALUE);
+
+    Label home = new Label("Home");
+    home.getStyleClass().add("auction-breadcrumb-muted");
+
+    Label firstSeparator = new Label("/");
+    firstSeparator.getStyleClass().add("auction-breadcrumb-separator");
+
+    Button liveAuctions = new Button("Live Auctions");
+    liveAuctions.setMnemonicParsing(false);
+    liveAuctions.getStyleClass().add("auction-breadcrumb-link");
+    liveAuctions.setOnAction(event -> {
+      showSection("auctions");
+    });
+
+    Label secondSeparator = new Label("/");
+    secondSeparator.getStyleClass().add("auction-breadcrumb-separator");
+
+    Label currentTitle = new Label(data.title);
+    currentTitle.getStyleClass().add("auction-breadcrumb-current");
+    currentTitle.setWrapText(true);
+    currentTitle.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(currentTitle, Priority.ALWAYS);
+
+    breadcrumb.getChildren().addAll(home, firstSeparator, liveAuctions, secondSeparator, currentTitle);
+    return breadcrumb;
+  }
+
+  private HBox buildAuctionMetaRow(AuctionCardData data) {
+    HBox row = new HBox(18);
+    row.getStyleClass().add("auction-detail-meta-row");
+    row.setAlignment(Pos.CENTER_LEFT);
+    row.setMaxWidth(Double.MAX_VALUE);
+
+    addAuctionMetaCell(row, "Category", data.category);
+    if (isArtCategory(data.category)) {
+      addAuctionMetaCell(row, "Artist", attributeValue(data.attributes, "artist"));
+      addAuctionMetaCell(row, "Year", attributeValue(data.attributes, "year_created", "year"));
+    }
+
+    return row;
+  }
+
+  private void addAuctionMetaCell(HBox row, String labelText, String valueText) {
+    VBox cell = new VBox(5);
+    cell.getStyleClass().add("auction-detail-meta-cell");
+    Label label = new Label(labelText);
+    label.getStyleClass().add("auction-detail-meta-key");
+    Label value = new Label(fallback(valueText, "not available"));
+    value.getStyleClass().add("auction-detail-meta-value");
+    value.setWrapText(true);
+    cell.getChildren().addAll(label, value);
+    HBox.setHgrow(cell, Priority.ALWAYS);
+    row.getChildren().add(cell);
+  }
+
+  private boolean isArtCategory(String category) {
+    return normalize(category).equals("art");
+  }
+
+  private String attributeValue(String attributes, String... keys) {
+    if (attributes == null || attributes.isBlank() || keys == null || keys.length == 0) {
+      return "";
+    }
+
+    Map<String, String> values = new LinkedHashMap<>();
+    String normalizedPayload = attributes.replace("\\n", "\n");
+    for (String line : normalizedPayload.split("\\R")) {
+      if (line == null || line.isBlank()) {
+        continue;
+      }
+      int separator = line.indexOf(':');
+      if (separator <= 0) {
+        continue;
+      }
+      String key = normalizeAttributeKey(line.substring(0, separator));
+      String value = line.substring(separator + 1).trim();
+      if (!key.isBlank() && !value.isBlank()) {
+        values.put(key, value);
+      }
+    }
+
+    for (String key : keys) {
+      String value = values.get(normalizeAttributeKey(key));
+      if (value != null && !value.isBlank()) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  private String normalizeAttributeKey(String key) {
+    return key == null ? "" : key.trim().toLowerCase().replace('-', '_').replace(' ', '_');
+  }
+
   private HBox buildCountdown(long secondsLeft) {
-    long days = Math.max(0, secondsLeft) / 86400;
-    long hours = (Math.max(0, secondsLeft) % 86400) / 3600;
-    long minutes = (Math.max(0, secondsLeft) % 3600) / 60;
+    long[] remainingSeconds = {Math.max(0, secondsLeft)};
 
     HBox box = new HBox(10);
     box.getStyleClass().add("auction-detail-countdown");
+
+    Label dayNumber = countdownNumberLabel();
+    Label hourNumber = countdownNumberLabel();
+    Label minuteNumber = countdownNumberLabel();
+    updateCountdownLabels(dayNumber, hourNumber, minuteNumber, remainingSeconds[0]);
+
     box.getChildren().addAll(
-        countdownUnit(days, "Day"),
+        countdownUnit(dayNumber, "Day"),
         countdownSeparator(),
-        countdownUnit(hours, "Hours"),
+        countdownUnit(hourNumber, "Hours"),
         countdownSeparator(),
-        countdownUnit(minutes, "Minutes")
+        countdownUnit(minuteNumber, "Minutes")
     );
+
+    if (remainingSeconds[0] > 0) {
+      auctionDetailCountdownTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
+        remainingSeconds[0] = Math.max(0, remainingSeconds[0] - 1);
+        updateCountdownLabels(dayNumber, hourNumber, minuteNumber, remainingSeconds[0]);
+        if (remainingSeconds[0] <= 0) {
+          stopAuctionDetailCountdown();
+        }
+      }));
+      auctionDetailCountdownTimeline.setCycleCount(Timeline.INDEFINITE);
+      auctionDetailCountdownTimeline.play();
+    }
+
     return box;
   }
 
-  private VBox countdownUnit(long value, String labelText) {
+  private void stopAuctionDetailCountdown() {
+    if (auctionDetailCountdownTimeline != null) {
+      auctionDetailCountdownTimeline.stop();
+      auctionDetailCountdownTimeline = null;
+    }
+  }
+
+  private void updateCountdownLabels(Label dayNumber, Label hourNumber, Label minuteNumber,
+      long secondsLeft) {
+    long safeSeconds = Math.max(0, secondsLeft);
+    long days = safeSeconds / 86400;
+    long hours = (safeSeconds % 86400) / 3600;
+    long minutes = (safeSeconds % 3600) / 60;
+
+    dayNumber.setText(String.format("%02d", days));
+    hourNumber.setText(String.format("%02d", hours));
+    minuteNumber.setText(String.format("%02d", minutes));
+  }
+
+  private Label countdownNumberLabel() {
+    Label number = new Label("00");
+    number.getStyleClass().add("auction-detail-countdown-number");
+    return number;
+  }
+
+  private VBox countdownUnit(Label number, String labelText) {
     VBox unit = new VBox(2);
     unit.getStyleClass().add("auction-detail-countdown-unit");
-    Label number = new Label(String.format("%02d", value));
-    number.getStyleClass().add("auction-detail-countdown-number");
     Label label = new Label(labelText);
     label.getStyleClass().add("auction-detail-countdown-label");
     unit.getChildren().addAll(number, label);
     return unit;
   }
-
   private Label countdownSeparator() {
     Label separator = new Label(":");
     separator.getStyleClass().add("auction-detail-countdown-separator");

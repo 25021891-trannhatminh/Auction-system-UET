@@ -2151,3 +2151,110 @@
     -fx-font-size: 26px;
     -fx-font-weight: bold;
 }
+
+/* Auction detail refinement: compact breadcrumb, image description line, and lean bid panel. */
+.user-dashboard-root .sidebar-shell {
+    -fx-background-color: linear-gradient(to bottom, #07231d, #020c0a);
+    -fx-border-color: rgba(209, 177, 93, 0.08);
+}
+
+.user-dashboard-root .profile-card,
+.user-dashboard-root .sidebar-mini-card {
+    -fx-background-color: rgba(255, 255, 255, 0.030);
+    -fx-border-color: rgba(255, 255, 255, 0.050);
+}
+
+.auction-breadcrumb {
+    -fx-padding: 2 0 9 2;
+}
+
+.auction-breadcrumb-muted,
+.auction-breadcrumb-separator {
+    -fx-text-fill: rgba(247, 243, 233, 0.36);
+    -fx-font-size: 13px;
+}
+
+.auction-breadcrumb-link {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-text-fill: rgba(247, 243, 233, 0.48);
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+
+.auction-breadcrumb-link:hover {
+    -fx-text-fill: #d1b15d;
+}
+
+.auction-breadcrumb-current {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-shell {
+    -fx-padding: 0;
+}
+
+
+.auction-detail-description-line {
+    -fx-text-fill: rgba(247, 243, 233, 0.82);
+    -fx-font-size: 15px;
+    -fx-line-spacing: 3px;
+}
+
+.auction-detail-price-panel {
+    -fx-background-color: #101010;
+    -fx-background-radius: 24;
+    -fx-border-color: #2a2a2a;
+    -fx-border-radius: 24;
+    -fx-padding: 16;
+}
+
+.auction-detail-meta-row {
+    -fx-padding: 2 0 4 0;
+}
+
+.auction-detail-meta-key {
+    -fx-text-fill: rgba(247, 243, 233, 0.56);
+    -fx-font-size: 13px;
+}
+
+.auction-detail-meta-value {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-bid-row {
+    -fx-alignment: center;
+}
+
+.auction-detail-bid-input {
+    -fx-background-color: #202020;
+    -fx-background-radius: 18;
+    -fx-border-color: transparent;
+    -fx-border-radius: 18;
+    -fx-text-fill: #f7f3e9;
+    -fx-prompt-text-fill: rgba(247, 243, 233, 0.70);
+    -fx-font-size: 13px;
+    -fx-padding: 11 16 11 16;
+}
+
+.auction-detail-bid-input:disabled {
+    -fx-opacity: 1;
+}
+
+.auction-detail-end-note {
+    -fx-text-fill: rgba(247, 243, 233, 0.66);
+    -fx-font-size: 12px;
+}
+
+.auction-detail-info-column {
+    -fx-background-color: #080808;
+    -fx-background-radius: 32;
+    -fx-border-color: #2a2a2a;
+    -fx-border-radius: 32;
+    -fx-padding: 22;
+}
