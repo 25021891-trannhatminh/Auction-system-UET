@@ -228,6 +228,10 @@ public class ClientHandler implements Runnable {
                 sendAdminAuctions();
                 break;
 
+            case "USER_LIST_AUCTIONS":
+                sendUserAuctions();
+                break;
+
             case "ADMIN_CREATE_AUCTION":
                 handleAdminCreateAuction(msg.length() > "ADMIN_CREATE_AUCTION".length()
                     ? msg.substring("ADMIN_CREATE_AUCTION".length()).trim()
@@ -367,6 +371,7 @@ public class ClientHandler implements Runnable {
         if (result.success) {
             send("ADMIN_CREATE_AUCTION_SUCCESS " + fields(result.auctionId, itemId));
             ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
+            ClientManager.broadcast("USER_AUCTIONS_DIRTY");
             return;
         }
         send("ADMIN_CREATE_AUCTION_FAIL " + fields(result.message));
@@ -711,6 +716,94 @@ public class ClientHandler implements Runnable {
             e.printStackTrace();
         }
         send("ADMIN_AUCTIONS_END");
+    }
+
+    private void sendUserAuctions() {
+        String sql = """
+            SELECT a.auction_id,
+                   a.item_id,
+                   COALESCE(i.name, '') AS item_name,
+                   COALESCE(i.category, '') AS category_name,
+                   COALESCE(i.description, '') AS description,
+                   a.current_price,
+                   a.min_bid_increment,
+                   a.reserve_price,
+                   COALESCE(bid_counts.bid_count, 0) AS bid_count,
+                   CASE
+                       WHEN a.status IN ('OPEN', 'RUNNING') AND NOW() >= a.end_time THEN 'FINISHED'
+                       WHEN a.status = 'OPEN' AND NOW() >= a.start_time THEN 'RUNNING'
+                       ELSE a.status
+                   END AS display_status,
+                   a.start_time,
+                   a.end_time,
+                   GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left,
+                   COALESCE(seller.username, '') AS seller_username,
+                   COALESCE(winner.username, '') AS winner_username,
+                   COALESCE(imgs.image_urls, '') AS image_urls,
+                   COALESCE(attrs.attribute_lines, '') AS attribute_lines,
+                   a.snipe_window_seconds,
+                   a.snipe_extension_seconds
+            FROM auctions a
+            LEFT JOIN items i ON i.item_id = a.item_id
+            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+            LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
+            LEFT JOIN (
+                SELECT auction_id, COUNT(*) AS bid_count
+                FROM bid_transactions
+                GROUP BY auction_id
+            ) bid_counts ON bid_counts.auction_id = a.auction_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                                    SEPARATOR '\n') AS image_urls
+                FROM item_images
+                GROUP BY item_id
+            ) imgs ON imgs.item_id = a.item_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(CONCAT(attr_key, ': ', attr_value) ORDER BY attr_id ASC
+                                    SEPARATOR '\n') AS attribute_lines
+                FROM item_attributes
+                GROUP BY item_id
+            ) attrs ON attrs.item_id = a.item_id
+            WHERE a.status IN ('OPEN', 'RUNNING')
+              AND a.end_time > NOW()
+            ORDER BY a.end_time ASC, a.auction_id DESC
+            """;
+
+        send("USER_AUCTIONS_BEGIN");
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                send("USER_AUCTION " + fields(
+                    rs.getInt("auction_id"),
+                    rs.getInt("item_id"),
+                    rs.getString("item_name"),
+                    rs.getString("category_name"),
+                    rs.getString("description"),
+                    rs.getBigDecimal("current_price"),
+                    rs.getBigDecimal("min_bid_increment"),
+                    rs.getBigDecimal("reserve_price"),
+                    rs.getInt("bid_count"),
+                    rs.getString("display_status"),
+                    rs.getTimestamp("start_time"),
+                    rs.getTimestamp("end_time"),
+                    rs.getLong("seconds_left"),
+                    rs.getString("seller_username"),
+                    rs.getString("winner_username"),
+                    rs.getString("image_urls"),
+                    rs.getString("attribute_lines"),
+                    rs.getInt("snipe_window_seconds"),
+                    rs.getInt("snipe_extension_seconds")
+                ));
+            }
+        } catch (SQLException e) {
+            send("USER_AUCTIONS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        send("USER_AUCTIONS_END");
     }
 
     private Integer nullableInt(ResultSet rs, String column) throws SQLException {

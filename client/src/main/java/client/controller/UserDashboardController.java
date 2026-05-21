@@ -6,6 +6,10 @@ import client.service.SessionManager;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -97,10 +101,15 @@ public class UserDashboardController extends BaseDashboardController {
       + "-fx-border-color: #bccbc3; -fx-border-radius: 16; -fx-background-radius: 16; "
       + "-fx-text-fill: #294941; -fx-padding: 10 16 10 16; "
       + "-fx-font-size: 11px; -fx-font-weight: bold; -fx-cursor: hand;";
+  private static final DecimalFormat MONEY_FORMAT = new DecimalFormat("#,##0.##");
+  private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+  private static final String AUCTION_IMAGE_FALLBACK = "/client/images/overlay2.jpg";
 
   private final Map<String, SectionContent> sections = buildSections();
-  private final List<AuctionCardData> auctionCards = buildAuctionCards();
-  private final List<CategoryData> categories = buildCategories();
+  private final List<AuctionCardData> liveAuctionCards = new ArrayList<>();
+  private List<AuctionCardData> incomingAuctionCards = new ArrayList<>();
+  private boolean userAuctionsLoaded;
   private final Map<String, Image> imageCache = new HashMap<>();
   /**
    * Reused connection for the inline Create Listing form.
@@ -130,22 +139,25 @@ public class UserDashboardController extends BaseDashboardController {
   @Override
   @FXML
   protected void initialize() {
-    preloadAuctionImages();
     setupCreateItemNetwork();
     setupCreateListingFloatingButton();
     super.initialize();
 
     this.networkManager = NetworkManager.getInstance();
     this.userNetworkHandler = msg -> {
-      if (msg != null && msg.startsWith("PUSH_NOTIF|")) {
-        javafx.application.Platform.runLater(() -> {
-          new client.service.NotificationUIHandler().handle(msg);
-        });
+      if (msg == null || msg.isBlank()) {
+        return;
+      }
+      if (msg.startsWith("PUSH_NOTIF|")) {
+        Platform.runLater(() -> new client.service.NotificationUIHandler().handle(msg));
+        return;
+      }
+      if (isAuctionListMessage(msg)) {
+        Platform.runLater(() -> handleUserAuctionServerMessage(msg));
       }
     };
-    // Thêm vào danh sách lắng nghe chung của hệ thống
     this.networkManager.addMessageHandler(userNetworkHandler);
-
+    requestUserAuctions();
   }
 
   private void setupCreateListingFloatingButton() {
@@ -163,16 +175,15 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void preloadAuctionImages() {
-    for (AuctionCardData card : auctionCards) {
+    for (AuctionCardData card : liveAuctionCards) {
       getCachedImage(card.imagePath);
     }
   }
 
   private void setupCreateItemNetwork() {
     createItemNetworkManager = NetworkManager.getInstance();
-    createItemNetworkManager.addMessageHandler(
-        message -> Platform.runLater(() -> handleCreateItemServerMessage(message))
-    );
+    createItemHandler = message -> Platform.runLater(() -> handleCreateItemServerMessage(message));
+    createItemNetworkManager.addMessageHandler(createItemHandler);
     requestCreateListingMetadata();
   }
 
@@ -192,6 +203,184 @@ public class UserDashboardController extends BaseDashboardController {
     if (currentUser != null && currentUser.getUserId() > 0) {
       createItemNetworkManager.send("USER_ITEM_STATS " + currentUser.getUserId());
     }
+  }
+
+  private void requestUserAuctions() {
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager != null) {
+      // Server refactor(2) does not have USER_LIST_AUCTIONS yet, but it already exposes
+      // ADMIN_LIST_AUCTIONS without an admin-only gate. Reuse that legacy stream so the
+      // git client can run against the unchanged refactor(2) server.
+      networkManager.send("ADMIN_LIST_AUCTIONS");
+    }
+  }
+
+  private boolean isAuctionListMessage(String message) {
+    return message.startsWith("USER_AUCTION")
+        || message.equals("USER_AUCTIONS_DIRTY")
+        || message.startsWith("ADMIN_AUCTION")
+        || message.equals("ADMIN_AUCTIONS_BEGIN")
+        || message.equals("ADMIN_AUCTIONS_END")
+        || message.startsWith("ADMIN_DATA_ERROR");
+  }
+
+  private void handleUserAuctionServerMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.equals("USER_AUCTIONS_DIRTY")) {
+      requestUserAuctions();
+      return;
+    }
+
+    if (message.equals("USER_AUCTIONS_BEGIN") || message.equals("ADMIN_AUCTIONS_BEGIN")) {
+      incomingAuctionCards = new ArrayList<>();
+      return;
+    }
+
+    if (message.startsWith("USER_AUCTION ")) {
+      AuctionCardData parsed = parseAuctionCard(message.substring("USER_AUCTION ".length()));
+      if (parsed != null) {
+        incomingAuctionCards.add(parsed);
+      }
+      return;
+    }
+
+    if (message.startsWith("ADMIN_AUCTION ")) {
+      AuctionCardData parsed = parseLegacyAdminAuctionCard(
+          message.substring("ADMIN_AUCTION ".length())
+      );
+      if (parsed != null) {
+        incomingAuctionCards.add(parsed);
+      }
+      return;
+    }
+
+    if (message.equals("USER_AUCTIONS_END") || message.equals("ADMIN_AUCTIONS_END")) {
+      liveAuctionCards.clear();
+      liveAuctionCards.addAll(incomingAuctionCards);
+      userAuctionsLoaded = true;
+      preloadAuctionImages();
+      applyUserAuctionStatsIfVisible();
+      if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+      }
+      return;
+    }
+
+    if (message.startsWith("USER_AUCTIONS_ERROR") || message.startsWith("ADMIN_DATA_ERROR")) {
+      liveAuctionCards.clear();
+      userAuctionsLoaded = true;
+      applyUserAuctionStatsIfVisible();
+      if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+      }
+    }
+  }
+
+  private AuctionCardData parseLegacyAdminAuctionCard(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 11) {
+      return null;
+    }
+
+    String auctionId = safeField(fields, 0);
+    String itemId = safeField(fields, 1);
+    String title = fallback(safeField(fields, 2), "Auction #" + auctionId);
+    String sellerId = safeField(fields, 3);
+    String seller = fallback(safeField(fields, 4), "Seller #" + sellerId);
+    String currentPrice = formatMoney(safeField(fields, 5));
+    int bidCount = parseIntOrDefault(safeField(fields, 6), 0);
+    String status = fallback(safeField(fields, 7), "OPEN");
+    String startTime = shortTimestamp(safeField(fields, 8));
+    String endTime = shortTimestamp(safeField(fields, 9));
+    String winner = safeField(fields, 10);
+    String badge = status;
+
+    return new AuctionCardData(
+        auctionId,
+        itemId,
+        title,
+        "Auction",
+        "Auction loaded from refactor(2) ADMIN_LIST_AUCTIONS stream.",
+        currentPrice,
+        "0 VND",
+        "No reserve",
+        bidCount,
+        formatBidCount(bidCount),
+        fallback(endTime, "Not available"),
+        0L,
+        badge,
+        AUCTION_IMAGE_FALLBACK,
+        "AUC-" + auctionId + " - ITEM-" + itemId + " - Seller " + seller
+            + " - status " + status + " - ends " + endTime,
+        status,
+        startTime,
+        endTime,
+        seller,
+        winner,
+        "",
+        "300",
+        "60"
+    );
+  }
+
+  private AuctionCardData parseAuctionCard(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 19) {
+      return null;
+    }
+
+    String auctionId = safeField(fields, 0);
+    String itemId = safeField(fields, 1);
+    String title = fallback(safeField(fields, 2), "Auction #" + auctionId);
+    String category = normalizeCategoryLabel(safeField(fields, 3));
+    String description = safeField(fields, 4);
+    String currentPrice = formatMoney(safeField(fields, 5));
+    String minimumIncrement = formatMoney(safeField(fields, 6));
+    String reservePrice = safeField(fields, 7).isBlank() ? "No reserve" : formatMoney(safeField(fields, 7));
+    int bidCount = parseIntOrDefault(safeField(fields, 8), 0);
+    String status = fallback(safeField(fields, 9), "OPEN");
+    String startTime = shortTimestamp(safeField(fields, 10));
+    String endTime = shortTimestamp(safeField(fields, 11));
+    long secondsLeft = parseLongOrDefault(safeField(fields, 12), 0L);
+    String seller = fallback(safeField(fields, 13), "Seller #" + itemId);
+    String winner = safeField(fields, 14);
+    String imagePayload = safeField(fields, 15);
+    String attributes = safeField(fields, 16);
+    String snipeWindow = fallback(safeField(fields, 17), "300");
+    String snipeExtension = fallback(safeField(fields, 18), "60");
+    String badge = secondsLeft > 0 && secondsLeft <= 3600 ? "Ending Soon" : status;
+
+    return new AuctionCardData(
+        auctionId,
+        itemId,
+        title,
+        category,
+        description,
+        currentPrice,
+        minimumIncrement,
+        reservePrice,
+        bidCount,
+        formatBidCount(bidCount),
+        formatTimeLeft(secondsLeft),
+        secondsLeft,
+        badge,
+        firstImage(imagePayload),
+        "AUC-" + auctionId + " - ITEM-" + itemId + " - Seller " + seller
+            + " - status " + status + " - ends " + endTime,
+        status,
+        startTime,
+        endTime,
+        seller,
+        winner,
+        attributes,
+        snipeWindow,
+        snipeExtension
+    );
   }
 
   @Override
@@ -246,13 +435,30 @@ public class UserDashboardController extends BaseDashboardController {
 
     super.showSection(sectionKey);
     hidePageDescriptions();
+    resetActivityLinesToLiveDataState();
     updatePrimaryAction(sectionKey);
     renderWorkspace(sectionKey, activeFilter);
     setCreateListingFloatingButtonVisible("myItems".equals(sectionKey));
     if ("myItems".equals(sectionKey)) {
+      applyEmptyStats("Items", "Drafts", "Active Sales", "Sold");
       requestCreateListingMetadata();
       applySellerItemStatsIfAvailable();
     }
+    if ("dashboard".equals(sectionKey) || "auctions".equals(sectionKey)) {
+      requestUserAuctions();
+      applyUserAuctionStatsIfVisible();
+    }
+    if ("myBids".equals(sectionKey) || "autoBids".equals(sectionKey)
+        || "winners".equals(sectionKey)) {
+      applyEmptyStats("Real DB rows", "Not wired", "Pending", "");
+    }
+  }
+
+  private void resetActivityLinesToLiveDataState() {
+    setLabelText(activityLine1, "Auction data loads from database.");
+    setLabelText(activityLine2, "No fake auction activity is shown.");
+    setLabelText(activityLine3, "Create listings and admin auction rooms to populate this view.");
+    setLabelText(activityLine4, "Place Bid is disabled until bidding flow is wired.");
   }
 
   private void setCreateListingFloatingButtonVisible(boolean visible) {
@@ -272,7 +478,7 @@ public class UserDashboardController extends BaseDashboardController {
         "User Auction Workspace",
         "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller " +
             "tasks, and auto-bid warnings.",
-        new String[]{"12", "04", "03", "08"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
         new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
         new String[]{
@@ -281,10 +487,10 @@ public class UserDashboardController extends BaseDashboardController {
             "Sold items and won auctions move into Transactions after bidding ends."
         },
         new String[]{
-            "You were outbid on Vintage Camera.",
-            "MacBook Pro M3 ends in 42 minutes.",
-            "Mechanical Keyboard sale is ready to ship.",
-            "Auto bid reached 80% of max limit."
+            "Auction activity loads from database.",
+            "Countdowns use live auction end_time.",
+            "Seller follow-up rows are hidden until wired to DB.",
+            "Auto-bid rows are hidden until wired to DB."
         }
     ));
 
@@ -294,7 +500,7 @@ public class UserDashboardController extends BaseDashboardController {
         "Auction Browse",
         "Marketplace-style browsing with product images, category cards, status filters, and " +
             "paginated auction cards.",
-        new String[]{"32", "10", "08", "06"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
         new String[]{"Shop by Category", "Auction cards", "Pagination"},
         new String[]{
@@ -304,10 +510,10 @@ public class UserDashboardController extends BaseDashboardController {
             "Large result sets stay manageable with page 1, page 2, and Next/Previous controls."
         },
         new String[]{
-            "Vintage Camera is ending soon with high demand.",
-            "MacBook Pro M3 is the most watched Electronics auction.",
-            "Signed Art Print is a no-reserve auction.",
-            "Use category cards before opening advanced filters."
+            "Live auction cards come from the auctions table.",
+            "Auction stats refresh after database responses.",
+            "Reserve price displays only from the stored auction row.",
+            "Category cards are generated from live auction categories."
         }
     ));
 
@@ -317,7 +523,7 @@ public class UserDashboardController extends BaseDashboardController {
         "Bid Tracking Board",
         "A management table is best here: item thumbnail, current price, your bid, status, " +
             "countdown, and quick action.",
-        new String[]{"18", "07", "05", "06"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
         new String[]{"Bid history", "Status badges", "Quick re-bid"},
         new String[]{
@@ -326,10 +532,10 @@ public class UserDashboardController extends BaseDashboardController {
             "Outbid rows expose Bid Again without forcing a full detail page first."
         },
         new String[]{
-            "You are winning 7 auctions right now.",
-            "5 bids are outbid and need action.",
-            "2 auctions end within the next hour.",
-            "Completed bids move to Transactions."
+            "Bid history is hidden until user bid queries are added.",
+            "Outbid rows are not mocked.",
+            "Ending-soon counts use seconds_left from the server.",
+            "Completed bid rows need a real transaction query before rendering."
         }
     ));
 
@@ -339,7 +545,7 @@ public class UserDashboardController extends BaseDashboardController {
         "Auto Bid Controls",
         "Auto bids are bidding rules, not just history. Keep max limit, current price, " +
             "increment, warning threshold, and controls visible.",
-        new String[]{"03", "01", "02", "01"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
         new String[]{"Rule table", "Limit safety", "Pause / resume"},
         new String[]{
@@ -348,10 +554,10 @@ public class UserDashboardController extends BaseDashboardController {
             "Allow quick Edit, Pause, Resume, or Delete actions."
         },
         new String[]{
-            "MacBook Pro M3 auto bid is near its max limit.",
-            "Vintage Camera auto bid is paused by user.",
-            "Mechanical Keyboard auto bid ended with a winning result.",
-            "Safety warning threshold is currently 80% of max limit."
+            "Auto-bid rules are hidden until loaded from DB.",
+            "Paused auto-bid rows are not mocked.",
+            "Ended auto-bid rows are not mocked.",
+            "Auto-bid safety data will render only after DB wiring."
         }
     ));
 
@@ -361,7 +567,7 @@ public class UserDashboardController extends BaseDashboardController {
         "Seller Workspace",
         "Seller management stays practical with item thumbnails, listing status, bids, " +
             "watchers, countdown, winner, and context actions.",
-        new String[]{"14", "05", "03", "06"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Items", "Drafts", "Active Sales", "Sold"},
         new String[]{"Listing status", "Auction linkage", "Seller actions"},
         new String[]{
@@ -371,10 +577,10 @@ public class UserDashboardController extends BaseDashboardController {
                 "or Relist."
         },
         new String[]{
-            "Leather Backpack draft needs image and starting price.",
-            "Mechanical Keyboard is sold and ready to ship.",
-            "Wireless Mouse has 11 watchers but no bids yet.",
-            "Abstract Painting can be relisted after no winning bid."
+            "Seller item counts load from DB.",
+            "Sold item rows are not mocked.",
+            "Watcher data is hidden until a real query exists.",
+            "Relist rows are hidden until a real query exists."
         }
     ));
 
@@ -384,7 +590,7 @@ public class UserDashboardController extends BaseDashboardController {
         "Post-Auction Transactions",
         "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold " +
             "Auctions for winners of your listings.",
-        new String[]{"06", "02", "03", "01"},
+        new String[]{"00", "00", "00", "00"},
         new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
         new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
         new String[]{
@@ -394,10 +600,10 @@ public class UserDashboardController extends BaseDashboardController {
                 "Leave Review."
         },
         new String[]{
-            "Canon EOS M50 is waiting for payment.",
-            "Mechanical Keyboard winner has paid and needs shipping.",
-            "Signed Art Print transaction is completed.",
-            "Vintage Camera invoice is ready to download."
+            "Transaction rows are hidden until DB queries are added.",
+            "Shipping rows are not mocked.",
+            "Completed transaction rows are not mocked.",
+            "Invoice rows are not mocked."
         }
     ));
 
@@ -458,136 +664,11 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private List<CategoryData> buildCategories() {
-    List<CategoryData> list = new ArrayList<>();
-    list.add(category("Electronics", "Phones, laptops, cameras, audio devices", "5 live", "EL"));
-    list.add(category("Art", "Paintings, prints, sculpture, handmade items", "4 live", "AR"));
-    list.add(category("Vehicle", "Bikes, motorbikes, cars, vehicle accessories", "3 live", "VE"));
-    return list;
+    return new ArrayList<>();
   }
 
   private List<AuctionCardData> buildAuctionCards() {
-    List<AuctionCardData> list = new ArrayList<>();
-    list.add(auction(
-        "MacBook Pro M3",
-        "Electronics",
-        "32,500,000 VND",
-        "18 bids",
-        "42m",
-        "Hot",
-        "/client/images/overlay2.jpg",
-        "Seller minh.seller - high value laptop auction with active auto bids."
-    ));
-    list.add(auction(
-        "Vintage Camera",
-        "Electronics",
-        "4,600,000 VND",
-        "21 bids",
-        "38m",
-        "Ending Soon",
-        "/client/images/overlay3.jpg",
-        "Camera auction with strong demand and quick final-minute pressure."
-    ));
-    list.add(auction(
-        "Wireless Headset",
-        "Electronics",
-        "1,100,000 VND",
-        "5 bids",
-        "1d",
-        "Running",
-        "/client/images/overlay5.jpg",
-        "Audio item with quick bid increment and shipping support."
-    ));
-    list.add(auction(
-        "Mechanical Keyboard",
-        "Electronics",
-        "2,400,000 VND",
-        "9 bids",
-        "6h",
-        "Watched",
-        "/client/images/overlay7.jpg",
-        "Watched item with current leading bid and compact bid history."
-    ));
-    list.add(auction(
-        "Smart Speaker",
-        "Electronics",
-        "1,250,000 VND",
-        "7 bids",
-        "8h",
-        "No Reserve",
-        "/client/images/overlay2.jpg",
-        "Electronics auction with no reserve and high watcher count."
-    ));
-    list.add(auction(
-        "Signed Art Print",
-        "Art",
-        "8,200,000 VND",
-        "11 bids",
-        "3h",
-        "No Reserve",
-        "/client/images/overlay4.jpg",
-        "No-reserve art listing with gallery preview and verified seller note."
-    ));
-    list.add(auction(
-        "Abstract Painting",
-        "Art",
-        "3,000,000 VND",
-        "2 bids",
-        "1d",
-        "Running",
-        "/client/images/overlay.jpg",
-        "Painting listing with preview image and artist note."
-    ));
-    list.add(auction(
-        "Ceramic Sculpture",
-        "Art",
-        "5,900,000 VND",
-        "13 bids",
-        "2h",
-        "Ending Soon",
-        "/client/images/overlay4.jpg",
-        "Art auction with a detailed preview image and closing pressure."
-    ));
-    list.add(auction(
-        "Digital Artwork Print",
-        "Art",
-        "1,750,000 VND",
-        "6 bids",
-        "22h",
-        "Watched",
-        "/client/images/bg2.jpg",
-        "Watched art print with seller notes and shipping support."
-    ));
-    list.add(auction(
-        "City Bike",
-        "Vehicle",
-        "2,800,000 VND",
-        "6 bids",
-        "5h",
-        "Ending Soon",
-        "/client/images/overlay3.jpg",
-        "Vehicle listing with pickup information and bidder questions."
-    ));
-    list.add(auction(
-        "Electric Scooter",
-        "Vehicle",
-        "7,500,000 VND",
-        "10 bids",
-        "1d",
-        "Hot",
-        "/client/images/overlay6.jpg",
-        "Vehicle auction with active watchers and pickup arrangement."
-    ));
-    list.add(auction(
-        "Vintage Motorbike",
-        "Vehicle",
-        "18,000,000 VND",
-        "16 bids",
-        "2d",
-        "Running",
-        "/client/images/overlay5.jpg",
-        "Vehicle auction with seller inspection notes and bidder questions."
-    ));
-    return list;
+    return new ArrayList<>();
   }
 
   private CategoryData category(String title, String description, String count, String initials) {
@@ -604,7 +685,31 @@ public class UserDashboardController extends BaseDashboardController {
       String imagePath,
       String detail
   ) {
-    return new AuctionCardData(title, category, price, bids, endsIn, badge, imagePath, detail);
+    return new AuctionCardData(
+        "",
+        "",
+        title,
+        category,
+        "",
+        price,
+        "0 VND",
+        "No reserve",
+        0,
+        bids,
+        endsIn,
+        0,
+        badge,
+        imagePath,
+        detail,
+        badge,
+        "not available",
+        "not available",
+        "not available",
+        "",
+        "",
+        "300",
+        "60"
+    );
   }
 
   private String getDefaultFilter(String sectionKey) {
@@ -648,74 +753,66 @@ public class UserDashboardController extends BaseDashboardController {
 
     switch (sectionKey) {
       case "auctions" -> renderAuctions(filter);
-      case "myBids" -> renderMyBids(filter);
-      case "autoBids" -> renderAutoBids(filter);
-      case "myItems" -> renderMyItems(filter);
-      case "winners" -> renderTransactions(filter);
+      case "myBids" -> renderNoLiveData(
+          "My Bid Tracking",
+          "Chưa có truy vấn DB cho lịch sử bid của user trong màn này, nên không hiển thị dữ liệu ảo."
+      );
+      case "autoBids" -> renderNoLiveData(
+          "Auto Bid Controls",
+          "Chưa có truy vấn DB cho auto-bid của user trong màn này, nên không hiển thị dữ liệu ảo."
+      );
+      case "myItems" -> renderMyItemsLiveSummary(filter);
+      case "winners" -> renderNoLiveData(
+          "Transactions",
+          "Chưa có truy vấn DB cho giao dịch thắng/bán trong màn này, nên không hiển thị dữ liệu ảo."
+      );
       case "settings" -> renderSettings(filter);
       default -> renderDashboard(filter);
     }
   }
 
   private void renderDashboard(String filter) {
-    setWorkspaceTitle("Action Needed");
-    renderChips(filter, "Overview", "Needs Action", "Ending Soon", "Seller", "Auto Bid");
+    setWorkspaceTitle("Live Auction Rooms");
+    renderChips(filter, "Overview", "Running", "Open", "Ending Soon", "Vehicle", "Art", "Electronic");
 
-    addHeader("Item / Task", "Value", "Time / Signal");
+    addHeader("Auction", "Current Bid", "Time Left");
 
     List<UserRow> rows = new ArrayList<>();
-    rows.add(row(
-        "Vintage Camera",
-        "My bid 4,300,000 VND - current price moved above your bid",
-        "4,600,000 VND",
-        "Ends in 38m",
-        "Outbid",
-        "You were outbid. Place a higher bid or configure auto bid before the auction closes.",
-        "VC",
-        "Bid Again",
-        "View"
-    ));
-    rows.add(row(
-        "MacBook Pro M3",
-        "Winning now - auto bid active until 35,000,000 VND",
-        "32,500,000 VND",
-        "Ends in 42m",
-        "Winning",
-        "You are currently leading. Watch closing pressure and bid history before the final " +
-            "minutes.",
-        "MB",
-        "View",
-        "Auto Bid"
-    ));
-    rows.add(row(
-        "Canon EOS M50",
-        "Won auction - seller camera.store - payment required",
-        "5,200,000 VND",
-        "Due today",
-        "Payment Due",
-        "This won auction should move through payment before fulfilment can continue.",
-        "CE",
-        "Pay Now",
-        "Contact"
-    ));
-    rows.add(row(
-        "Mechanical Keyboard",
-        "Sold item - winner thanh.user has paid",
-        "2,400,000 VND",
-        "Ship today",
-        "To Ship",
-        "Winner payment is complete. Seller should prepare shipping or pickup confirmation.",
-        "MK",
-        "Ship",
-        "Details"
-    ));
+    for (AuctionCardData card : liveAuctionCards) {
+      rows.add(row(
+          card.title,
+          "AUC-" + card.auctionId + " - ITEM-" + card.itemId + " - Seller " + card.seller,
+          card.price,
+          card.endsIn,
+          card.badge,
+          card.detail,
+          initialsFor(card.title),
+          "View"
+      ));
+      if (rows.size() == 5) {
+        break;
+      }
+    }
+
+    if (!userAuctionsLoaded) {
+      rows.add(row(
+          "Loading auctions from database...",
+          "Đang lấy dữ liệu từ server refactor(2).",
+          "DB",
+          "Waiting",
+          "Loading",
+          "Danh sách này dùng ADMIN_LIST_AUCTIONS vì server refactor(2) chưa có USER_LIST_AUCTIONS.",
+          "DB",
+          "Refresh"
+      ));
+    }
 
     addFilteredRows(rows, filter);
   }
 
   private void renderAuctions(String filter) {
-    setWorkspaceTitle("All Auctions");
-    renderChips(filter, "All", "Running", "Ending Soon", "Hot", "No Reserve", "Watched");
+    setWorkspaceTitle("Live Auctions From Database");
+    renderChips(filter, "All", "Open", "Running", "Ending Soon", "Vehicle", "Art", "Electronic");
 
     HBox browseHeader = new HBox(10);
     browseHeader.setAlignment(Pos.CENTER_RIGHT);
@@ -724,7 +821,9 @@ public class UserDashboardController extends BaseDashboardController {
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
 
-    Label sortLabel = new Label("Sort: Ending Soon");
+    Label sortLabel = new Label(userAuctionsLoaded
+        ? "Sorted by nearest end time"
+        : "Loading database auctions...");
     sortLabel.getStyleClass().add("sort-pill");
 
     browseHeader.getChildren().addAll(spacer, sortLabel);
@@ -739,8 +838,10 @@ public class UserDashboardController extends BaseDashboardController {
 
     GridPane productGrid = createThreeColumnGrid("auction-grid");
 
-    if (filtered.isEmpty()) {
-      addGridCell(productGrid, emptyCard("No auctions found for filter: " + filter), 0);
+    if (!userAuctionsLoaded) {
+      addGridCell(productGrid, emptyCard("Loading real auctions from database..."), 0);
+    } else if (filtered.isEmpty()) {
+      addGridCell(productGrid, emptyCard("No live auctions found in database for filter: " + filter), 0);
     } else {
       int index = 0;
       for (AuctionCardData card : filtered.subList(fromIndex, toIndex)) {
@@ -751,187 +852,76 @@ public class UserDashboardController extends BaseDashboardController {
     workspaceBox.getChildren().add(productGrid);
     workspaceBox.getChildren().add(buildPagination(totalPages, filtered.size()));
 
-    workspaceBox.getChildren().add(sectionHeader("Shop by Category", ""));
+    workspaceBox.getChildren().add(sectionHeader("Categories from live database rows", ""));
 
     GridPane categoryGrid = createThreeColumnGrid("category-grid");
-    for (int index = 0; index < categories.size(); index++) {
-      addGridCell(categoryGrid, buildCategoryCard(categories.get(index)), index);
+    List<CategoryData> categoryRows = buildLiveCategories();
+    for (int index = 0; index < categoryRows.size(); index++) {
+      addGridCell(categoryGrid, buildCategoryCard(categoryRows.get(index)), index);
+    }
+    if (categoryRows.isEmpty()) {
+      addGridCell(categoryGrid, emptyCard("No categories yet because there are no active auction rows."), 0);
     }
 
     workspaceBox.getChildren().add(categoryGrid);
   }
 
-  private void renderMyBids(String filter) {
-    setWorkspaceTitle("My Bid Tracking");
-    renderChips(filter, "All", "Winning", "Outbid", "Won", "Lost", "Ending Soon");
+  private void renderNoLiveData(String title, String message) {
+    setWorkspaceTitle(title);
+    renderChips("All", "All");
+    VBox card = emptyCard(message);
+    workspaceBox.getChildren().add(card);
+  }
 
-    addHeader("Auction", "My Bid", "Current / Ends");
+  private void renderMyItemsLiveSummary(String filter) {
+    setWorkspaceTitle("My Items");
+    renderChips(filter, "All", "Draft", "Pending Review", "In Auction", "Sold");
+    applySellerItemStatsIfAvailable();
 
+    addHeader("Seller Data", "Value", "Source");
     List<UserRow> rows = new ArrayList<>();
-    rows.add(row(
-        "MacBook Pro M3",
-        "Latest bid 32,500,000 VND - max auto bid 35,000,000 VND",
-        "32,500,000 VND",
-        "32,500,000 VND - 42m",
-        "Winning",
-        "You are currently leading. Keep watching or edit the max auto bid limit.",
-        "MB",
-        "View",
-        "Edit Auto"
-    ));
-    rows.add(row(
-        "Vintage Camera",
-        "Latest bid 4,300,000 VND - current price is higher",
-        "4,300,000 VND",
-        "4,600,000 VND - 38m",
-        "Outbid",
-        "You need to bid again if you still want this item.",
-        "VC",
-        "Bid Again",
-        "View"
-    ));
-    rows.add(row(
-        "Canon EOS M50",
-        "Final winning bid accepted",
-        "5,200,000 VND",
-        "Won today",
-        "Won",
-        "Auction is won and should be handled in Transactions for payment.",
-        "CE",
-        "Pay Now",
-        "View"
-    ));
-    rows.add(row(
-        "Gaming Chair",
-        "Final bid 1,900,000 VND - another bidder won",
-        "1,900,000 VND",
-        "Closed",
-        "Lost",
-        "This auction is closed. Use View for bid history only.",
-        "GC",
-        "View"
-    ));
-
+    if (sellerItemStatsLoaded) {
+      rows.add(row(
+          "Items from database",
+          "Counts are loaded through USER_ITEM_STATS for the logged-in seller.",
+          String.valueOf(sellerItemTotal),
+          "items table",
+          "Live DB",
+          "This summary uses real rows from the items table. Detailed seller item rows can be added later without showing fake data.",
+          "DB",
+          "Create"
+      ));
+    } else {
+      rows.add(row(
+          "Loading seller items from database...",
+          "Server command USER_ITEM_STATS chưa trả dữ liệu.",
+          "DB",
+          "Waiting",
+          "Loading",
+          "Không dùng item giả trong My Items.",
+          "DB",
+          "Refresh"
+      ));
+    }
     addFilteredRows(rows, filter);
+  }
+
+  private void renderMyBids(String filter) {
+    renderNoLiveData(
+        "My Bid Tracking",
+        "Chưa có truy vấn DB cho lịch sử bid của user trong màn này, nên không hiển thị dữ liệu ảo."
+    );
   }
 
   private void renderAutoBids(String filter) {
-    setWorkspaceTitle("Auto Bid Rules");
-    renderChips(filter, "All", "Active", "Paused", "Near Limit", "Limit Reached", "Ended");
-
-    addHeader("Auction Rule", "Current / Max", "Increment");
-
-    List<UserRow> rows = new ArrayList<>();
-    rows.add(row(
-        "MacBook Pro M3",
-        "Auto bid active - stop at 35,000,000 VND - threshold 80%",
-        "32.5M / 35M",
-        "+500,000 VND",
-        "Near Limit",
-        "Current price is close to max limit. Edit max bid or watch manually.",
-        "MB",
-        "Edit",
-        "Pause"
-    ));
-    rows.add(row(
-        "Vintage Camera",
-        "Auto bid paused by user - can resume before close",
-        "4.6M / 5M",
-        "+100,000 VND",
-        "Paused",
-        "Paused auto bid will not respond to new bids until resumed.",
-        "VC",
-        "Resume",
-        "Edit"
-    ));
-    rows.add(row(
-        "Signed Art Print",
-        "Auto bid active - no reserve auction",
-        "8.2M / 10M",
-        "+200,000 VND",
-        "Active",
-        "Auto bid rule is healthy and still below warning threshold.",
-        "AP",
-        "Edit",
-        "Pause"
-    ));
-    rows.add(row(
-        "Mechanical Keyboard",
-        "Auto bid ended after auction close",
-        "2.4M / 2.5M",
-        "+50,000 VND",
-        "Ended",
-        "Rule is ended and the transaction should be tracked after close.",
-        "MK",
-        "View"
-    ));
-
-    addFilteredRows(rows, filter);
+    renderNoLiveData(
+        "Auto Bid Rules",
+        "Chưa có truy vấn DB cho auto-bid của user trong màn này, nên không hiển thị dữ liệu ảo."
+    );
   }
 
   private void renderMyItems(String filter) {
-    setWorkspaceTitle("Seller Listings");
-    renderChips(filter, "All", "Draft", "Pending", "Active", "Sold", "Unsold");
-
-    addHeader("Item", "Price / Bids", "Watchers / Ends");
-
-    List<UserRow> rows = new ArrayList<>();
-    rows.add(row(
-        "Mechanical Keyboard",
-        "Sold through AUC-0977 - winner thanh.user",
-        "2,400,000 VND",
-        "9 bids - paid",
-        "Sold",
-        "Winner has paid. Prepare shipment or pickup confirmation.",
-        "MK",
-        "Ship",
-        "Contact"
-    ));
-    rows.add(row(
-        "Leather Backpack",
-        "Draft listing - missing photo validation and starting price",
-        "No price",
-        "Draft",
-        "Draft",
-        "Complete required listing details before publishing or submitting for approval.",
-        "LB",
-        "Edit",
-        "Publish"
-    ));
-    rows.add(row(
-        "Wireless Mouse",
-        "Active sale - 11 watchers but no bid yet",
-        "450,000 VND",
-        "11 watchers - 1d",
-        "Active",
-        "Consider lowering start price or promoting before the auction ends.",
-        "WM",
-        "View Bids",
-        "Edit"
-    ));
-    rows.add(row(
-        "Abstract Painting",
-        "Ended without winner - eligible for relist",
-        "3,000,000 VND",
-        "0 bids - closed",
-        "Unsold",
-        "Relist with improved title, image, or starting price.",
-        "AR",
-        "Relist",
-        "Edit"
-    ));
-    rows.add(row(
-        "Vintage Watch",
-        "Submitted for review before auction launch",
-        "6,000,000 VND",
-        "Pending",
-        "Pending",
-        "Item is waiting review before it can become ACTIVE.",
-        "VW",
-        "View"
-    ));
-
-    addFilteredRows(rows, filter);
+    renderMyItemsLiveSummary(filter);
   }
 
   private HBox buildCreateListingActionBar() {
@@ -950,66 +940,10 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void renderTransactions(String filter) {
-    setWorkspaceTitle("Won Auctions / Sold Auctions");
-    renderChips(
-        filter,
-        "All",
-        "Won Auctions",
-        "Sold Auctions",
-        "Payment Due",
-        "To Ship",
-        "Completed"
+    renderNoLiveData(
+        "Transactions",
+        "Chưa có truy vấn DB cho giao dịch thắng/bán trong màn này, nên không hiển thị dữ liệu ảo."
     );
-
-    addHeader("Transaction", "Final Price", "Next Step");
-
-    List<UserRow> rows = new ArrayList<>();
-    rows.add(row(
-        "Won - Canon EOS M50",
-        "Seller camera.store - invoice ready",
-        "5,200,000 VND",
-        "Pay today",
-        "Payment Due",
-        "Bidder flow: pay the final price, then track shipping or pickup.",
-        "CE",
-        "Pay Now",
-        "Contact Seller"
-    ));
-    rows.add(row(
-        "Sold - Mechanical Keyboard",
-        "Winner thanh.user - payment completed",
-        "2,400,000 VND",
-        "Ship today",
-        "To Ship",
-        "Seller flow: winner has paid, so mark shipped after fulfilment.",
-        "MK",
-        "Ship",
-        "Contact Winner"
-    ));
-    rows.add(row(
-        "Won - Signed Art Print",
-        "Seller art.house - completed purchase",
-        "8,200,000 VND",
-        "Leave review",
-        "Completed",
-        "Transaction complete. User can leave seller review or download receipt.",
-        "AP",
-        "Review",
-        "Receipt"
-    ));
-    rows.add(row(
-        "Sold - Wireless Mouse",
-        "Winner pending payment confirmation",
-        "450,000 VND",
-        "Payment check",
-        "Payment Due",
-        "Seller should wait for payment confirmation before shipment.",
-        "WM",
-        "View",
-        "Reminder"
-    ));
-
-    addFilteredRows(rows, filter);
   }
 
   private void renderSettings(String filter) {
@@ -1133,27 +1067,30 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private VBox buildAuctionProductCard(AuctionCardData data) {
-    VBox card = new VBox(8);
-    card.getStyleClass().add("auction-product-card");
+    VBox card = new VBox(10);
+    card.getStyleClass().add("auction-live-card");
     card.setMinWidth(0);
     card.setMaxWidth(Double.MAX_VALUE);
 
     StackPane imageWrap = new StackPane();
-    imageWrap.getStyleClass().add("product-image-wrap");
+    imageWrap.getStyleClass().add("auction-live-image-wrap");
     imageWrap.setMinWidth(0);
-    imageWrap.setPrefHeight(PRODUCT_IMAGE_HEIGHT);
-    imageWrap.setMinHeight(PRODUCT_IMAGE_HEIGHT);
-    imageWrap.setMaxHeight(PRODUCT_IMAGE_HEIGHT);
+    imageWrap.setPrefHeight(PRODUCT_IMAGE_HEIGHT + 35);
+    imageWrap.setMinHeight(PRODUCT_IMAGE_HEIGHT + 35);
+    imageWrap.setMaxHeight(PRODUCT_IMAGE_HEIGHT + 35);
     imageWrap.setMaxWidth(Double.MAX_VALUE);
 
     Rectangle wrapClip = new Rectangle();
     wrapClip.widthProperty().bind(imageWrap.widthProperty());
     wrapClip.heightProperty().bind(imageWrap.heightProperty());
-    wrapClip.setArcWidth(28);
-    wrapClip.setArcHeight(28);
+    wrapClip.setArcWidth(30);
+    wrapClip.setArcHeight(30);
     imageWrap.setClip(wrapClip);
 
     Image image = getCachedImage(data.imagePath);
+    if (image == null || image.isError()) {
+      image = getCachedImage(AUCTION_IMAGE_FALLBACK);
+    }
     if (image != null && !image.isError()) {
       ImageView imageView = new ImageView(image);
       imageView.getStyleClass().add("product-image");
@@ -1161,67 +1098,87 @@ public class UserDashboardController extends BaseDashboardController {
       imageView.setCache(true);
       imageView.setPreserveRatio(false);
       imageView.setFitWidth(PRODUCT_IMAGE_INITIAL_WIDTH);
-      imageView.setFitHeight(PRODUCT_IMAGE_HEIGHT);
+      imageView.setFitHeight(PRODUCT_IMAGE_HEIGHT + 35);
       imageView.fitWidthProperty().bind(imageWrap.widthProperty());
       imageView.fitHeightProperty().bind(imageWrap.heightProperty());
-
       imageWrap.widthProperty().addListener((observable, oldValue, newValue) ->
           updateCoverViewport(imageView, imageWrap));
       imageWrap.heightProperty().addListener((observable, oldValue, newValue) ->
           updateCoverViewport(imageView, imageWrap));
-
       imageWrap.getChildren().add(imageView);
       imageWrap.applyCss();
       imageWrap.layout();
       updateCoverViewport(imageView, imageWrap);
     } else {
-      imageWrap.getChildren().add(
-          buildThumbnail(data.title.substring(0, Math.min(2, data.title.length())).toUpperCase())
-      );
+      imageWrap.getChildren().add(buildThumbnail(initialsFor(data.title)));
     }
 
     Label badge = new Label(data.badge);
-    badge.getStyleClass().add("product-badge");
+    badge.getStyleClass().add("auction-live-badge");
     badge.getStyleClass().add(statusStyle(data.badge));
     StackPane.setAlignment(badge, Pos.TOP_LEFT);
     imageWrap.getChildren().add(badge);
 
-    Label category = new Label(data.category);
-    category.getStyleClass().add("product-category");
+    VBox content = new VBox(8);
+    content.getStyleClass().add("auction-live-content");
 
+    HBox top = new HBox(8);
+    top.setAlignment(Pos.CENTER_LEFT);
+    VBox nameBox = new VBox(3);
+    nameBox.setMinWidth(0);
+    HBox.setHgrow(nameBox, Priority.ALWAYS);
+
+    Label category = new Label(data.category + " / AUC-" + data.auctionId);
+    category.getStyleClass().add("auction-live-category");
     Label title = new Label(data.title);
-    title.getStyleClass().add("product-title");
+    title.getStyleClass().add("auction-live-title");
     title.setWrapText(true);
+    nameBox.getChildren().addAll(category, title);
+
+    VBox timer = new VBox(2);
+    timer.getStyleClass().add("auction-live-timer");
+    Label timerValue = new Label(data.endsIn);
+    timerValue.getStyleClass().add("auction-live-timer-value");
+    Label timerLabel = new Label("time left");
+    timerLabel.getStyleClass().add("auction-live-timer-label");
+    timer.getChildren().addAll(timerValue, timerLabel);
+
+    top.getChildren().addAll(nameBox, timer);
+
+    GridPane facts = new GridPane();
+    facts.getStyleClass().add("auction-live-facts");
+    facts.setHgap(8);
+    facts.setVgap(7);
+    facts.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
+    addAuctionFact(facts, 0, 0, "Seller", data.seller);
+    addAuctionFact(facts, 1, 0, "Status", data.status);
+    addAuctionFact(facts, 0, 1, "Bid count", data.bids);
+    addAuctionFact(facts, 1, 1, "Min increment", data.minimumIncrement);
+    addAuctionFact(facts, 0, 2, "Reserve", data.reservePrice);
+    addAuctionFact(facts, 1, 2, "Ends", data.endTime);
 
     Label price = new Label(data.price);
-    price.getStyleClass().add("product-price");
+    price.getStyleClass().add("auction-live-price");
 
-    HBox meta = new HBox(8);
-    meta.setAlignment(Pos.CENTER_LEFT);
-    Label bids = new Label(data.bids);
-    bids.getStyleClass().add("product-meta");
-    Label ends = new Label("Ends in " + data.endsIn);
-    ends.getStyleClass().add("product-meta");
-    meta.getChildren().addAll(bids, ends);
-
-    HBox actions = new HBox(7);
+    HBox actions = new HBox(8);
     actions.setAlignment(Pos.CENTER_LEFT);
-    Button bid = new Button("Bid Now");
+    Button bid = new Button("Place Bid");
     bid.setMnemonicParsing(false);
-    bid.getStyleClass().add("mini-action-btn");
+    bid.getStyleClass().add("auction-disabled-bid-btn");
+    bid.setDisable(true);
     bid.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(bid, Priority.ALWAYS);
-    bid.setOnAction(event -> showTemporaryDetail("Bid Now - " + data.title, data.detail));
 
-    Button view = new Button("View");
+    Button view = new Button("View Detail");
     view.setMnemonicParsing(false);
-    view.getStyleClass().add("mini-action-btn");
+    view.getStyleClass().add("auction-view-btn");
     view.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(view, Priority.ALWAYS);
-    view.setOnAction(event -> showTemporaryDetail(data.title, data.detail));
+    view.setOnAction(event -> showTemporaryDetail(data.title, buildAuctionDetailText(data)));
     actions.getChildren().addAll(bid, view);
 
-    card.getChildren().addAll(imageWrap, category, title, price, meta, actions);
+    content.getChildren().addAll(top, facts, price, actions);
+    card.getChildren().addAll(imageWrap, content);
     return card;
   }
 
@@ -1241,11 +1198,26 @@ public class UserDashboardController extends BaseDashboardController {
 
   private Image loadImage(String imagePath) {
     try {
-      if (getClass().getResource(imagePath) == null) {
+      if (imagePath == null || imagePath.isBlank()) {
+        return null;
+      }
+      String normalizedPath = imagePath.trim();
+      if (normalizedPath.startsWith("file:")
+          || normalizedPath.startsWith("http://")
+          || normalizedPath.startsWith("https://")) {
+        return new Image(normalizedPath, false);
+      }
+
+      File localFile = new File(normalizedPath);
+      if (localFile.exists()) {
+        return new Image(localFile.toURI().toString(), false);
+      }
+
+      if (getClass().getResource(normalizedPath) == null) {
         return null;
       }
 
-      return new Image(getClass().getResource(imagePath).toExternalForm(), false);
+      return new Image(getClass().getResource(normalizedPath).toExternalForm(), false);
     } catch (IllegalArgumentException exception) {
       return null;
     }
@@ -1371,9 +1343,16 @@ public class UserDashboardController extends BaseDashboardController {
     List<AuctionCardData> filtered = new ArrayList<>();
     String normalizedFilter = normalize(filter);
 
-    for (AuctionCardData card : auctionCards) {
-      String haystack = normalize(card.title + " " + card.category + " " + card.badge + " " +
-          card.detail);
+    for (AuctionCardData card : liveAuctionCards) {
+      String haystack = normalize(String.join(" ",
+          card.title,
+          card.category,
+          card.badge,
+          card.status,
+          card.seller,
+          card.detail,
+          card.attributes
+      ));
 
       if (isAllLikeFilter(filter)
           || haystack.contains(normalizedFilter)
@@ -1383,6 +1362,26 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     return filtered;
+  }
+
+  private List<CategoryData> buildLiveCategories() {
+    Map<String, Integer> counts = new LinkedHashMap<>();
+    for (AuctionCardData card : liveAuctionCards) {
+      String category = fallback(card.category, "Uncategorized");
+      counts.put(category, counts.getOrDefault(category, 0) + 1);
+    }
+
+    List<CategoryData> result = new ArrayList<>();
+    for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+      String category = entry.getKey();
+      result.add(category(
+          category,
+          "Real auction rows from database category " + category,
+          entry.getValue() + " live",
+          initialsFor(category)
+      ));
+    }
+    return result;
   }
 
   private void setWorkspaceTitle(String title) {
@@ -1533,9 +1532,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (normalizedFilter.equals("ending soon")) {
       return haystack.contains("ending soon")
-          || haystack.contains("ends in")
-          || haystack.contains("42m")
-          || haystack.contains("38m");
+          || haystack.contains("ends in");
     }
 
     if (normalizedFilter.equals("won auctions")) {
@@ -2026,6 +2023,8 @@ public class UserDashboardController extends BaseDashboardController {
     TextField titleField = createFormField("Item title");
     TextField priceField = createFormField("Starting price, e.g. 2500000");
     TextField sizeField = createFormField("Size / condition");
+    TextField artistField = createFormField("Artist name");
+    TextField yearCreatedField = createFormField("Year created, e.g. 1889");
 
     ComboBox<String> currencyBox = new ComboBox<>();
     currencyBox.getStyleClass().add("create-combo-box");
@@ -2067,6 +2066,23 @@ public class UserDashboardController extends BaseDashboardController {
     GridPane.setHgrow(titleFieldBox, Priority.ALWAYS);
     GridPane.setHgrow(priceFieldBox, Priority.ALWAYS);
 
+    GridPane artFields = new GridPane();
+    artFields.setHgap(18);
+    artFields.setMaxWidth(Double.MAX_VALUE);
+    for (int column = 0; column < 2; column++) {
+      ColumnConstraints constraints = new ColumnConstraints();
+      constraints.setPercentWidth(50);
+      constraints.setHgrow(Priority.ALWAYS);
+      constraints.setFillWidth(true);
+      artFields.getColumnConstraints().add(constraints);
+    }
+    VBox artistFieldBox = fieldBox("Artist", artistField);
+    VBox yearCreatedFieldBox = fieldBox("Year Created", yearCreatedField);
+    artFields.add(artistFieldBox, 0, 0);
+    artFields.add(yearCreatedFieldBox, 1, 0);
+    GridPane.setHgrow(artistFieldBox, Priority.ALWAYS);
+    GridPane.setHgrow(yearCreatedFieldBox, Priority.ALWAYS);
+
     GridPane secondaryFields = new GridPane();
     secondaryFields.setHgap(18);
     secondaryFields.setMaxWidth(Double.MAX_VALUE);
@@ -2083,6 +2099,18 @@ public class UserDashboardController extends BaseDashboardController {
     secondaryFields.add(currencyFieldBox, 1, 0);
     GridPane.setHgrow(sizeFieldBox, Priority.ALWAYS);
     GridPane.setHgrow(currencyFieldBox, Priority.ALWAYS);
+
+    categoryBox.valueProperty().addListener((observable, oldValue, newValue) -> {
+      boolean isArt = "ART".equalsIgnoreCase(newValue);
+      artFields.setVisible(isArt);
+      artFields.setManaged(isArt);
+      if (!isArt) {
+        artistField.clear();
+        yearCreatedField.clear();
+      }
+    });
+    artFields.setVisible(true);
+    artFields.setManaged(true);
 
     Label messageLabel = new Label("");
     messageLabel.getStyleClass().add("create-message");
@@ -2134,19 +2162,20 @@ public class UserDashboardController extends BaseDashboardController {
 
     saveDraft.setOnAction(event -> submitCreateItem(
         true, categoryBox, titleField, descriptionArea, priceField,
-        sizeField, currencyBox,
+        sizeField, artistField, yearCreatedField, currencyBox,
         saveDraft, submitItem, messageLabel
     ));
 
     submitItem.setOnAction(event -> submitCreateItem(
         false, categoryBox, titleField, descriptionArea, priceField,
-        sizeField, currencyBox,
+        sizeField, artistField, yearCreatedField, currencyBox,
         saveDraft, submitItem, messageLabel
     ));
 
     detailsPanel.getChildren().addAll(
         detailsTitle,
         primaryFields,
+        artFields,
         secondaryFields,
         fieldBox("Description", descriptionArea),
         actions
@@ -2493,6 +2522,8 @@ public class UserDashboardController extends BaseDashboardController {
                   TextArea descriptionArea,
                   TextField priceField,
                   TextField sizeField,
+                  TextField artistField,
+                  TextField yearCreatedField,
                   ComboBox<String> currencyBox,
                   Button saveDraftButton,
                   Button submitItemButton,
@@ -2504,6 +2535,22 @@ public class UserDashboardController extends BaseDashboardController {
     if (category.isBlank()) {
       showCreateMessage(messageLabel, "Vui lòng chọn category cho item.", true);
       return;
+    }
+
+    String artist = safeTrim(artistField.getText());
+    String yearCreated = safeTrim(yearCreatedField.getText());
+    if ("ART".equalsIgnoreCase(category)) {
+      if (artist.isBlank()) {
+        showCreateMessage(messageLabel, "Vui lòng nhập artist cho item ART.", true);
+        return;
+      }
+      if (!isValidCreateItemYear(yearCreated)) {
+        showCreateMessage(messageLabel, "Year phải là số hợp lệ và lớn hơn 0.", true);
+        return;
+      }
+    } else {
+      artist = "";
+      yearCreated = "";
     }
 
     if (title.isBlank()) {
@@ -2532,6 +2579,8 @@ public class UserDashboardController extends BaseDashboardController {
         "",
         "",
         currency,
+        artist,
+        yearCreated,
         pendingCreateItemImagePayload()
     );
 
@@ -2601,6 +2650,182 @@ public class UserDashboardController extends BaseDashboardController {
     if (label != null) {
       label.setText(value == null ? "" : value);
     }
+  }
+
+  private void applyUserAuctionStatsIfVisible() {
+    if ("myItems".equals(currentSectionKey)) {
+      return;
+    }
+    int total = liveAuctionCards.size();
+    int running = 0;
+    int endingSoon = 0;
+    int totalBids = 0;
+    for (AuctionCardData card : liveAuctionCards) {
+      if (normalize(card.status).equals("running")) {
+        running++;
+      }
+      if (card.secondsLeft > 0 && card.secondsLeft <= 86400) {
+        endingSoon++;
+      }
+      totalBids += card.bidCount;
+    }
+
+    setLabelText(statValue1, twoDigit(total));
+    setLabelText(statValue2, twoDigit(running));
+    setLabelText(statValue3, twoDigit(endingSoon));
+    setLabelText(statValue4, String.valueOf(totalBids));
+    setLabelText(statLabel1, "Live Auctions");
+    setLabelText(statLabel2, "Running");
+    setLabelText(statLabel3, "Ending Soon");
+    setLabelText(statLabel4, "Total Bids");
+  }
+
+  private void applyEmptyStats(String first, String second, String third, String fourth) {
+    setLabelText(statValue1, "00");
+    setLabelText(statValue2, "00");
+    setLabelText(statValue3, "00");
+    setLabelText(statValue4, "00");
+    setLabelText(statLabel1, first);
+    setLabelText(statLabel2, second);
+    setLabelText(statLabel3, third);
+    setLabelText(statLabel4, fourth);
+  }
+
+  private void addAuctionFact(GridPane grid, int column, int row, String label, String value) {
+    VBox box = new VBox(2);
+    box.getStyleClass().add("auction-live-fact");
+    Label key = new Label(label);
+    key.getStyleClass().add("auction-live-fact-key");
+    Label val = new Label(fallback(value, "not available"));
+    val.getStyleClass().add("auction-live-fact-value");
+    val.setWrapText(true);
+    box.getChildren().addAll(key, val);
+    grid.add(box, column, row);
+  }
+
+  private String buildAuctionDetailText(AuctionCardData data) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Auction ID: AUC-").append(data.auctionId).append('\n');
+    builder.append("Item ID: ITEM-").append(data.itemId).append('\n');
+    builder.append("Seller: ").append(data.seller).append('\n');
+    builder.append("Category: ").append(data.category).append('\n');
+    builder.append("Status: ").append(data.status).append('\n');
+    builder.append("Current price: ").append(data.price).append('\n');
+    builder.append("Minimum increment: ").append(data.minimumIncrement).append('\n');
+    builder.append("Reserve price: ").append(data.reservePrice).append('\n');
+    builder.append("Start: ").append(data.startTime).append('\n');
+    builder.append("End: ").append(data.endTime).append('\n');
+    builder.append("Time left: ").append(data.endsIn).append('\n');
+    builder.append("Snipe window: ").append(data.snipeWindowSeconds).append(" seconds\n");
+    builder.append("Snipe extension: ").append(data.snipeExtensionSeconds).append(" seconds\n");
+    if (!data.description.isBlank()) {
+      builder.append("Description: ").append(data.description).append('\n');
+    }
+    if (!data.attributes.isBlank()) {
+      builder.append("Attributes:\n").append(data.attributes);
+    }
+    return builder.toString();
+  }
+
+  private String safeField(List<String> fields, int index) {
+    return index >= 0 && index < fields.size() ? fields.get(index) : "";
+  }
+
+  private String fallback(String value, String fallbackValue) {
+    return value == null || value.isBlank() ? fallbackValue : value;
+  }
+
+  private String normalizeCategoryLabel(String rawCategory) {
+    String normalized = rawCategory == null ? "" : rawCategory.trim().toUpperCase();
+    return switch (normalized) {
+      case "ELECTRONIC", "ELECTRONICS" -> "Electronic";
+      case "VEHICLE" -> "Vehicle";
+      case "ART" -> "Art";
+      default -> normalized.isBlank() ? "Uncategorized" : normalized.substring(0, 1)
+          + normalized.substring(1).toLowerCase();
+    };
+  }
+
+  private String firstImage(String imagePayload) {
+    if (imagePayload == null || imagePayload.isBlank()) {
+      return AUCTION_IMAGE_FALLBACK;
+    }
+    String normalizedPayload = imagePayload.replace("\\n", "\n");
+    for (String image : normalizedPayload.split("\\R")) {
+      if (image != null && !image.isBlank()) {
+        return image.trim();
+      }
+    }
+    return AUCTION_IMAGE_FALLBACK;
+  }
+
+  private String formatMoney(String value) {
+    try {
+      String normalized = value == null ? "" : value.replace(",", "").trim();
+      if (normalized.isBlank()) {
+        return "0 VND";
+      }
+      return MONEY_FORMAT.format(new BigDecimal(normalized)) + " VND";
+    } catch (NumberFormatException exception) {
+      return fallback(value, "0") + " VND";
+    }
+  }
+
+  private String formatBidCount(int bidCount) {
+    return bidCount + (bidCount == 1 ? " bid" : " bids");
+  }
+
+  private String formatTimeLeft(long secondsLeft) {
+    if (secondsLeft <= 0) {
+      return "Ended";
+    }
+    long days = secondsLeft / 86400;
+    long hours = (secondsLeft % 86400) / 3600;
+    long minutes = (secondsLeft % 3600) / 60;
+    if (days > 0) {
+      return days + "d " + hours + "h " + minutes + "m";
+    }
+    if (hours > 0) {
+      return hours + "h " + minutes + "m";
+    }
+    return Math.max(1, minutes) + "m";
+  }
+
+  private long parseLongOrDefault(String value, long fallbackValue) {
+    try {
+      return value == null || value.isBlank() ? fallbackValue : Long.parseLong(value.trim());
+    } catch (NumberFormatException exception) {
+      return fallbackValue;
+    }
+  }
+
+  private String shortTimestamp(String value) {
+    if (value == null || value.isBlank()) {
+      return "not available";
+    }
+    String normalized = value.trim();
+    int dotIndex = normalized.indexOf('.');
+    if (dotIndex > 0) {
+      normalized = normalized.substring(0, dotIndex);
+    }
+    try {
+      LocalDateTime parsed = LocalDateTime.parse(normalized, AUCTION_TIME_FORMATTER);
+      return parsed.format(AUCTION_TIME_FORMATTER);
+    } catch (DateTimeParseException exception) {
+      return normalized;
+    }
+  }
+
+  private String initialsFor(String text) {
+    String normalized = text == null ? "" : text.trim();
+    if (normalized.isBlank()) {
+      return "AU";
+    }
+    String[] parts = normalized.split("\\s+");
+    if (parts.length == 1) {
+      return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+    }
+    return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
   }
 
   private String fields(Object... values) {
@@ -2688,6 +2913,14 @@ public class UserDashboardController extends BaseDashboardController {
     }
   }
 
+  private boolean isValidCreateItemYear(String rawValue) {
+    try {
+      return rawValue != null && Integer.parseInt(rawValue.trim()) > 0;
+    } catch (Exception exception) {
+      return false;
+    }
+  }
+
   private void showCreateMessage(Label label, String message, boolean error) {
     label.setText(message);
     label.getStyleClass().removeAll("create-message-error", "create-message-info");
@@ -2734,32 +2967,77 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private static class AuctionCardData {
+    private final String auctionId;
+    private final String itemId;
     private final String title;
     private final String category;
+    private final String description;
     private final String price;
+    private final String minimumIncrement;
+    private final String reservePrice;
+    private final int bidCount;
     private final String bids;
     private final String endsIn;
+    private final long secondsLeft;
     private final String badge;
     private final String imagePath;
     private final String detail;
+    private final String status;
+    private final String startTime;
+    private final String endTime;
+    private final String seller;
+    private final String winner;
+    private final String attributes;
+    private final String snipeWindowSeconds;
+    private final String snipeExtensionSeconds;
 
     private AuctionCardData(
+        String auctionId,
+        String itemId,
         String title,
         String category,
+        String description,
         String price,
+        String minimumIncrement,
+        String reservePrice,
+        int bidCount,
         String bids,
         String endsIn,
+        long secondsLeft,
         String badge,
         String imagePath,
-        String detail) {
+        String detail,
+        String status,
+        String startTime,
+        String endTime,
+        String seller,
+        String winner,
+        String attributes,
+        String snipeWindowSeconds,
+        String snipeExtensionSeconds) {
+      this.auctionId = auctionId;
+      this.itemId = itemId;
       this.title = title;
       this.category = category;
+      this.description = description;
       this.price = price;
+      this.minimumIncrement = minimumIncrement;
+      this.reservePrice = reservePrice;
+      this.bidCount = bidCount;
       this.bids = bids;
       this.endsIn = endsIn;
+      this.secondsLeft = secondsLeft;
       this.badge = badge;
       this.imagePath = imagePath;
       this.detail = detail;
+      this.status = status;
+      this.startTime = startTime;
+      this.endTime = endTime;
+      this.seller = seller;
+      this.winner = winner;
+      this.attributes = attributes;
+      this.snipeWindowSeconds = snipeWindowSeconds;
+      this.snipeExtensionSeconds = snipeExtensionSeconds;
     }
   }
 

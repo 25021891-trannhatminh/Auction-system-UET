@@ -27,13 +27,13 @@
 }
 
 .sidebar-shell {
-    -fx-background-color: linear-gradient(to bottom, #274b45, #183530);
+    -fx-background-color: linear-gradient(to bottom, #1c3f38, #0d241f);
     -fx-background-radius: 24;
     -fx-padding: 16 12 16 12;
 }
 
 .profile-card {
-    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-color: rgba(255, 255, 255, 0.055);
     -fx-background-radius: 20;
     -fx-padding: 14;
     -fx-alignment: center;
@@ -98,7 +98,7 @@
 }
 
 .nav-btn:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-color: rgba(255, 255, 255, 0.075);
 }
 
 .nav-btn-active {
@@ -107,7 +107,7 @@
 }
 
 .sidebar-mini-card {
-    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-color: rgba(255, 255, 255, 0.055);
     -fx-background-radius: 16;
     -fx-padding: 12;
 }
@@ -1766,4 +1766,185 @@
     -fx-min-height: 38;
     -fx-pref-height: 38;
     -fx-padding: 8 12 8 12;
+}
+
+/* User live-auction dark theme. Scoped to user-home only. */
+.user-dashboard-root {
+    -fx-background-color: #050505;
+}
+
+.user-dashboard-root .app-shell {
+    -fx-background-color: #050505;
+    -fx-background-radius: 0;
+}
+
+.user-dashboard-root .content-shell {
+    -fx-background-color: #050505;
+}
+
+.user-dashboard-root .surface-card,
+.user-dashboard-root .table-card,
+.user-dashboard-root .activity-card,
+.user-dashboard-root .stat-card {
+    -fx-background-color: #101010;
+    -fx-border-color: #242424;
+}
+
+.user-dashboard-root .top-title,
+.user-dashboard-root .surface-title,
+.user-dashboard-root .table-title,
+.user-dashboard-root .placeholder-title,
+.user-dashboard-root .section-mini-title,
+.user-dashboard-root .stat-value,
+.user-dashboard-root .row-link,
+.user-dashboard-root .row-metric,
+.user-dashboard-root .product-title,
+.user-dashboard-root .category-title {
+    -fx-text-fill: #f7f3e9;
+}
+
+.user-dashboard-root .surface-desc,
+.user-dashboard-root .placeholder-desc,
+.user-dashboard-root .activity-line,
+.user-dashboard-root .row-meta,
+.user-dashboard-root .product-meta,
+.user-dashboard-root .product-category,
+.user-dashboard-root .category-desc,
+.user-dashboard-root .stat-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.68);
+}
+
+.user-dashboard-root .search-field,
+.user-dashboard-root .sort-pill,
+.user-dashboard-root .pagination-btn,
+.user-dashboard-root .category-card,
+.user-dashboard-root .data-row,
+.user-dashboard-root .data-header {
+    -fx-background-color: #151515;
+    -fx-border-color: #2b2b2b;
+    -fx-text-fill: #f7f3e9;
+}
+
+.user-dashboard-root .search-field {
+    -fx-prompt-text-fill: rgba(247, 243, 233, 0.46);
+}
+
+.user-dashboard-root .filter-chip {
+    -fx-background-color: #151515;
+    -fx-border-color: #303030;
+    -fx-text-fill: #f7f3e9;
+}
+
+.auction-live-card {
+    -fx-background-color: #111111;
+    -fx-background-radius: 24;
+    -fx-border-color: #2c2c2c;
+    -fx-border-radius: 24;
+    -fx-padding: 12;
+}
+
+.auction-live-card:hover {
+    -fx-border-color: rgba(255, 214, 0, 0.38);
+    -fx-background-color: #151515;
+}
+
+.auction-live-image-wrap {
+    -fx-background-color: #070707;
+    -fx-background-radius: 18;
+    -fx-border-color: #252525;
+    -fx-border-radius: 18;
+    -fx-alignment: center;
+}
+
+.auction-live-content {
+    -fx-padding: 2 2 0 2;
+}
+
+.auction-live-category,
+.auction-live-fact-key,
+.auction-live-timer-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.58);
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.auction-live-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.auction-live-timer {
+    -fx-background-color: #1b1b1b;
+    -fx-background-radius: 16;
+    -fx-border-color: #333333;
+    -fx-border-radius: 16;
+    -fx-padding: 8 10 8 10;
+    -fx-alignment: center;
+}
+
+.auction-live-timer-value {
+    -fx-text-fill: #ff5b64;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.auction-live-facts {
+    -fx-padding: 2 0 0 0;
+}
+
+.auction-live-fact {
+    -fx-background-color: #171717;
+    -fx-background-radius: 13;
+    -fx-border-color: #282828;
+    -fx-border-radius: 13;
+    -fx-padding: 7 8 7 8;
+}
+
+.auction-live-fact-value {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.auction-live-price {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.auction-live-badge {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.auction-disabled-bid-btn {
+    -fx-background-color: #3a3a3a;
+    -fx-background-radius: 16;
+    -fx-text-fill: rgba(247, 243, 233, 0.55);
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 9 12 9 12;
+}
+
+.auction-view-btn {
+    -fx-background-color: linear-gradient(to right, #ffe100, #ffbf00);
+    -fx-background-radius: 16;
+    -fx-text-fill: #111111;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 9 12 9 12;
+    -fx-cursor: hand;
+}
+
+/* Remove the extra top line created when tableTitleLabel is hidden on detail pages. */
+.admin-workspace-shell {
+    -fx-padding: 0;
+}
+
+.admin-page-title {
+    -fx-padding: 0 0 4 6;
 }

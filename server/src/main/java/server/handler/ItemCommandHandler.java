@@ -50,8 +50,11 @@ public class ItemCommandHandler {
      *
      * <p>Payload format:</p>
      * <pre>
-     * sellerId|category|title|description|price|status|listingFlow|size|property|royalty|currency|imageUris
+     * sellerId|category|title|description|price|status|listingFlow|size|property|royalty|currency|artist|yearCreated|imageUris
      * </pre>
+     *
+     * <p>The older 12-field payload is still accepted for non-ART items. ART items must send
+     * artist and yearCreated so they can be reloaded by {@code ItemFactory} on server startup.</p>
      */
     public void handleCreateItem(String payload, int authenticatedUserId) {
         List<String> fields = splitPayload(payload);
@@ -77,12 +80,22 @@ public class ItemCommandHandler {
         String property = safeField(fields, 8);
         String royalty = safeField(fields, 9);
         String currency = normalizeCurrency(safeField(fields, 10));
-        String imagePayload = safeField(fields, 11);
+        boolean hasArtFields = fields.size() >= 14;
+        String artist = hasArtFields ? safeField(fields, 11).trim() : "";
+        String yearCreated = hasArtFields ? safeField(fields, 12).trim() : "";
+        String imagePayload = hasArtFields ? safeField(fields, 13) : safeField(fields, 11);
 
         if (category == null || name.isBlank()
                 || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
             client.send("CREATE_ITEM_FAIL INVALID_DATA");
             return;
+        }
+
+        if (category == ItemCategory.ART) {
+            if (artist.isBlank() || !isPositiveInteger(yearCreated)) {
+                client.send("CREATE_ITEM_FAIL ART_DETAILS_REQUIRED");
+                return;
+            }
         }
 
         List<String> imageUrls = parseImageUrls(imagePayload);
@@ -92,6 +105,11 @@ public class ItemCommandHandler {
         if (!property.isBlank()) attributes.put("property", property);
         if (!royalty.isBlank()) attributes.put("royalty", royalty);
         if (!currency.isBlank()) attributes.put("currency", currency);
+        if (category == ItemCategory.ART) {
+            attributes.put("artist", artist);
+            attributes.put("year_created", yearCreated);
+            if (!property.isBlank()) attributes.put("medium", property);
+        }
 
         int itemId = itemService.createItem(
             sellerId,
@@ -335,6 +353,14 @@ public class ItemCommandHandler {
                 : ItemCategory.valueOf(value.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             return null;
+        }
+    }
+
+    private boolean isPositiveInteger(String value) {
+        try {
+            return value != null && Integer.parseInt(value.trim()) > 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 

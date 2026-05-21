@@ -17,6 +17,7 @@ client\enums\AccountStatus.class
 client\controller\CreateItemController.class
 client\util\AccountValidator.class
 client\controller\BaseDashboardController.class
+client\service\NotificationUIHandler$ToastType.class
 client\MainApp.class
 client\service\SimpleClient.class
 client\enums\SystemRole.class

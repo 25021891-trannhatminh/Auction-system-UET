@@ -271,15 +271,23 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (msg.equals("ADMIN_APPROVE_SUCCESS")) {
             requestLiveAdminData();
+            notifUIHandler.showSuccess(
+                "Item approved",
+                "Item has been approved and is ready for auction."
+            );
             showDetail(
                 "Item approved",
                 "Database đã chuyển item từ PENDING_REVIEW sang AVAILABLE. "
-                    + "Create Auction đang mở ở chế độ UI preview, chưa ghi bảng auctions."
+                    + "Create Auction sẽ ghi trực tiếp xuống bảng auctions khi bấm tạo phòng."
             );
             return;
         }
 
         if (msg.startsWith("ADMIN_APPROVE_FAIL")) {
+            notifUIHandler.showError(
+                "Approve failed",
+                "Server không approve được item. Có thể item không còn ở PENDING_REVIEW."
+            );
             showDetail(
                 "Approve failed",
                 "Server không approve được item. Có thể item không còn ở PENDING_REVIEW."
@@ -289,6 +297,11 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (msg.startsWith("ADMIN_CREATE_AUCTION_SUCCESS")) {
             requestLiveAdminData();
+            notifUIHandler.showSuccess(
+                "Auction created",
+                "Auction room has been created successfully. Back to Items."
+            );
+            showSection("items");
             showDetail(
                 "Auction created",
                 "Đã insert auctions bằng item_id/seller_id thật và chuyển item sang IN_AUCTION."
@@ -297,10 +310,11 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_CREATE_AUCTION_FAIL")) {
-            showDetail(
-                "Create auction failed",
-                decodeJoinedPayload(msg.substring("ADMIN_CREATE_AUCTION_FAIL".length()).trim())
+            String errorMessage = decodeJoinedPayload(
+                msg.substring("ADMIN_CREATE_AUCTION_FAIL".length()).trim()
             );
+            notifUIHandler.showError("Create auction failed", errorMessage);
+            showDetail("Create auction failed", errorMessage);
             return;
         }
 
@@ -1374,7 +1388,11 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void setTableTitle(String title) {
         if (tableTitleLabel != null) {
-            tableTitleLabel.setText(title);
+            String safeTitle = title == null ? "" : title;
+            tableTitleLabel.setText(safeTitle);
+            boolean visible = !safeTitle.isBlank();
+            tableTitleLabel.setVisible(visible);
+            tableTitleLabel.setManaged(visible);
         }
     }
 
@@ -2075,6 +2093,13 @@ public class AdminDashboardController extends BaseDashboardController {
         TextField reserveField = addFormCell(formGrid, 1, 1, "Reserve price", stripCurrency(data.startingPrice));
         TextField windowField = addFormCell(formGrid, 0, 2, "Snipe window seconds", "300");
         TextField extensionField = addFormCell(formGrid, 1, 2, "Snipe extension seconds", "60");
+        java.time.LocalDateTime defaultStart = java.time.LocalDateTime.now().plusMinutes(5);
+        java.time.LocalDateTime defaultEnd = defaultStart.plusDays(7);
+        java.time.format.DateTimeFormatter formatter =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        startField.setText(defaultStart.format(formatter));
+        endField.setText(defaultEnd.format(formatter));
+        incrementField.setText("10000");
         windowField.setText("300");
         extensionField.setText("60");
 

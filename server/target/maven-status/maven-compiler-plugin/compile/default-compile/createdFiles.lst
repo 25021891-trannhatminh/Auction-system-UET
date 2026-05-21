@@ -1,6 +1,8 @@
 server\repository\ItemImageDAO.class
 server\common\model\AuctionDTO.class
 server\common\enums\AuctionStatus.class
+server\common\model\WalletUpdateEvent.class
+server\service\listeners\PaymentTriggerObserver.class
 server\common\entity\factory\ItemFactory$1.class
 server\database\DBConnection.class
 server\network\AuctionServer.class
@@ -15,6 +17,7 @@ server\common\enums\AutoBidStatus.class
 server\common\enums\PaymentStatus.class
 server\repository\WalletDAO.class
 server\repository\WalletTransactionDAO.class
+server\service\PaymentService.class
 server\repository\AuctionDAO.class
 server\common\enums\WalletTransactionType.class
 server\common\model\NotificationDTO.class

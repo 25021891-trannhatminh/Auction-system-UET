@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import java.lang.String?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
@@ -14,11 +15,15 @@
 
 <AnchorPane prefHeight="650.0"
             prefWidth="1000.0"
-            styleClass="dashboard-root"
             stylesheets="@dashboard.css"
             xmlns="http://javafx.com/javafx/17"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="client.controller.UserDashboardController">
+
+    <styleClass>
+        <String fx:value="dashboard-root" />
+        <String fx:value="user-dashboard-root" />
+    </styleClass>
 
     <children>
         <HBox spacing="12.0"
@@ -104,26 +109,26 @@
                                     <children>
                                         <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
-                                                <Label fx:id="statValue1" styleClass="stat-value" text="12" />
-                                                <Label fx:id="statLabel1" styleClass="stat-label" text="Active Bids" />
+                                                <Label fx:id="statValue1" styleClass="stat-value" text="00" />
+                                                <Label fx:id="statLabel1" styleClass="stat-label" text="Live Auctions" />
                                             </children>
                                         </VBox>
                                         <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
-                                                <Label fx:id="statValue2" styleClass="stat-value" text="04" />
-                                                <Label fx:id="statLabel2" styleClass="stat-label" text="Winning Now" />
+                                                <Label fx:id="statValue2" styleClass="stat-value" text="00" />
+                                                <Label fx:id="statLabel2" styleClass="stat-label" text="Running" />
                                             </children>
                                         </VBox>
                                         <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
-                                                <Label fx:id="statValue3" styleClass="stat-value" text="03" />
-                                                <Label fx:id="statLabel3" styleClass="stat-label" text="Outbid" />
+                                                <Label fx:id="statValue3" styleClass="stat-value" text="00" />
+                                                <Label fx:id="statLabel3" styleClass="stat-label" text="Ending Soon" />
                                             </children>
                                         </VBox>
                                         <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
                                             <children>
-                                                <Label fx:id="statValue4" styleClass="stat-value" text="08" />
-                                                <Label fx:id="statLabel4" styleClass="stat-label" text="Ending Soon" />
+                                                <Label fx:id="statValue4" styleClass="stat-value" text="00" />
+                                                <Label fx:id="statLabel4" styleClass="stat-label" text="Total Bids" />
                                             </children>
                                         </VBox>
                                     </children>
@@ -144,10 +149,10 @@
                                         <VBox spacing="5.0" styleClass="activity-card">
                                             <children>
                                                 <Label styleClass="placeholder-title" text="Recent Activity" />
-                                                <Label fx:id="activityLine1" styleClass="activity-line" text="You were outbid on Vintage Camera." wrapText="true" />
-                                                <Label fx:id="activityLine2" styleClass="activity-line" text="MacBook Pro M3 ends in 42 minutes." wrapText="true" />
-                                                <Label fx:id="activityLine3" styleClass="activity-line" text="Mechanical Keyboard sale is ready to ship." wrapText="true" />
-                                                <Label fx:id="activityLine4" styleClass="activity-line" text="Auto bid reached 80% of max limit." wrapText="true" />
+                                                <Label fx:id="activityLine1" styleClass="activity-line" text="Auction data loads from database." wrapText="true" />
+                                                <Label fx:id="activityLine2" styleClass="activity-line" text="No fake auction activity is shown." wrapText="true" />
+                                                <Label fx:id="activityLine3" styleClass="activity-line" text="Create listings and admin auction rooms to populate this view." wrapText="true" />
+                                                <Label fx:id="activityLine4" styleClass="activity-line" text="Place Bid is disabled until bidding flow is wired." wrapText="true" />
                                             </children>
                                         </VBox>
                                     </children>

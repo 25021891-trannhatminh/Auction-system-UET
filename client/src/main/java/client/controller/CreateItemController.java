@@ -28,6 +28,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -54,6 +55,9 @@ public class CreateItemController {
   @FXML private TextField propertyField;
   @FXML private TextField royaltyField;
   @FXML private TextField currencyField;
+  @FXML private HBox artDetailsBox;
+  @FXML private TextField artistField;
+  @FXML private TextField yearCreatedField;
   @FXML private TextArea descriptionArea;
   @FXML private RadioButton fixedPriceRadio;
   @FXML private RadioButton timedAuctionRadio;
@@ -84,6 +88,7 @@ public class CreateItemController {
     PREVIEW_PRICE.setGroupingUsed(true);
     setupCategoryOptions();
     setupPurchaseTypeGroup();
+    setupCategorySpecificFields();
     bindPreview();
     updatePreviewNavigation();
     loadUserMeta();
@@ -99,6 +104,30 @@ public class CreateItemController {
   private void setupCategoryOptions() {
     categoryComboBox.getItems().setAll("ART", "VEHICLE", "ELECTRONIC");
     categoryComboBox.getSelectionModel().select("ART");
+  }
+
+  /**
+   * Shows the ART-only metadata fields only when the seller selects ART.
+   */
+  private void setupCategorySpecificFields() {
+    updateArtDetailsVisibility();
+    categoryComboBox.valueProperty().addListener((obs, oldValue, newValue) ->
+        updateArtDetailsVisibility());
+  }
+
+  /**
+   * Keeps ART metadata fields out of the form layout for non-ART categories.
+   */
+  private void updateArtDetailsVisibility() {
+    boolean isArt = "ART".equalsIgnoreCase(categoryComboBox.getValue());
+    if (artDetailsBox != null) {
+      artDetailsBox.setVisible(isArt);
+      artDetailsBox.setManaged(isArt);
+    }
+    if (!isArt) {
+      artistField.clear();
+      yearCreatedField.clear();
+    }
   }
 
   /**
@@ -251,6 +280,8 @@ public class CreateItemController {
     String description = normalize(descriptionArea.getText());
     String price = normalize(priceField.getText());
     String category = categoryComboBox.getValue() == null ? "" : categoryComboBox.getValue().trim();
+    String artist = normalize(artistField.getText());
+    String yearCreated = normalize(yearCreatedField.getText());
 
     if (category.isBlank()) {
       showErrorMessage("Vui lòng chọn category cho item.");
@@ -266,6 +297,20 @@ public class CreateItemController {
     if (parsedPrice == null || parsedPrice.compareTo(BigDecimal.ZERO) <= 0) {
       showErrorMessage("Price phải là số hợp lệ và lớn hơn 0.");
       return;
+    }
+
+    if ("ART".equalsIgnoreCase(category)) {
+      if (artist.isBlank()) {
+        showErrorMessage("Vui lòng nhập artist cho item ART.");
+        return;
+      }
+      if (!isValidYearCreated(yearCreated)) {
+        showErrorMessage("Year phải là số hợp lệ và lớn hơn 0.");
+        return;
+      }
+    } else {
+      artist = "";
+      yearCreated = "";
     }
 
     int sellerId = SessionManager.getCurrentUser() == null
@@ -284,6 +329,8 @@ public class CreateItemController {
         normalize(propertyField.getText()),
         normalize(royaltyField.getText()),
         normalize(currencyField.getText()),
+        artist,
+        yearCreated,
         joinImageUris()
     );
 
@@ -346,6 +393,8 @@ public class CreateItemController {
     propertyField.clear();
     royaltyField.clear();
     currencyField.clear();
+    artistField.clear();
+    yearCreatedField.clear();
     descriptionArea.clear();
     persistedImagePaths.clear();
     currentPreviewImageIndex = 0;
@@ -466,6 +515,17 @@ public class CreateItemController {
       return new BigDecimal(value.replace(",", "").trim());
     } catch (Exception e) {
       return null;
+    }
+  }
+
+  /**
+   * Validates the ART year field before sending it to the server protocol.
+   */
+  private boolean isValidYearCreated(String value) {
+    try {
+      return Integer.parseInt(value.trim()) > 0;
+    } catch (Exception e) {
+      return false;
     }
   }
 

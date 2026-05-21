@@ -113,6 +113,17 @@
                                     </VBox>
                                 </HBox>
 
+                                <HBox fx:id="artDetailsBox" spacing="16.0">
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Artist" styleClass="field-label" />
+                                        <TextField fx:id="artistField" promptText="Vincent van Gogh" styleClass="form-field" />
+                                    </VBox>
+                                    <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                        <Label text="Year Created" styleClass="field-label" />
+                                        <TextField fx:id="yearCreatedField" promptText="1889" styleClass="form-field" />
+                                    </VBox>
+                                </HBox>
+
                                 <HBox spacing="16.0">
                                     <VBox spacing="6.0" HBox.hgrow="ALWAYS">
                                         <Label text="Size" styleClass="field-label" />

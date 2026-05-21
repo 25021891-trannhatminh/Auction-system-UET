@@ -43,6 +43,7 @@ C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\P
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\UserDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\WalletDTO.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\WalletTransactionDTO.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\model\WalletUpdateEvent.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\common\util\AccountValidator.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\database\DBConnection.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\handler\ClientHandler.java
@@ -69,5 +70,7 @@ C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\ItemSe
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\AuctionEventListener.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\NotificationEventHandler.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\ObserverToNotificationEventAdapter.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\listeners\PaymentTriggerObserver.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\NotificationService.java
+C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\PaymentService.java
 C:\Users\tggli\Auction-system-UET-git\server\src\main\java\server\service\ServerAuthService.java

@@ -76,9 +76,13 @@ public class AuthController {
      */
     @FXML
     public void initialize() {
-        // Lấy instance duy nhất thay vì tạo mới tránh trùng lặp connection
+        // Lấy instance duy nhất thay vì tạo mới tránh trùng lặp connection.
         this.networkManager = NetworkManager.getInstance();
-        networkManager.addMessageHandler(this::handleServerResponse);
+
+        // Lưu đúng handler instance để cleanupAuthHandler() có thể gỡ ra sau khi đổi màn.
+        this.authResponseHandler = this::handleServerResponse;
+        networkManager.addMessageHandler(authResponseHandler);
+
         authService = new AuthService(networkManager);
 
         setupOverlayViewport();
@@ -251,6 +255,8 @@ public class AuthController {
             return;
         }
 
+        wakeServerConnection();
+
         authService.register(
             username,
             password,
@@ -279,16 +285,18 @@ public class AuthController {
             return;
         }
 
+        wakeServerConnection();
+
         authService.login(identity, password);
         showSuccess(signInMessageLabel, "Đang đăng nhập...");
     }
 
-    @FXML
     /**
      * Handles protocol messages returned by the server after login or registration.
      *
      * @param msg raw server response message
      */
+    @FXML
     public void handleServerResponse(String msg) {
         javafx.application.Platform.runLater(() -> {
             if (msg == null || msg.isBlank()) {
@@ -352,6 +360,18 @@ public class AuthController {
         });
     }
 
+
+    /**
+     * Wakes the reconnect loop before sending auth commands.
+     *
+     * <p>Login/register messages are allowed to enter NetworkManager's queue while the socket is
+     * reconnecting, instead of being blocked by a transient false connection state.</p>
+     */
+    private void wakeServerConnection() {
+        if (networkManager != null) {
+            networkManager.ensureConnected();
+        }
+    }
 
     private User parseLoginSuccessPayload(String payload) {
         if (payload != null && payload.contains("|")) {
@@ -444,10 +464,17 @@ public class AuthController {
         return value == null || value.isBlank() ? fallbackValue : value;
     }
 
+    /**
+     * Removes the authentication response handler before leaving the auth screen.
+     *
+     * <p>The previous code added {@code this::handleServerResponse} directly without storing it,
+     * so cleanup could not remove the same handler instance. Keeping and removing the exact
+     * Consumer prevents old auth screens from receiving future LOGIN_SUCCESS messages.</p>
+     */
     private void cleanupAuthHandler() {
         if (networkManager != null && authResponseHandler != null) {
             networkManager.removeMessageHandler(authResponseHandler);
-            authResponseHandler = null; // Reset để tránh gỡ bỏ nhiều lần
+            authResponseHandler = null;
         }
     }
 
