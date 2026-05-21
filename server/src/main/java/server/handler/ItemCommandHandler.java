@@ -133,6 +133,146 @@ public class ItemCommandHandler {
         client.send("CREATE_ITEM_FAIL SAVE_ERROR");
     }
 
+    public void handleUpdateDraftItem(String payload, int authenticatedUserId) {
+        List<String> fields = splitPayload(payload);
+        if (fields.size() < 15) {
+            client.send("USER_UPDATE_DRAFT_FAIL " + fields("INVALID_PAYLOAD"));
+            return;
+        }
+
+        int itemId = parseIntOrDefault(safeField(fields, 0), 0);
+        int requestedSellerId = parseIntOrDefault(safeField(fields, 1), 0);
+        int sellerId = authenticatedUserId > 0 ? authenticatedUserId : requestedSellerId;
+        if (itemId <= 0 || sellerId <= 0) {
+            client.send("USER_UPDATE_DRAFT_FAIL " + fields("NOT_AUTHENTICATED"));
+            return;
+        }
+
+        ItemCategory category = parseItemCategory(safeField(fields, 2));
+        String name = safeField(fields, 3);
+        String description = safeField(fields, 4);
+        BigDecimal startingPrice = parseBigDecimal(safeField(fields, 5));
+        ItemStatus targetStatus = parseItemStatus(safeField(fields, 6));
+        String listingFlow = safeField(fields, 7);
+        String size = safeField(fields, 8);
+        String property = safeField(fields, 9);
+        String royalty = safeField(fields, 10);
+        String currency = normalizeCurrency(safeField(fields, 11));
+        String artist = safeField(fields, 12).trim();
+        String yearCreated = safeField(fields, 13).trim();
+        String imagePayload = safeField(fields, 14);
+
+        if (targetStatus != ItemStatus.DRAFT && targetStatus != ItemStatus.PENDING_REVIEW) {
+            client.send("USER_UPDATE_DRAFT_FAIL " + fields("INVALID_STATUS"));
+            return;
+        }
+        if (category == null || name.isBlank()
+                || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            client.send("USER_UPDATE_DRAFT_FAIL " + fields("INVALID_DATA"));
+            return;
+        }
+        if (category == ItemCategory.ART) {
+            if (artist.isBlank() || !isPositiveInteger(yearCreated)) {
+                client.send("USER_UPDATE_DRAFT_FAIL " + fields("ART_DETAILS_REQUIRED"));
+                return;
+            }
+        }
+
+        List<String> imageUrls = parseImageUrls(imagePayload);
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("listing_flow", listingFlow.isBlank() ? "Timed Auction" : listingFlow);
+        if (!size.isBlank()) attributes.put("size_condition", size);
+        if (!property.isBlank()) attributes.put("property", property);
+        if (!royalty.isBlank()) attributes.put("royalty", royalty);
+        if (!currency.isBlank()) attributes.put("currency", currency);
+        if (category == ItemCategory.ART) {
+            attributes.put("artist", artist);
+            attributes.put("year_created", yearCreated);
+            if (!property.isBlank()) attributes.put("medium", property);
+        }
+
+        String updateSql = """
+            UPDATE items
+            SET category = ?, name = ?, description = ?, starting_price = ?, status = ?
+            WHERE item_id = ? AND seller_id = ? AND status = 'DRAFT'
+            """;
+        String deleteImagesSql = "DELETE FROM item_images WHERE item_id = ?";
+        String insertImageSql = """
+            INSERT INTO item_images (item_id, url, is_primary, sort_order)
+            VALUES (?, ?, ?, ?)
+            """;
+        String deleteAttrsSql = "DELETE FROM item_attributes WHERE item_id = ?";
+        String insertAttrSql = """
+            INSERT INTO item_attributes (item_id, attr_key, attr_value)
+            VALUES (?, ?, ?)
+            """;
+
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+                ps.setString(1, category.name());
+                ps.setString(2, name.trim());
+                ps.setString(3, description == null ? "" : description.trim());
+                ps.setBigDecimal(4, startingPrice);
+                ps.setString(5, targetStatus.name());
+                ps.setInt(6, itemId);
+                ps.setInt(7, sellerId);
+                if (ps.executeUpdate() == 0) {
+                    conn.rollback();
+                    client.send("USER_UPDATE_DRAFT_FAIL " + fields("NOT_DRAFT_OR_NOT_OWNER"));
+                    return;
+                }
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(deleteImagesSql)) {
+                ps.setInt(1, itemId);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement(insertImageSql)) {
+                int sortOrder = 0;
+                for (String url : imageUrls) {
+                    if (url == null || url.isBlank()) {
+                        continue;
+                    }
+                    ps.setInt(1, itemId);
+                    ps.setString(2, url.trim());
+                    ps.setBoolean(3, sortOrder == 0);
+                    ps.setInt(4, sortOrder);
+                    ps.addBatch();
+                    sortOrder++;
+                }
+                ps.executeBatch();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(deleteAttrsSql)) {
+                ps.setInt(1, itemId);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement(insertAttrSql)) {
+                for (Map.Entry<String, String> entry : attributes.entrySet()) {
+                    if (entry.getKey() == null || entry.getKey().isBlank()
+                            || entry.getValue() == null || entry.getValue().isBlank()) {
+                        continue;
+                    }
+                    ps.setInt(1, itemId);
+                    ps.setString(2, entry.getKey().trim());
+                    ps.setString(3, entry.getValue().trim());
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+
+            conn.commit();
+            client.send("USER_UPDATE_DRAFT_SUCCESS " + fields(itemId, targetStatus.name()));
+            if (targetStatus == ItemStatus.PENDING_REVIEW) {
+                ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
+            }
+        } catch (SQLException e) {
+            client.send("USER_UPDATE_DRAFT_FAIL " + fields("SAVE_ERROR", e.getMessage()));
+            e.printStackTrace();
+        }
+    }
+
     public void sendUserItemStats(String sellerIdText, int authenticatedUserId) {
         int sellerId = authenticatedUserId > 0 ? authenticatedUserId : parseIntOrDefault(sellerIdText, 0);
         if (sellerId <= 0) {
@@ -167,6 +307,79 @@ public class ItemCommandHandler {
             e.printStackTrace();
         }
         client.send("USER_ITEM_STATS " + fields(0, 0, 0, 0));
+    }
+
+    public void sendUserItems(String sellerIdText, int authenticatedUserId) {
+        int sellerId = authenticatedUserId > 0 ? authenticatedUserId : parseIntOrDefault(sellerIdText, 0);
+        if (sellerId <= 0) {
+            client.send("USER_ITEMS_BEGIN");
+            client.send("USER_ITEMS_END");
+            return;
+        }
+
+        String sql = """
+            SELECT i.item_id, i.seller_id,
+                   COALESCE(i.category, '') AS category_name,
+                   i.name, COALESCE(i.description, '') AS description,
+                   i.starting_price, i.status, i.created_at,
+                   a.auction_id, a.status AS auction_status, a.current_price,
+                   COALESCE(bid_counts.bid_count, 0) AS bid_count,
+                   COALESCE(imgs.image_urls, '') AS image_urls,
+                   COALESCE(attrs.attribute_lines, '') AS attribute_lines
+            FROM items i
+            LEFT JOIN auctions a ON a.item_id = i.item_id
+            LEFT JOIN (
+                SELECT auction_id, COUNT(*) AS bid_count
+                FROM bid_transactions
+                GROUP BY auction_id
+            ) bid_counts ON bid_counts.auction_id = a.auction_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                                    SEPARATOR '\n') AS image_urls
+                FROM item_images
+                GROUP BY item_id
+            ) imgs ON imgs.item_id = i.item_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(CONCAT(attr_key, ': ', attr_value) ORDER BY attr_id ASC
+                                    SEPARATOR '\n') AS attribute_lines
+                FROM item_attributes
+                GROUP BY item_id
+            ) attrs ON attrs.item_id = i.item_id
+            WHERE i.seller_id = ?
+            ORDER BY i.created_at DESC, i.item_id DESC
+            """;
+
+        client.send("USER_ITEMS_BEGIN");
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, sellerId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    client.send("USER_ITEM " + fields(
+                        rs.getInt("item_id"),
+                        rs.getInt("seller_id"),
+                        rs.getString("category_name"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getBigDecimal("starting_price"),
+                        rs.getString("status"),
+                        rs.getTimestamp("created_at"),
+                        nullableInt(rs, "auction_id"),
+                        rs.getString("auction_status"),
+                        rs.getBigDecimal("current_price"),
+                        rs.getInt("bid_count"),
+                        rs.getString("image_urls"),
+                        rs.getString("attribute_lines")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            client.send("USER_ITEMS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        client.send("USER_ITEMS_END");
     }
 
     public void sendAdminItems() {

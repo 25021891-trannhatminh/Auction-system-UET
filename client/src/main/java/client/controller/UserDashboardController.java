@@ -110,6 +110,9 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<AuctionCardData> liveAuctionCards = new ArrayList<>();
   private List<AuctionCardData> incomingAuctionCards = new ArrayList<>();
   private boolean userAuctionsLoaded;
+  private final List<SellerItemData> sellerItems = new ArrayList<>();
+  private List<SellerItemData> incomingSellerItems = new ArrayList<>();
+  private boolean sellerItemsLoaded;
   private final Map<String, Image> imageCache = new HashMap<>();
   /**
    * Reused connection for the inline Create Listing form.
@@ -202,6 +205,7 @@ public class UserDashboardController extends BaseDashboardController {
     User currentUser = SessionManager.getCurrentUser();
     if (currentUser != null && currentUser.getUserId() > 0) {
       createItemNetworkManager.send("USER_ITEM_STATS " + currentUser.getUserId());
+      createItemNetworkManager.send("USER_LIST_ITEMS " + currentUser.getUserId());
     }
   }
 
@@ -210,10 +214,7 @@ public class UserDashboardController extends BaseDashboardController {
       networkManager = NetworkManager.getInstance();
     }
     if (networkManager != null) {
-      // Server refactor(2) does not have USER_LIST_AUCTIONS yet, but it already exposes
-      // ADMIN_LIST_AUCTIONS without an admin-only gate. Reuse that legacy stream so the
-      // git client can run against the unchanged refactor(2) server.
-      networkManager.send("ADMIN_LIST_AUCTIONS");
+      networkManager.send("USER_LIST_AUCTIONS");
     }
   }
 
@@ -315,6 +316,7 @@ public class UserDashboardController extends BaseDashboardController {
         0L,
         badge,
         AUCTION_IMAGE_FALLBACK,
+        AUCTION_IMAGE_FALLBACK,
         "AUC-" + auctionId + " - ITEM-" + itemId + " - Seller " + seller
             + " - status " + status + " - ends " + endTime,
         status,
@@ -370,6 +372,7 @@ public class UserDashboardController extends BaseDashboardController {
         secondsLeft,
         badge,
         firstImage(imagePayload),
+        imagePayload,
         "AUC-" + auctionId + " - ITEM-" + itemId + " - Seller " + seller
             + " - status " + status + " - ends " + endTime,
         status,
@@ -700,6 +703,7 @@ public class UserDashboardController extends BaseDashboardController {
         0,
         badge,
         imagePath,
+        imagePath,
         detail,
         badge,
         "not available",
@@ -801,7 +805,7 @@ public class UserDashboardController extends BaseDashboardController {
           "DB",
           "Waiting",
           "Loading",
-          "Danh sách này dùng ADMIN_LIST_AUCTIONS vì server refactor(2) chưa có USER_LIST_AUCTIONS.",
+          "Đang lấy danh sách auction thật từ USER_LIST_AUCTIONS.",
           "DB",
           "Refresh"
       ));
@@ -851,19 +855,6 @@ public class UserDashboardController extends BaseDashboardController {
 
     workspaceBox.getChildren().add(productGrid);
     workspaceBox.getChildren().add(buildPagination(totalPages, filtered.size()));
-
-    workspaceBox.getChildren().add(sectionHeader("Categories from live database rows", ""));
-
-    GridPane categoryGrid = createThreeColumnGrid("category-grid");
-    List<CategoryData> categoryRows = buildLiveCategories();
-    for (int index = 0; index < categoryRows.size(); index++) {
-      addGridCell(categoryGrid, buildCategoryCard(categoryRows.get(index)), index);
-    }
-    if (categoryRows.isEmpty()) {
-      addGridCell(categoryGrid, emptyCard("No categories yet because there are no active auction rows."), 0);
-    }
-
-    workspaceBox.getChildren().add(categoryGrid);
   }
 
   private void renderNoLiveData(String title, String message) {
@@ -875,26 +866,16 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void renderMyItemsLiveSummary(String filter) {
     setWorkspaceTitle("My Items");
-    renderChips(filter, "All", "Draft", "Pending Review", "In Auction", "Sold");
+    renderChips(filter, "All", "Draft", "Pending Review", "Available", "In Auction", "Sold", "Removed");
     applySellerItemStatsIfAvailable();
 
-    addHeader("Seller Data", "Value", "Source");
-    List<UserRow> rows = new ArrayList<>();
-    if (sellerItemStatsLoaded) {
-      rows.add(row(
-          "Items from database",
-          "Counts are loaded through USER_ITEM_STATS for the logged-in seller.",
-          String.valueOf(sellerItemTotal),
-          "items table",
-          "Live DB",
-          "This summary uses real rows from the items table. Detailed seller item rows can be added later without showing fake data.",
-          "DB",
-          "Create"
-      ));
-    } else {
+    addHeader("Item", "Starting Price", "Created");
+
+    if (!sellerItemsLoaded) {
+      List<UserRow> rows = new ArrayList<>();
       rows.add(row(
           "Loading seller items from database...",
-          "Server command USER_ITEM_STATS chưa trả dữ liệu.",
+          "Đang lấy dữ liệu thật bằng USER_LIST_ITEMS.",
           "DB",
           "Waiting",
           "Loading",
@@ -902,8 +883,219 @@ public class UserDashboardController extends BaseDashboardController {
           "DB",
           "Refresh"
       ));
+      addFilteredRows(rows, filter);
+      return;
     }
-    addFilteredRows(rows, filter);
+
+    List<SellerItemData> filteredItems = filterSellerItems(filter);
+    if (filteredItems.isEmpty()) {
+      addEmptyRow(filter);
+      return;
+    }
+
+    for (SellerItemData item : filteredItems) {
+      addSellerItemRow(item);
+    }
+  }
+
+  private List<SellerItemData> filterSellerItems(String filter) {
+    List<SellerItemData> filtered = new ArrayList<>();
+    String normalizedFilter = normalize(filter);
+
+    for (SellerItemData item : sellerItems) {
+      String normalizedStatus = normalizeStatusForFilter(item.status);
+      String haystack = normalize(String.join(" ",
+          item.name,
+          item.category,
+          item.status,
+          normalizedStatus,
+          item.description,
+          item.attributes,
+          item.auctionStatus
+      ));
+
+      if (isAllLikeFilter(filter)
+          || normalizedStatus.equals(normalizedFilter)
+          || haystack.contains(normalizedFilter)) {
+        filtered.add(item);
+      }
+    }
+
+    return filtered;
+  }
+
+  private String normalizeStatusForFilter(String status) {
+    return normalize(status).replace("_", " ");
+  }
+
+  private void addSellerItemRow(SellerItemData item) {
+    GridPane row = createTableGrid("data-row");
+    row.setOnMouseClicked(event -> showTemporaryDetail(item.name, buildSellerItemDetailText(item)));
+
+    HBox mainCell = new HBox(9);
+    mainCell.setAlignment(Pos.CENTER_LEFT);
+    mainCell.setMinWidth(0);
+    mainCell.setMaxWidth(Double.MAX_VALUE);
+    mainCell.getStyleClass().add("row-main-cell");
+    GridPane.setHgrow(mainCell, Priority.ALWAYS);
+
+    StackPane thumbnail = buildImageThumbnail(item.imagePath, item.name);
+
+    VBox textCell = new VBox(2);
+    textCell.setMinWidth(0);
+    textCell.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(textCell, Priority.ALWAYS);
+
+    Button link = new Button(item.name);
+    link.setMnemonicParsing(false);
+    link.getStyleClass().add("row-link");
+    link.setMinWidth(0);
+    link.setMaxWidth(Double.MAX_VALUE);
+    link.setTextOverrun(OverrunStyle.ELLIPSIS);
+    link.setOnAction(event -> showTemporaryDetail(item.name, buildSellerItemDetailText(item)));
+
+    Label meta = new Label(item.category + " • ITEM-" + item.itemId
+        + auctionMetaSuffix(item));
+    meta.getStyleClass().add("row-meta");
+    meta.setWrapText(false);
+    meta.setMinWidth(0);
+    meta.setMaxWidth(Double.MAX_VALUE);
+    meta.setTextOverrun(OverrunStyle.ELLIPSIS);
+
+    textCell.getChildren().addAll(link, meta);
+    mainCell.getChildren().addAll(thumbnail, textCell);
+
+    Label firstMetric = rowMetric(item.startingPrice);
+    Label secondMetric = rowMetric(item.createdAt);
+    Label status = statusBadge(prettyStatus(item.status));
+    GridPane actions = sellerItemActions(item);
+
+    row.add(mainCell, 0, 0);
+    row.add(firstMetric, 1, 0);
+    row.add(secondMetric, 2, 0);
+    row.add(status, 3, 0);
+    row.add(actions, 4, 0);
+
+    GridPane.setHalignment(firstMetric, HPos.CENTER);
+    GridPane.setHalignment(secondMetric, HPos.CENTER);
+    GridPane.setHalignment(status, HPos.CENTER);
+    GridPane.setHalignment(actions, HPos.CENTER);
+
+    workspaceBox.getChildren().add(row);
+  }
+
+  private String auctionMetaSuffix(SellerItemData item) {
+    if (item.auctionId == null || item.auctionId.isBlank()) {
+      return "";
+    }
+    return " • AUC-" + item.auctionId + " • " + item.bidCount + " bids";
+  }
+
+  private GridPane sellerItemActions(SellerItemData item) {
+    GridPane actions = new GridPane();
+    actions.setHgap(USER_ACTION_GAP);
+    actions.setAlignment(Pos.CENTER);
+    actions.setMinWidth(0);
+    actions.setMaxWidth(Double.MAX_VALUE);
+    actions.getStyleClass().add("user-row-actions");
+    actions.getColumnConstraints().addAll(
+        fixedColumn(USER_ACTION_PRIMARY_WIDTH),
+        fixedColumn(USER_ACTION_MORE_WIDTH)
+    );
+
+    String primaryAction = normalize(item.status).equals("draft") ? "Edit Draft" : "View";
+    Button primary = new Button(primaryAction);
+    primary.setMnemonicParsing(false);
+    primary.getStyleClass().addAll("mini-action-btn", "user-primary-action-btn");
+    primary.setMinWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setPrefWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setMaxWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setTextOverrun(OverrunStyle.ELLIPSIS);
+    primary.setOnAction(event -> {
+      if (normalize(item.status).equals("draft")) {
+        renderCreateItemForm(item);
+      } else {
+        showTemporaryDetail(item.name, buildSellerItemDetailText(item));
+      }
+    });
+    actions.add(primary, 0, 0);
+
+    Region placeholder = new Region();
+    placeholder.setMinWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setPrefWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setMaxWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setOpacity(0);
+    actions.add(placeholder, 1, 0);
+    return actions;
+  }
+
+  private StackPane buildImageThumbnail(String imagePath, String fallbackText) {
+    StackPane thumbnail = buildThumbnail(initialsFor(fallbackText));
+    Image image = getCachedImage(imagePath);
+    if (image == null || image.isError()) {
+      return thumbnail;
+    }
+
+    thumbnail.getChildren().clear();
+    ImageView imageView = new ImageView(image);
+    imageView.setPreserveRatio(false);
+    imageView.setFitWidth(54);
+    imageView.setFitHeight(46);
+    imageView.setSmooth(true);
+    imageView.setCache(true);
+    Rectangle clip = new Rectangle(54, 46);
+    clip.setArcWidth(18);
+    clip.setArcHeight(18);
+    imageView.setClip(clip);
+    thumbnail.getChildren().add(imageView);
+    return thumbnail;
+  }
+
+  private String buildSellerItemDetailText(SellerItemData item) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Item ID: ITEM-").append(item.itemId).append('\n');
+    builder.append("Category: ").append(item.category).append('\n');
+    builder.append("Status: ").append(prettyStatus(item.status)).append('\n');
+    builder.append("Starting price: ").append(item.startingPrice).append('\n');
+    builder.append("Created at: ").append(item.createdAt).append('\n');
+    if (!item.auctionId.isBlank()) {
+      builder.append("Auction ID: AUC-").append(item.auctionId).append('\n');
+      builder.append("Auction status: ").append(item.auctionStatus).append('\n');
+      builder.append("Current price: ").append(item.currentPrice).append('\n');
+      builder.append("Bid count: ").append(item.bidCount).append('\n');
+    }
+    if (!item.description.isBlank()) {
+      builder.append("Description: ").append(item.description).append('\n');
+    }
+    if (!item.attributes.isBlank()) {
+      builder.append("Attributes:\n").append(item.attributes);
+    }
+    return builder.toString();
+  }
+
+  private String prettyStatus(String status) {
+    String normalized = normalize(status);
+    return switch (normalized) {
+      case "pending review" -> "Pending Review";
+      case "in auction" -> "In Auction";
+      default -> {
+        if (normalized.isBlank()) {
+          yield "Unknown";
+        }
+        String[] parts = normalized.split("\\s+");
+        StringBuilder builder = new StringBuilder();
+        for (String part : parts) {
+          if (part.isBlank()) {
+            continue;
+          }
+          if (builder.length() > 0) {
+            builder.append(' ');
+          }
+          builder.append(part.substring(0, 1).toUpperCase()).append(part.substring(1));
+        }
+        yield builder.toString();
+      }
+    };
   }
 
   private void renderMyBids(String filter) {
@@ -1068,16 +1260,74 @@ public class UserDashboardController extends BaseDashboardController {
 
   private VBox buildAuctionProductCard(AuctionCardData data) {
     VBox card = new VBox(10);
-    card.getStyleClass().add("auction-live-card");
+    card.getStyleClass().add("auction-market-card");
     card.setMinWidth(0);
     card.setMaxWidth(Double.MAX_VALUE);
 
+    StackPane imageWrap = createAuctionImageWrap(data.imagePath, 205);
+
+    Label reserveBadge = new Label(isNoReserve(data.reservePrice) ? "No Reserve" : "Reserve Set");
+    reserveBadge.getStyleClass().add("auction-market-badge");
+    reserveBadge.getStyleClass().add(isNoReserve(data.reservePrice) ? "status-neutral" : "status-good");
+    StackPane.setAlignment(reserveBadge, Pos.TOP_LEFT);
+
+    Label timeBadge = new Label(data.endsIn);
+    timeBadge.getStyleClass().add("auction-market-time");
+    StackPane.setAlignment(timeBadge, Pos.TOP_RIGHT);
+    imageWrap.getChildren().addAll(reserveBadge, timeBadge);
+
+    VBox content = new VBox(8);
+    content.getStyleClass().add("auction-market-content");
+
+    Label title = new Label(data.title);
+    title.getStyleClass().add("auction-market-title");
+    title.setWrapText(true);
+
+    Label meta = new Label(data.category + " • " + data.status + " • Seller " + data.seller);
+    meta.getStyleClass().add("auction-market-meta");
+    meta.setWrapText(true);
+
+    VBox priceBox = new VBox(2);
+    Label currentBidLabel = new Label("Current Bid");
+    currentBidLabel.getStyleClass().add("auction-market-label");
+    Label currentBid = new Label(data.price);
+    currentBid.getStyleClass().add("auction-market-price");
+    priceBox.getChildren().addAll(currentBidLabel, currentBid);
+
+    HBox facts = new HBox(12);
+    facts.getStyleClass().add("auction-market-facts");
+    Label bidCount = new Label(data.bids);
+    bidCount.getStyleClass().add("auction-market-small-fact");
+    Label increment = new Label("Min increment " + data.minimumIncrement);
+    increment.getStyleClass().add("auction-market-small-fact");
+    Region factSpacer = new Region();
+    HBox.setHgrow(factSpacer, Priority.ALWAYS);
+    facts.getChildren().addAll(bidCount, factSpacer, increment);
+
+    Button bid = new Button("Place Bid");
+    bid.setMnemonicParsing(false);
+    bid.getStyleClass().add("auction-market-bid-btn");
+    bid.setDisable(true);
+    bid.setMaxWidth(Double.MAX_VALUE);
+
+    Button view = new Button("View Auction");
+    view.setMnemonicParsing(false);
+    view.getStyleClass().add("auction-market-view-btn");
+    view.setMaxWidth(Double.MAX_VALUE);
+    view.setOnAction(event -> renderAuctionDetailPage(data));
+
+    content.getChildren().addAll(title, meta, priceBox, facts, bid, view);
+    card.getChildren().addAll(imageWrap, content);
+    return card;
+  }
+
+  private StackPane createAuctionImageWrap(String imagePath, double height) {
     StackPane imageWrap = new StackPane();
-    imageWrap.getStyleClass().add("auction-live-image-wrap");
+    imageWrap.getStyleClass().add("auction-market-image-wrap");
     imageWrap.setMinWidth(0);
-    imageWrap.setPrefHeight(PRODUCT_IMAGE_HEIGHT + 35);
-    imageWrap.setMinHeight(PRODUCT_IMAGE_HEIGHT + 35);
-    imageWrap.setMaxHeight(PRODUCT_IMAGE_HEIGHT + 35);
+    imageWrap.setPrefHeight(height);
+    imageWrap.setMinHeight(height);
+    imageWrap.setMaxHeight(height);
     imageWrap.setMaxWidth(Double.MAX_VALUE);
 
     Rectangle wrapClip = new Rectangle();
@@ -1087,7 +1337,13 @@ public class UserDashboardController extends BaseDashboardController {
     wrapClip.setArcHeight(30);
     imageWrap.setClip(wrapClip);
 
-    Image image = getCachedImage(data.imagePath);
+    setAuctionImageContent(imageWrap, imagePath, height);
+    return imageWrap;
+  }
+
+  private void setAuctionImageContent(StackPane imageWrap, String imagePath, double height) {
+    imageWrap.getChildren().clear();
+    Image image = getCachedImage(imagePath);
     if (image == null || image.isError()) {
       image = getCachedImage(AUCTION_IMAGE_FALLBACK);
     }
@@ -1098,7 +1354,7 @@ public class UserDashboardController extends BaseDashboardController {
       imageView.setCache(true);
       imageView.setPreserveRatio(false);
       imageView.setFitWidth(PRODUCT_IMAGE_INITIAL_WIDTH);
-      imageView.setFitHeight(PRODUCT_IMAGE_HEIGHT + 35);
+      imageView.setFitHeight(height);
       imageView.fitWidthProperty().bind(imageWrap.widthProperty());
       imageView.fitHeightProperty().bind(imageWrap.heightProperty());
       imageWrap.widthProperty().addListener((observable, oldValue, newValue) ->
@@ -1110,76 +1366,189 @@ public class UserDashboardController extends BaseDashboardController {
       imageWrap.layout();
       updateCoverViewport(imageView, imageWrap);
     } else {
-      imageWrap.getChildren().add(buildThumbnail(initialsFor(data.title)));
+      imageWrap.getChildren().add(buildThumbnail("IMG"));
+    }
+  }
+
+  private boolean isNoReserve(String reservePrice) {
+    return reservePrice == null
+        || reservePrice.isBlank()
+        || normalize(reservePrice).equals("no reserve")
+        || normalize(reservePrice).equals("0 vnd");
+  }
+
+  private void renderAuctionDetailPage(AuctionCardData data) {
+    if (workspaceBox == null || data == null) {
+      return;
     }
 
-    Label badge = new Label(data.badge);
-    badge.getStyleClass().add("auction-live-badge");
-    badge.getStyleClass().add(statusStyle(data.badge));
-    StackPane.setAlignment(badge, Pos.TOP_LEFT);
-    imageWrap.getChildren().add(badge);
+    currentSectionKey = "auctions";
+    setWorkspaceTitle(data.title);
+    workspaceBox.getChildren().clear();
+    if (surfaceTitleLabel != null) {
+      surfaceTitleLabel.setVisible(true);
+      surfaceTitleLabel.setManaged(true);
+      surfaceTitleLabel.setText(data.title);
+    }
+    if (workspaceTitleLabel != null) {
+      workspaceTitleLabel.setVisible(true);
+      workspaceTitleLabel.setManaged(true);
+    }
+    if (userActionBar != null) {
+      userActionBar.getChildren().clear();
+      Button back = new Button("← Back to Auctions");
+      back.setMnemonicParsing(false);
+      back.getStyleClass().add("filter-chip-active");
+      back.setOnAction(event -> renderWorkspace("auctions", activeFilter));
+      userActionBar.getChildren().add(back);
+      userActionBar.setVisible(true);
+      userActionBar.setManaged(true);
+    }
 
-    VBox content = new VBox(8);
-    content.getStyleClass().add("auction-live-content");
+    HBox detailShell = new HBox(22);
+    detailShell.getStyleClass().add("auction-detail-shell");
+    detailShell.setMaxWidth(Double.MAX_VALUE);
 
-    HBox top = new HBox(8);
-    top.setAlignment(Pos.CENTER_LEFT);
-    VBox nameBox = new VBox(3);
-    nameBox.setMinWidth(0);
-    HBox.setHgrow(nameBox, Priority.ALWAYS);
+    VBox mediaColumn = new VBox(14);
+    mediaColumn.getStyleClass().add("auction-detail-media-column");
+    mediaColumn.setMinWidth(0);
+    mediaColumn.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(mediaColumn, Priority.ALWAYS);
 
-    Label category = new Label(data.category + " / AUC-" + data.auctionId);
-    category.getStyleClass().add("auction-live-category");
-    Label title = new Label(data.title);
-    title.getStyleClass().add("auction-live-title");
-    title.setWrapText(true);
-    nameBox.getChildren().addAll(category, title);
+    StackPane mainImage = createAuctionImageWrap(data.imagePath, 330);
+    mainImage.getStyleClass().add("auction-detail-main-image");
 
-    VBox timer = new VBox(2);
-    timer.getStyleClass().add("auction-live-timer");
-    Label timerValue = new Label(data.endsIn);
-    timerValue.getStyleClass().add("auction-live-timer-value");
-    Label timerLabel = new Label("time left");
-    timerLabel.getStyleClass().add("auction-live-timer-label");
-    timer.getChildren().addAll(timerValue, timerLabel);
+    HBox thumbnails = new HBox(10);
+    thumbnails.getStyleClass().add("auction-detail-thumbnails");
+    List<String> imagePaths = imagePathsFromPayload(data.imagePayload);
+    if (imagePaths.isEmpty()) {
+      imagePaths.add(data.imagePath);
+    }
+    for (String path : imagePaths.subList(0, Math.min(4, imagePaths.size()))) {
+      StackPane thumb = createAuctionImageWrap(path, 74);
+      thumb.getStyleClass().add("auction-detail-thumb");
+      thumb.setPrefWidth(100);
+      thumb.setMinWidth(100);
+      thumb.setMaxWidth(100);
+      thumb.setOnMouseClicked(event -> setAuctionImageContent(mainImage, path, 330));
+      thumbnails.getChildren().add(thumb);
+    }
 
-    top.getChildren().addAll(nameBox, timer);
+    VBox descriptionBox = new VBox(7);
+    descriptionBox.getStyleClass().add("auction-detail-card");
+    Label descTitle = new Label("Description");
+    descTitle.getStyleClass().add("auction-detail-section-title");
+    Label desc = new Label(fallback(data.description, "No description stored for this item."));
+    desc.getStyleClass().add("auction-detail-text");
+    desc.setWrapText(true);
+    descriptionBox.getChildren().addAll(descTitle, desc);
+    if (!data.attributes.isBlank()) {
+      Label attrTitle = new Label("Item Attributes");
+      attrTitle.getStyleClass().add("auction-detail-section-title");
+      Label attr = new Label(data.attributes);
+      attr.getStyleClass().add("auction-detail-text");
+      attr.setWrapText(true);
+      descriptionBox.getChildren().addAll(attrTitle, attr);
+    }
+
+    mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionBox);
+
+    VBox infoColumn = new VBox(14);
+    infoColumn.getStyleClass().add("auction-detail-info-column");
+    infoColumn.setMinWidth(320);
+    infoColumn.setPrefWidth(390);
+    infoColumn.setMaxWidth(430);
+
+    Label timeTitle = new Label("Time Left");
+    timeTitle.getStyleClass().add("auction-detail-heading");
+
+    HBox countdown = buildCountdown(data.secondsLeft);
 
     GridPane facts = new GridPane();
-    facts.getStyleClass().add("auction-live-facts");
-    facts.setHgap(8);
-    facts.setVgap(7);
+    facts.getStyleClass().add("auction-detail-facts");
+    facts.setHgap(10);
+    facts.setVgap(10);
     facts.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
-    addAuctionFact(facts, 0, 0, "Seller", data.seller);
-    addAuctionFact(facts, 1, 0, "Status", data.status);
-    addAuctionFact(facts, 0, 1, "Bid count", data.bids);
-    addAuctionFact(facts, 1, 1, "Min increment", data.minimumIncrement);
-    addAuctionFact(facts, 0, 2, "Reserve", data.reservePrice);
-    addAuctionFact(facts, 1, 2, "Ends", data.endTime);
+    addAuctionFact(facts, 0, 0, "Auction ID", "AUC-" + data.auctionId);
+    addAuctionFact(facts, 1, 0, "Item ID", "ITEM-" + data.itemId);
+    addAuctionFact(facts, 0, 1, "Category", data.category);
+    addAuctionFact(facts, 1, 1, "Status", data.status);
+    addAuctionFact(facts, 0, 2, "Seller", data.seller);
+    addAuctionFact(facts, 1, 2, "Bids", data.bids);
+    addAuctionFact(facts, 0, 3, "Min increment", data.minimumIncrement);
+    addAuctionFact(facts, 1, 3, "Reserve", data.reservePrice);
+    addAuctionFact(facts, 0, 4, "Start", data.startTime);
+    addAuctionFact(facts, 1, 4, "End", data.endTime);
 
+    VBox pricePanel = new VBox(8);
+    pricePanel.getStyleClass().add("auction-detail-price-panel");
+    Label currentLabel = new Label("Current Bid");
+    currentLabel.getStyleClass().add("auction-market-label");
     Label price = new Label(data.price);
-    price.getStyleClass().add("auction-live-price");
+    price.getStyleClass().add("auction-detail-price");
+    Button disabledBid = new Button("Place Bid");
+    disabledBid.setMnemonicParsing(false);
+    disabledBid.getStyleClass().add("auction-market-bid-btn");
+    disabledBid.setDisable(true);
+    disabledBid.setMaxWidth(Double.MAX_VALUE);
+    pricePanel.getChildren().addAll(currentLabel, price, disabledBid);
 
-    HBox actions = new HBox(8);
-    actions.setAlignment(Pos.CENTER_LEFT);
-    Button bid = new Button("Place Bid");
-    bid.setMnemonicParsing(false);
-    bid.getStyleClass().add("auction-disabled-bid-btn");
-    bid.setDisable(true);
-    bid.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(bid, Priority.ALWAYS);
+    Label ruleText = new Label("Snipe window: " + data.snipeWindowSeconds
+        + "s • Snipe extension: " + data.snipeExtensionSeconds + "s");
+    ruleText.getStyleClass().add("auction-detail-text");
+    ruleText.setWrapText(true);
 
-    Button view = new Button("View Detail");
-    view.setMnemonicParsing(false);
-    view.getStyleClass().add("auction-view-btn");
-    view.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(view, Priority.ALWAYS);
-    view.setOnAction(event -> showTemporaryDetail(data.title, buildAuctionDetailText(data)));
-    actions.getChildren().addAll(bid, view);
+    infoColumn.getChildren().addAll(timeTitle, countdown, facts, pricePanel, ruleText);
+    detailShell.getChildren().addAll(mediaColumn, infoColumn);
+    workspaceBox.getChildren().add(detailShell);
+  }
 
-    content.getChildren().addAll(top, facts, price, actions);
-    card.getChildren().addAll(imageWrap, content);
-    return card;
+  private HBox buildCountdown(long secondsLeft) {
+    long days = Math.max(0, secondsLeft) / 86400;
+    long hours = (Math.max(0, secondsLeft) % 86400) / 3600;
+    long minutes = (Math.max(0, secondsLeft) % 3600) / 60;
+
+    HBox box = new HBox(10);
+    box.getStyleClass().add("auction-detail-countdown");
+    box.getChildren().addAll(
+        countdownUnit(days, "Day"),
+        countdownSeparator(),
+        countdownUnit(hours, "Hours"),
+        countdownSeparator(),
+        countdownUnit(minutes, "Minutes")
+    );
+    return box;
+  }
+
+  private VBox countdownUnit(long value, String labelText) {
+    VBox unit = new VBox(2);
+    unit.getStyleClass().add("auction-detail-countdown-unit");
+    Label number = new Label(String.format("%02d", value));
+    number.getStyleClass().add("auction-detail-countdown-number");
+    Label label = new Label(labelText);
+    label.getStyleClass().add("auction-detail-countdown-label");
+    unit.getChildren().addAll(number, label);
+    return unit;
+  }
+
+  private Label countdownSeparator() {
+    Label separator = new Label(":");
+    separator.getStyleClass().add("auction-detail-countdown-separator");
+    return separator;
+  }
+
+  private List<String> imagePathsFromPayload(String payload) {
+    List<String> paths = new ArrayList<>();
+    if (payload == null || payload.isBlank()) {
+      return paths;
+    }
+    String normalizedPayload = payload.replace("\\n", "\n");
+    for (String image : normalizedPayload.split("\\R")) {
+      if (image != null && !image.isBlank()) {
+        paths.add(image.trim());
+      }
+    }
+    return paths;
   }
 
   private Image getCachedImage(String imagePath) {
@@ -1784,6 +2153,10 @@ public class UserDashboardController extends BaseDashboardController {
    * item, admin reviews it, then admin creates the auction session from the approved item.</p>
    */
   private void renderCreateItemForm() {
+    renderCreateItemForm(null);
+  }
+
+  private void renderCreateItemForm(SellerItemData editItem) {
     if (workspaceBox == null) {
       return;
     }
@@ -1807,18 +2180,28 @@ public class UserDashboardController extends BaseDashboardController {
     }
     pendingCreateItemUploads.clear();
     pendingCreateItemPreviewIndex = 0;
+    if (editItem != null) {
+      for (String imagePath : imagePathsFromPayload(editItem.imagePayload)) {
+        pendingCreateItemUploads.add(new CreateItemUpload(
+            imagePath,
+            fileNameFromPath(imagePath),
+            0
+        ));
+      }
+    }
 
     VBox formShell = new VBox(16);
     formShell.getStyleClass().add("create-listing-shell");
     formShell.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
     formShell.setMaxWidth(Double.MAX_VALUE);
 
-    Label formTitle = new Label("Create Listing");
+    Label formTitle = new Label(editItem == null ? "Create Listing" : "Edit Draft Item");
     formTitle.getStyleClass().add("create-listing-title");
     formTitle.setStyle("-fx-text-fill: #1f3e37; -fx-font-size: 24px; -fx-font-weight: bold;");
 
-    Label formNote = new Label("Submit an item for admin review. Approved items become "
-        + "available for auction creation.");
+    Label formNote = new Label(editItem == null
+        ? "Submit an item for admin review. Approved items become available for auction creation."
+        : "Only DRAFT items are editable here. Save keeps it as DRAFT; Submit sends it to admin review.");
     formNote.getStyleClass().add("create-listing-note");
     formNote.setStyle("-fx-text-fill: #738581; -fx-font-size: 11px;");
     formNote.setWrapText(true);
@@ -2116,12 +2499,12 @@ public class UserDashboardController extends BaseDashboardController {
     messageLabel.getStyleClass().add("create-message");
     messageLabel.setStyle(CREATE_MUTED_TEXT_STYLE);
 
-    Button saveDraft = new Button("Save Draft");
+    Button saveDraft = new Button(editItem == null ? "Save Draft" : "Save Draft");
     saveDraft.setMnemonicParsing(false);
     saveDraft.getStyleClass().add("create-secondary-btn");
     saveDraft.setStyle(CREATE_SECONDARY_BUTTON_STYLE);
 
-    Button submitItem = new Button("Submit Item");
+    Button submitItem = new Button(editItem == null ? "Submit Item" : "Submit Draft");
     submitItem.setMnemonicParsing(false);
     submitItem.getStyleClass().add("create-primary-btn");
     submitItem.setStyle(CREATE_PRIMARY_BUTTON_STYLE);
@@ -2144,6 +2527,29 @@ public class UserDashboardController extends BaseDashboardController {
             + (priceField.getText().isBlank() ? "0" : priceField.getText().trim()) + " "
             + (newValue == null ? "VND" : newValue)));
 
+    if (editItem != null) {
+      categoryBox.getSelectionModel().select(categoryEnumValue(editItem.category));
+      titleField.setText(editItem.name);
+      priceField.setText(stripCurrency(editItem.startingPrice));
+      sizeField.setText(attributeValue(editItem.attributes, "size_condition"));
+      artistField.setText(attributeValue(editItem.attributes, "artist"));
+      yearCreatedField.setText(attributeValue(editItem.attributes, "year_created"));
+      String currencyValue = attributeValue(editItem.attributes, "currency");
+      if (!currencyValue.isBlank() && currencyBox.getItems().contains(currencyValue.toUpperCase())) {
+        currencyBox.getSelectionModel().select(currencyValue.toUpperCase());
+      }
+      descriptionArea.setText(editItem.description);
+      rebuildCreateFileList(
+          fileListBox,
+          fileListScroll,
+          selectedFileLabel,
+          previewImage,
+          previewPlaceholder,
+          imageCounterLabel
+      );
+      refreshCreatePreviewImage(previewImage, previewPlaceholder, imageCounterLabel);
+    }
+
     browseButton.setOnAction(event -> chooseItemImages(
         selectedFileLabel,
         previewImage,
@@ -2163,13 +2569,13 @@ public class UserDashboardController extends BaseDashboardController {
     saveDraft.setOnAction(event -> submitCreateItem(
         true, categoryBox, titleField, descriptionArea, priceField,
         sizeField, artistField, yearCreatedField, currencyBox,
-        saveDraft, submitItem, messageLabel
+        saveDraft, submitItem, messageLabel, editItem
     ));
 
     submitItem.setOnAction(event -> submitCreateItem(
         false, categoryBox, titleField, descriptionArea, priceField,
         sizeField, artistField, yearCreatedField, currencyBox,
-        saveDraft, submitItem, messageLabel
+        saveDraft, submitItem, messageLabel, editItem
     ));
 
     detailsPanel.getChildren().addAll(
@@ -2527,7 +2933,8 @@ public class UserDashboardController extends BaseDashboardController {
                   ComboBox<String> currencyBox,
                   Button saveDraftButton,
                   Button submitItemButton,
-                  Label messageLabel) {
+                  Label messageLabel,
+                  SellerItemData editItem) {
     String title = safeTrim(titleField.getText());
     String category = categoryBox.getValue() == null ? "" : categoryBox.getValue().trim();
     BigDecimal price = parseCreateItemPrice(priceField.getText());
@@ -2567,13 +2974,14 @@ public class UserDashboardController extends BaseDashboardController {
     int sellerId = currentUser == null ? 0 : currentUser.getUserId();
     String currency = currencyBox.getValue() == null ? "VND" : currencyBox.getValue();
 
+    String status = draftMode ? "DRAFT" : "PENDING_REVIEW";
     String payload = fields(
         sellerId,
         category,
         title,
         safeTrim(descriptionArea.getText()),
         price.toPlainString(),
-        draftMode ? "DRAFT" : "PENDING_REVIEW",
+        status,
         "Timed Auction",
         safeTrim(sizeField.getText()),
         "",
@@ -2586,10 +2994,17 @@ public class UserDashboardController extends BaseDashboardController {
 
     showCreateMessage(
         messageLabel,
-        draftMode ? "Đang lưu draft item..." : "Đang submit item lên Pending Approval...",
+        editItem == null
+            ? (draftMode ? "Đang lưu draft item..." : "Đang submit item lên Pending Approval...")
+            : (draftMode ? "Đang cập nhật draft item..." : "Đang submit draft item lên Pending Approval..."),
         false
     );
-    createItemNetworkManager.send("CREATE_ITEM " + payload);
+
+    if (editItem == null) {
+      createItemNetworkManager.send("CREATE_ITEM " + payload);
+    } else {
+      createItemNetworkManager.send("USER_UPDATE_DRAFT_ITEM " + fields(editItem.itemId) + "|" + payload);
+    }
   }
 
   private void handleCreateItemServerMessage(String message) {
@@ -2610,11 +3025,47 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    if (message.startsWith("CREATE_ITEM_SUCCESS")) {
+    if (message.equals("USER_ITEMS_BEGIN")) {
+      incomingSellerItems = new ArrayList<>();
+      return;
+    }
+
+    if (message.startsWith("USER_ITEM ")) {
+      SellerItemData parsed = parseSellerItem(message.substring("USER_ITEM ".length()));
+      if (parsed != null) {
+        incomingSellerItems.add(parsed);
+      }
+      return;
+    }
+
+    if (message.equals("USER_ITEMS_END")) {
+      sellerItems.clear();
+      sellerItems.addAll(incomingSellerItems);
+      sellerItemsLoaded = true;
+      if ("myItems".equals(currentSectionKey)) {
+        renderWorkspace("myItems", activeFilter);
+        applySellerItemStatsIfAvailable();
+      }
+      return;
+    }
+
+    if (message.startsWith("USER_ITEMS_ERROR")) {
+      sellerItems.clear();
+      sellerItemsLoaded = true;
+      if ("myItems".equals(currentSectionKey)) {
+        renderWorkspace("myItems", activeFilter);
+      }
+      return;
+    }
+
+    if (message.startsWith("CREATE_ITEM_SUCCESS")
+        || message.startsWith("USER_UPDATE_DRAFT_SUCCESS")) {
       requestCreateListingMetadata();
       showTemporaryDetail(
-          "Create Listing",
-          "Tạo item thành công. Nếu submit item, admin sẽ thấy nó trong Pending Approval."
+          "My Items",
+          message.startsWith("USER_UPDATE_DRAFT_SUCCESS")
+              ? "Cập nhật draft item thành công."
+              : "Tạo item thành công. Nếu submit item, admin sẽ thấy nó trong Pending Approval."
       );
       if ("myItems".equals(currentSectionKey)) {
         showSection("myItems");
@@ -2622,9 +3073,49 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    if (message.startsWith("CREATE_ITEM_FAIL")) {
-      showTemporaryDetail("Create Listing failed", message);
+    if (message.startsWith("CREATE_ITEM_FAIL")
+        || message.startsWith("USER_UPDATE_DRAFT_FAIL")) {
+      showTemporaryDetail("My Items failed", message);
     }
+  }
+
+  private SellerItemData parseSellerItem(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 14) {
+      return null;
+    }
+
+    String itemId = safeField(fields, 0);
+    String category = normalizeCategoryLabel(safeField(fields, 2));
+    String name = fallback(safeField(fields, 3), "Item #" + itemId);
+    String description = safeField(fields, 4);
+    String startingPrice = formatMoney(safeField(fields, 5));
+    String status = prettyStatus(safeField(fields, 6));
+    String createdAt = shortTimestamp(safeField(fields, 7));
+    String auctionId = safeField(fields, 8);
+    String auctionStatus = fallback(safeField(fields, 9), "No auction");
+    String currentPrice = formatMoney(safeField(fields, 10));
+    int bidCount = parseIntOrDefault(safeField(fields, 11), 0);
+    String imagePayload = safeField(fields, 12);
+    String attributes = safeField(fields, 13);
+
+    return new SellerItemData(
+        itemId,
+        safeField(fields, 1),
+        category,
+        name,
+        description,
+        startingPrice,
+        status,
+        createdAt,
+        auctionId,
+        auctionStatus,
+        currentPrice,
+        bidCount,
+        firstImage(imagePayload),
+        imagePayload,
+        attributes
+    );
   }
 
   private void applySellerItemStatsIfAvailable() {
@@ -2934,6 +3425,52 @@ public class UserDashboardController extends BaseDashboardController {
     return value == null ? "" : value.trim();
   }
 
+  private String fileNameFromPath(String path) {
+    if (path == null || path.isBlank()) {
+      return "image";
+    }
+    String normalized = path.trim();
+    int slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+    return slash >= 0 && slash < normalized.length() - 1
+        ? normalized.substring(slash + 1)
+        : normalized;
+  }
+
+  private String attributeValue(String attributes, String key) {
+    if (attributes == null || attributes.isBlank() || key == null || key.isBlank()) {
+      return "";
+    }
+    String normalizedKey = normalize(key);
+    for (String line : attributes.split("\\R")) {
+      int colon = line.indexOf(':');
+      if (colon <= 0) {
+        continue;
+      }
+      String currentKey = normalize(line.substring(0, colon));
+      if (currentKey.equals(normalizedKey)) {
+        return line.substring(colon + 1).trim();
+      }
+    }
+    return "";
+  }
+
+  private String categoryEnumValue(String category) {
+    String normalized = normalize(category);
+    return switch (normalized) {
+      case "art" -> "ART";
+      case "vehicle" -> "VEHICLE";
+      case "electronic", "electronics" -> "ELECTRONIC";
+      default -> "ART";
+    };
+  }
+
+  private String stripCurrency(String formattedMoney) {
+    if (formattedMoney == null) {
+      return "";
+    }
+    return formattedMoney.replace("VND", "").replace("USD", "").trim();
+  }
+
   private void showTemporaryDetail(String title, String description) {
     if (surfaceTitleLabel != null) {
       surfaceTitleLabel.setText(title);
@@ -2981,6 +3518,7 @@ public class UserDashboardController extends BaseDashboardController {
     private final long secondsLeft;
     private final String badge;
     private final String imagePath;
+    private final String imagePayload;
     private final String detail;
     private final String status;
     private final String startTime;
@@ -3006,6 +3544,7 @@ public class UserDashboardController extends BaseDashboardController {
         long secondsLeft,
         String badge,
         String imagePath,
+        String imagePayload,
         String detail,
         String status,
         String startTime,
@@ -3029,6 +3568,7 @@ public class UserDashboardController extends BaseDashboardController {
       this.secondsLeft = secondsLeft;
       this.badge = badge;
       this.imagePath = imagePath;
+      this.imagePayload = imagePayload;
       this.detail = detail;
       this.status = status;
       this.startTime = startTime;
@@ -3038,6 +3578,57 @@ public class UserDashboardController extends BaseDashboardController {
       this.attributes = attributes;
       this.snipeWindowSeconds = snipeWindowSeconds;
       this.snipeExtensionSeconds = snipeExtensionSeconds;
+    }
+  }
+
+  private static class SellerItemData {
+    private final String itemId;
+    private final String sellerId;
+    private final String category;
+    private final String name;
+    private final String description;
+    private final String startingPrice;
+    private final String status;
+    private final String createdAt;
+    private final String auctionId;
+    private final String auctionStatus;
+    private final String currentPrice;
+    private final int bidCount;
+    private final String imagePath;
+    private final String imagePayload;
+    private final String attributes;
+
+    private SellerItemData(
+        String itemId,
+        String sellerId,
+        String category,
+        String name,
+        String description,
+        String startingPrice,
+        String status,
+        String createdAt,
+        String auctionId,
+        String auctionStatus,
+        String currentPrice,
+        int bidCount,
+        String imagePath,
+        String imagePayload,
+        String attributes) {
+      this.itemId = itemId;
+      this.sellerId = sellerId;
+      this.category = category;
+      this.name = name;
+      this.description = description;
+      this.startingPrice = startingPrice;
+      this.status = status;
+      this.createdAt = createdAt;
+      this.auctionId = auctionId == null ? "" : auctionId;
+      this.auctionStatus = auctionStatus == null ? "" : auctionStatus;
+      this.currentPrice = currentPrice;
+      this.bidCount = bidCount;
+      this.imagePath = imagePath;
+      this.imagePayload = imagePayload == null ? "" : imagePayload;
+      this.attributes = attributes == null ? "" : attributes;
     }
   }
 

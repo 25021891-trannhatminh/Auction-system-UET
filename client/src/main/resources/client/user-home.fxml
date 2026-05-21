@@ -146,15 +146,6 @@
                                             </children>
                                         </VBox>
 
-                                        <VBox spacing="5.0" styleClass="activity-card">
-                                            <children>
-                                                <Label styleClass="placeholder-title" text="Recent Activity" />
-                                                <Label fx:id="activityLine1" styleClass="activity-line" text="Auction data loads from database." wrapText="true" />
-                                                <Label fx:id="activityLine2" styleClass="activity-line" text="No fake auction activity is shown." wrapText="true" />
-                                                <Label fx:id="activityLine3" styleClass="activity-line" text="Create listings and admin auction rooms to populate this view." wrapText="true" />
-                                                <Label fx:id="activityLine4" styleClass="activity-line" text="Place Bid is disabled until bidding flow is wired." wrapText="true" />
-                                            </children>
-                                        </VBox>
                                     </children>
                                 </VBox>
                             </children>

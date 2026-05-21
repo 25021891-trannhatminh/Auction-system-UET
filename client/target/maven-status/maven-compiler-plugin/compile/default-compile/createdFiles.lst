@@ -7,6 +7,7 @@ client\controller\UserDashboardController$UserRow.class
 client\service\NetworkManager.class
 client\Launcher.class
 client\service\AuthService.class
+client\controller\UserDashboardController$SellerItemData.class
 client\controller\UserDashboardController.class
 client\SceneNavigator.class
 client\controller\UserDashboardController$AuctionCardData.class

@@ -1948,3 +1948,206 @@
 .admin-page-title {
     -fx-padding: 0 0 4 6;
 }
+
+/* User dashboard darker navigation + real auction marketplace/detail views */
+.user-dashboard-root .sidebar-shell {
+    -fx-background-color: linear-gradient(to bottom, #0e2c26, #061714);
+    -fx-border-color: rgba(209, 177, 93, 0.10);
+    -fx-border-radius: 24;
+}
+
+.user-dashboard-root .profile-card,
+.user-dashboard-root .sidebar-mini-card {
+    -fx-background-color: rgba(255, 255, 255, 0.038);
+    -fx-border-color: rgba(255, 255, 255, 0.055);
+    -fx-border-radius: 20;
+}
+
+.auction-market-card {
+    -fx-background-color: #111111;
+    -fx-background-radius: 24;
+    -fx-border-color: #292929;
+    -fx-border-radius: 24;
+    -fx-padding: 12;
+}
+
+.auction-market-card:hover {
+    -fx-border-color: rgba(209, 177, 93, 0.44);
+    -fx-background-color: #151515;
+}
+
+.auction-market-image-wrap {
+    -fx-background-color: #070707;
+    -fx-background-radius: 18;
+    -fx-border-color: #262626;
+    -fx-border-radius: 18;
+    -fx-alignment: center;
+}
+
+.auction-market-badge,
+.auction-market-time {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.auction-market-time {
+    -fx-background-color: #202020;
+    -fx-border-color: #333333;
+    -fx-text-fill: #f7f3e9;
+}
+
+.auction-market-content {
+    -fx-padding: 2 0 0 0;
+}
+
+.auction-market-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.auction-market-meta,
+.auction-market-label,
+.auction-market-small-fact {
+    -fx-text-fill: rgba(247, 243, 233, 0.62);
+    -fx-font-size: 10px;
+}
+
+.auction-market-label {
+    -fx-font-weight: bold;
+}
+
+.auction-market-price {
+    -fx-text-fill: #d1b15d;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.auction-market-bid-btn {
+    -fx-background-color: #2d2d2d;
+    -fx-background-radius: 16;
+    -fx-text-fill: rgba(247, 243, 233, 0.52);
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 11 14 11 14;
+}
+
+.auction-market-view-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: #3a3a3a;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 11 14 11 14;
+    -fx-cursor: hand;
+}
+
+.auction-market-view-btn:hover {
+    -fx-border-color: #d1b15d;
+    -fx-text-fill: #d1b15d;
+}
+
+.auction-detail-shell {
+    -fx-padding: 4 0 0 0;
+}
+
+.auction-detail-media-column,
+.auction-detail-info-column,
+.auction-detail-card,
+.auction-detail-price-panel {
+    -fx-background-color: #101010;
+    -fx-background-radius: 24;
+    -fx-border-color: #262626;
+    -fx-border-radius: 24;
+    -fx-padding: 16;
+}
+
+.auction-detail-media-column {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.auction-detail-info-column {
+    -fx-background-color: #0f0f0f;
+}
+
+.auction-detail-main-image {
+    -fx-border-color: rgba(209, 177, 93, 0.18);
+}
+
+.auction-detail-thumb {
+    -fx-cursor: hand;
+    -fx-opacity: 0.88;
+}
+
+.auction-detail-thumb:hover {
+    -fx-opacity: 1;
+}
+
+.auction-detail-heading,
+.auction-detail-section-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-heading {
+    -fx-font-size: 18px;
+}
+
+.auction-detail-section-title {
+    -fx-font-size: 13px;
+}
+
+.auction-detail-text {
+    -fx-text-fill: rgba(247, 243, 233, 0.68);
+    -fx-font-size: 11px;
+    -fx-line-spacing: 2px;
+}
+
+.auction-detail-countdown {
+    -fx-background-color: #151515;
+    -fx-background-radius: 22;
+    -fx-border-color: #2c2c2c;
+    -fx-border-radius: 22;
+    -fx-padding: 20 18 20 18;
+    -fx-alignment: center;
+}
+
+.auction-detail-countdown-unit {
+    -fx-alignment: center;
+    -fx-min-width: 70;
+}
+
+.auction-detail-countdown-number {
+    -fx-text-fill: #ff5b64;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-countdown-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.64);
+    -fx-font-size: 10px;
+}
+
+.auction-detail-countdown-separator {
+    -fx-text-fill: rgba(247, 243, 233, 0.70);
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-facts .auction-live-fact {
+    -fx-background-color: #171717;
+    -fx-border-color: #2a2a2a;
+}
+
+.auction-detail-price {
+    -fx-text-fill: #d1b15d;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}

@@ -216,6 +216,16 @@ public class ClientHandler implements Runnable {
                 itemCommandHandler.sendUserItemStats(request.length > 1 ? request[1] : "", this.userId);
                 break;
 
+            case "USER_LIST_ITEMS":
+                itemCommandHandler.sendUserItems(request.length > 1 ? request[1] : "", this.userId);
+                break;
+
+            case "USER_UPDATE_DRAFT_ITEM":
+                itemCommandHandler.handleUpdateDraftItem(msg.length() > "USER_UPDATE_DRAFT_ITEM".length()
+                    ? msg.substring("USER_UPDATE_DRAFT_ITEM".length()).trim()
+                    : "", this.userId);
+                break;
+
             case "ADMIN_LIST_USERS":
                 sendAdminUsers();
                 break;
