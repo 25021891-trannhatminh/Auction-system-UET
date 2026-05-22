@@ -4,7 +4,7 @@ import server.common.ProtocolConstants;
 import server.common.entity.User;
 import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
-import server.common.model.BidResultDTO;
+import server.network.ClientManager;
 import server.service.AuctionService;
 
 import java.math.BigDecimal;
@@ -22,18 +22,20 @@ public class BidHandler {
 
     /**
      * Xử lý lệnh BID từ client.
-     * Format gói tin từ client: BID auctionId amount
-     * * @param request Mảng lệnh đã được split bằng dấu cách (" ") từ ClientHandler
-     * @param userId ID người dùng lấy từ Session của ClientHandler
-     * @return Chuỗi phản hồi chuẩn Protocol do ResponseBuilder sinh ra
+     * Format gói tin: BID auctionId amount
+     *
+     * @param request  Mảng lệnh đã được tách bởi ClientHandler
+     * @param userId   ID người dùng lấy từ session
+     * @param username Tên hiển thị (dùng cho log hoặc mở rộng sau)
+     * @return Chuỗi phản hồi chuẩn Protocol qua ResponseBuilder
      */
     public String handleBid(String[] request, int userId, String username) {
-        // 1. Kiểm tra trạng thái đăng nhập (Giống logic AdminHandler của nhóm)
+        // 1. Kiểm tra đăng nhập
         if (userId <= 0) {
             return ResponseBuilder.bidFail(ProtocolConstants.FAIL_NOT_LOGGED_IN);
         }
 
-        // 2. Kiểm tra độ dài mảng tham số (Format: [0]=BID, [1]=auctionId, [2]=amount)
+        // 2. Kiểm tra định dạng tham số
         if (request == null || request.length < 3) {
             return ResponseBuilder.bidFail(ProtocolConstants.FAIL_INVALID_FORMAT);
         }
@@ -49,27 +51,29 @@ public class BidHandler {
             int auctionId = Integer.parseInt(auctionIdStr);
             BigDecimal amount = new BigDecimal(amountStr);
 
-            // Kiểm tra số tiền cơ bản đầu va
+            // Kiểm tra số tiền dương
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return ResponseBuilder.bidFail("AMOUNT_MUST_BE_POSITIVE");
             }
 
-            // 3. Lấy thông tin đối tượng User từ Service
+            // 3. Kiểm tra trạng thái online
+            if (!ClientManager.isOnline(userId)) {
+                return ResponseBuilder.bidFail("USER_OFFLINE");
+            }
+
+            // 4. Kiểm tra user tồn tại trong RAM cache
             User bidder = auctionService.findUserById(String.valueOf(userId));
             if (bidder == null) {
                 return ResponseBuilder.bidFail("USER_NOT_FOUND");
             }
 
-            // 4. Gọi hàm "điều phối ở Service (Gộp cả thủ công và auto-bid )
-            // Hàm placeBid của Service đang nhận vào String đấu giá, ta truyền auctionIdStr
-            BidResultDTO result = auctionService.placeBid(auctionIdStr, bidder, amount);
+            // 5. Gọi logic đặt giá – auctionService.placeBid trả về boolean
+            boolean success = auctionService.placeBid(auctionId, userId, amount, false);
 
-            // 5. Trả về response thành công thông qua ResponseBuilder của nhóm
-            if (result != null && result.getManualTransaction() != null) {
+            // 6. Phản hồi kết quả
+            if (success) {
                 return ResponseBuilder.bidSuccess(auctionId, amount);
-                // Sinh ra chuỗi: "BID_SUCCESS auctionId amount"
             }
-
             return ResponseBuilder.bidFail("BID_FAILED");
 
         } catch (NumberFormatException e) {
@@ -77,8 +81,9 @@ public class BidHandler {
         } catch (AuctionClosedException e) {
             return ResponseBuilder.bidFail("AUCTION_CLOSED");
         } catch (InvalidBidException e) {
-            // Lấy lý do lỗi nghiệp vụ cụ thể từ Core RAM (ví dụ: viết hoa và nối dấu _)
-            String reason = e.getMessage() != null ? e.getMessage().toUpperCase().replace(" ", "_") : "INVALID_BID";
+            String reason = e.getMessage() != null
+                ? e.getMessage().toUpperCase().replace(" ", "_")
+                : "INVALID_BID";
             return ResponseBuilder.bidFail(reason);
         } catch (Exception e) {
             return ResponseBuilder.bidFail("SYSTEM_ERROR");

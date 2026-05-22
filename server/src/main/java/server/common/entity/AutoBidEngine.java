@@ -1,12 +1,14 @@
 package server.common.entity;
 
 
+import java.util.List;
 import server.common.entity.exception.InvalidBidException;
 
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import server.service.BidTransactionService;
 
 /*
   AutoBidEngine — Xử lý đấu giá tự động (Auto-Bidding).
@@ -161,38 +163,31 @@ public class AutoBidEngine {
     }
 
     /* Xử lý return BidTransaction */
-    private BidTransaction executeWinnerBidTransaction(Auction auction,
-                                            AutoBidConfig winner,
-                                            AutoBidConfig secondWinner) {
-    // Kiểm tra điều kiện auto-bid
+    private BidTransaction executeWinnerBidTransaction(Auction auction, AutoBidConfig winner, AutoBidConfig secondWinner) {
         BigDecimal amountBidWinner = calculateWinnerAmount(auction.getCurrentPrice(), winner, secondWinner);
-
         if (amountBidWinner.compareTo(auction.getCurrentPrice()) <= 0) {
-            // Đánh dấu winner config là COMPLETED nếu không còn canBid
             winner.complete();
-//                synchronized (this) {
-//                    PriorityQueue<AutoBidConfig> q = AutoBidManager.get(auctionId);
-//                    if (q != null) q.removeIf(c -> c.getBidderId().equals(winner.getBidderId()));
-//                }
             return null;
         }
-        // Lấy User object để đặt giá
         User winnerBidder = getUser(auction.getId(), winner.getBidderId());
         if (winnerBidder == null) {
-            System.err.printf("[AutoBidEngine] Winner bidder object not found for id=%s%n",
-                winner.getBidderId());
+            System.err.printf("[AutoBidEngine] Winner bidder object not found for id=%s%n", winner.getBidderId());
             return null;
         }
-        try {
-            BidTransaction transaction = auction.placeBid(winnerBidder, amountBidWinner, true);
-            // Nếu winner đã dùng hết maxBid → đánh dấu COMPLETED
-            if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) winner.complete();
 
-            return transaction;
+        // CHUYỂN ĐỔI: Ủy quyền cho Service điều phối giao dịch gom chung DB Lock và RAM Lock
+        int auctionId = Integer.parseInt(auction.getId());
+        int bidderId = Integer.parseInt(winner.getBidderId());
+        BidTransactionService txService = new server.service.BidTransactionService();
 
-        } catch (InvalidBidException e) {
-            System.err.printf("[AutoBidEngine] Auto-bid failed for %s: %s%n",
-                winnerBidder.getUsername(), e.getMessage());
+        BidTransaction autoTx = txService.executePlaceBidFlow(auctionId, bidderId, amountBidWinner, true);
+        if (autoTx != null) {
+            if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) { winner.complete(); }
+            // Lấy ra bản ghi transaction mới nhất vừa được thêm vào lịch sử của Auction trong RAM để trả về
+            List<BidTransaction> history = auction.getBidHistory();
+            return history.isEmpty() ? null : history.get(0);
+        } else {
+            System.err.printf("[AutoBidEngine] Auto-bid failed for %s tại mức giá %s%n", winnerBidder.getUsername(), amountBidWinner);
             return null;
         }
     }

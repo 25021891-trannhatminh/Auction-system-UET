@@ -3,6 +3,7 @@ server\common\model\AuctionDTO.class
 server\common\enums\AuctionStatus.class
 server\common\model\WalletUpdateEvent.class
 server\service\listeners\PaymentTriggerObserver.class
+server\common\AuctionConstants.class
 server\common\entity\factory\ItemFactory$1.class
 server\database\DBConnection.class
 server\network\AuctionServer.class
@@ -26,6 +27,7 @@ server\common\enums\BidStatus.class
 server\common\model\BidHistoryDTO.class
 server\network\ClientManager.class
 server\common\model\UserDTO.class
+server\handler\BidHandler.class
 server\repository\ItemDAO.class
 server\common\entity\User.class
 server\common\model\ItemImageDTO.class

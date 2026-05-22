@@ -5,11 +5,11 @@ import org.slf4j.LoggerFactory;
 
 import server.common.entity.Auction;
 import server.common.entity.Notification;
+import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.NotificationType;
 import server.common.enums.PaymentStatus;
 import server.common.enums.WalletTransactionType;
-import server.common.model.NotificationEvent;
 import server.common.model.PaymentDTO;
 import server.common.model.WalletDTO;
 import server.common.model.WalletUpdateEvent;
@@ -22,454 +22,296 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
 
-/**
- * PaymentService — điều phối toàn bộ vòng đời thanh toán.
- *
- * <h2>Nguyên tắc cốt lõi</h2>
- * <p>Mọi thao tác tài chính nằm trong <b>một DB transaction duy nhất</b> dùng
- * chung 1 {@link Connection}. Nếu bất kỳ bước nào thất bại → rollback toàn bộ.
- * Chỉ sau khi commit thành công mới push notification và WALLET_UPDATE realtime.</p>
- *
- * <h2>Phân công với DAOs</h2>
- * <ul>
- *   <li>{@link WalletDAO#lockByUserId} — lock row trước khi đọc balance (FOR UPDATE)</li>
- *   <li>{@link WalletDAO#withdrawInTx} / {@link WalletDAO#depositInTx} — thao tác tiền</li>
- *   <li>{@link WalletTransactionDAO#logTransactionInTx} — ghi audit log</li>
- *   <li>{@link PaymentDAO#completePaymentInTx} / {@link PaymentDAO#refundPaymentInTx} — cập nhật status</li>
- * </ul>
- * Tất cả nhận chung 1 Connection từ PaymentService → đảm bảo atomic.
- *
- * <h2>Flow processPayment</h2>
- * <pre>
- *  VALIDATE (ngoài transaction)
- *    ├─ payment tồn tại và đang PENDING
- *    ├─ buyer có ví, seller có ví
- *    └─ buyer đủ số dư (early check — trả lỗi nhanh)
- *
- *  BEGIN TRANSACTION
- *    ├─ lockByUserId(buyer)  ← FOR UPDATE — chặn concurrent write
- *    ├─ lockByUserId(seller) ← FOR UPDATE
- *    ├─ withdrawInTx(buyer)  ← check balance >= amount lần 2 tại SQL
- *    ├─ depositInTx(seller)
- *    ├─ logTransactionInTx(buyer,  PAYMENT, tiền ra)
- *    ├─ logTransactionInTx(seller, PAYMENT, tiền vào)
- *    └─ completePaymentInTx()  ← AND status = PENDING chặn double-processing
- *  COMMIT
- *
- *  SAU COMMIT
- *    ├─ PUSH_NOTIF  → buyer  (Payment Successful)
- *    ├─ PUSH_NOTIF  → seller (Payment Received)
- *    ├─ WALLET_UPDATE → buyer  (số dư mới — cập nhật UI ngay)
- *    └─ WALLET_UPDATE → seller (số dư mới — cập nhật UI ngay)
- * </pre>
- */
 public class PaymentService {
 
   private static final Logger logger = LoggerFactory.getLogger(PaymentService.class);
 
-  // ============================================================
-  // Dependencies — mỗi DAO chỉ lo đúng bảng của nó
-  // ============================================================
-
   private final PaymentDAO           paymentDAO    = new PaymentDAO();
   private final WalletDAO            walletDAO     = new WalletDAO();
   private final WalletTransactionDAO walletTxDAO   = new WalletTransactionDAO();
-  private final NotificationDAO      notifDAO      = new NotificationDAO();
+  private final NotificationService  notificationService = new NotificationService();
+  private final AuctionDAO           auctionDAO    = new AuctionDAO();
 
-  // ============================================================
-  // Public API
-  // ============================================================
+  // ==================== PUBLIC API ====================
 
-  /**
-   * Xử lý thanh toán cho phiên đấu giá.
-   *
-   * @param auctionId ID phiên đấu giá
-   * @param itemName  Tên vật phẩm (dùng trong nội dung thông báo)
-   * @return {@code true} nếu thanh toán hoàn tất thành công
-   */
-  public boolean processPayment(int auctionId, String itemName) {
-
-    // ── Validate payment record ──────────────────────────────────────────
-    PaymentDTO payment = paymentDAO.getPaymentByAuctionId(auctionId);
-    if (payment == null) {
-      logger.warn("processPayment() — No payment record for auctionId={}", auctionId);
-      return false;
-    }
-    if (payment.getStatus() != PaymentStatus.PENDING) {
-      logger.warn("processPayment() — Payment {} is {} (expected PENDING)",
-          payment.getPaymentId(), payment.getStatus());
-      return false;
-    }
-
-    int        buyerId   = payment.getBuyerId();
-    int        sellerId  = payment.getSellerId();
-    int        paymentId = payment.getPaymentId();
-    BigDecimal amount    = payment.getAmount();
-
-    // ── Validate ví tồn tại (ngoài transaction — early check) ────────────
-    WalletDTO buyerWalletCheck  = walletDAO.getByUserId(buyerId);
-    WalletDTO sellerWalletCheck = walletDAO.getByUserId(sellerId);
-
-    if (buyerWalletCheck == null) {
-      logger.error("processPayment() — Buyer {} has no wallet", buyerId);
-      return false;
-    }
-    if (sellerWalletCheck == null) {
-      logger.error("processPayment() — Seller {} has no wallet", sellerId);
-      return false;
-    }
-
-    // Early check số dư — trả lỗi nhanh trước khi mở transaction
-    if (buyerWalletCheck.getBalance().compareTo(amount) < 0) {
-      logger.warn("processPayment() — Buyer {} insufficient balance: have={}, need={}",
-          buyerId, buyerWalletCheck.getBalance(), amount);
-      // Đánh dấu FAILED (standalone — không cần transaction vì không có tiền nào di chuyển)
-      paymentDAO.failPayment(paymentId);
-      pushNotif(buyerId,
-          "Payment Failed",
-          String.format("Insufficient balance to pay %s for [%s]. Please top up your wallet.",
-              amount.toPlainString(), itemName),
-          NotificationType.PAYMENT_DUE, auctionId);
-      return false;
-    }
-
-    // ── Transaction ──────────────────────────────────────────────────────
-    Connection conn = null;
-    WalletDTO  buyerWalletLocked  = null;
-    WalletDTO  sellerWalletLocked = null;
-
-    try {
-      conn = DBConnection.getConnection();
-      conn.setAutoCommit(false);
-
-      // Lock cả 2 ví TRƯỚC khi đọc balance — tránh race condition
-      // Thứ tự lock buyerId < sellerId để tránh deadlock khi 2 transaction nghịch chiều
-      if (buyerId < sellerId) {
-        buyerWalletLocked  = walletDAO.lockByUserId(conn, buyerId);
-        sellerWalletLocked = walletDAO.lockByUserId(conn, sellerId);
-      } else {
-        sellerWalletLocked = walletDAO.lockByUserId(conn, sellerId);
-        buyerWalletLocked  = walletDAO.lockByUserId(conn, buyerId);
-      }
-
-      if (buyerWalletLocked == null || sellerWalletLocked == null) {
-        conn.rollback();
-        logger.error("processPayment() — Could not lock wallets: buyer={}, seller={}",
-            buyerWalletLocked, sellerWalletLocked);
-        return false;
-      }
-
-      int buyerWalletId  = buyerWalletLocked.getWalletId();
-      int sellerWalletId = sellerWalletLocked.getWalletId();
-
-      // Trừ tiền buyer — check balance >= amount lần 2 tại SQL (chặn concurrent race)
-      boolean withdrawn = walletDAO.withdrawInTx(conn, buyerWalletId, amount);
-      if (!withdrawn) {
-        conn.rollback();
-        logger.warn("processPayment() — Concurrent withdraw failed: buyerWalletId={}", buyerWalletId);
-        return false;
-      }
-
-      // Cộng tiền seller
-      walletDAO.depositInTx(conn, sellerWalletId, amount);
-
-      // Ghi audit log buyer (tiền ra)
-      walletTxDAO.logTransactionInTx(conn,
-          buyerWalletId, buyerId,
-          WalletTransactionType.PAYMENT,
-          amount,
-          auctionId,
-          "Payment for auction #" + auctionId + " — " + itemName);
-
-      // Ghi audit log seller (tiền vào)
-      walletTxDAO.logTransactionInTx(conn,
-          sellerWalletId, sellerId,
-          WalletTransactionType.PAYMENT,
-          amount,
-          auctionId,
-          "Received payment for auction #" + auctionId + " — " + itemName);
-
-      // Cập nhật payment → COMPLETED (AND status = PENDING chặn double-processing)
-      boolean completed = paymentDAO.completePaymentInTx(conn, paymentId);
-      if (!completed) {
-        conn.rollback();
-        logger.warn("processPayment() — Payment {} already processed (concurrent)", paymentId);
-        return false;
-      }
-
-      conn.commit();
-      logger.info("processPayment() — SUCCESS auctionId={}, buyer={}, seller={}, amount={}",
-          auctionId, buyerId, sellerId, amount);
-
-    } catch (SQLException e) {
-      logger.error("processPayment() — DB error for auctionId={}", auctionId, e);
-      rollbackQuietly(conn);
-      return false;
-    } finally {
-      closeQuietly(conn);
-    }
-
-    // ── Sau commit: push realtime ─────────────────────────────────────────
-    BigDecimal newBuyerBalance  = buyerWalletLocked.getBalance().subtract(amount);
-    BigDecimal newSellerBalance = sellerWalletLocked.getBalance().add(amount);
-
-    pushNotif(buyerId,
-        "Payment Successful 🎉",
-        String.format("You paid %s for [%s]. Enjoy your win!", amount.toPlainString(), itemName),
-        NotificationType.PAYMENT_DUE, auctionId);
-
-    pushNotif(sellerId,
-        "Payment Received 💰",
-        String.format("You received %s for [%s].", amount.toPlainString(), itemName),
-        NotificationType.PAYMENT_RECEIVED, auctionId);
-
-    pushWalletUpdate(buyerId,  newBuyerBalance);
-    pushWalletUpdate(sellerId, newSellerBalance);
-
-    return true;
+  /** Idempotency check – dùng cho Observer, tránh tạo trùng payment record */
+  public boolean isPaymentExistsForAuction(int auctionId) {
+    return paymentDAO.existsByAuctionId(auctionId);
   }
 
   /**
-   * Hoàn tiền cho buyer (COMPLETED → REFUNDED).
-   * Seller bị trừ tiền, buyer được cộng tiền — trong 1 transaction duy nhất.
-   *
-   * @param auctionId ID phiên đấu giá
-   * @param itemName  Tên vật phẩm
-   * @return {@code true} nếu hoàn tiền thành công
-   */
-  public boolean refundPayment(int auctionId, String itemName) {
-
-    // ── Validate ─────────────────────────────────────────────────────────
-    PaymentDTO payment = paymentDAO.getPaymentByAuctionId(auctionId);
-    if (payment == null) {
-      logger.warn("refundPayment() — No payment record for auctionId={}", auctionId);
-      return false;
-    }
-    if (payment.getStatus() != PaymentStatus.COMPLETED) {
-      logger.warn("refundPayment() — Payment {} is {} (expected COMPLETED)",
-          payment.getPaymentId(), payment.getStatus());
-      return false;
-    }
-
-    int        buyerId   = payment.getBuyerId();
-    int        sellerId  = payment.getSellerId();
-    int        paymentId = payment.getPaymentId();
-    BigDecimal amount    = payment.getAmount();
-
-    WalletDTO buyerWalletCheck  = walletDAO.getByUserId(buyerId);
-    WalletDTO sellerWalletCheck = walletDAO.getByUserId(sellerId);
-
-    if (buyerWalletCheck == null || sellerWalletCheck == null) {
-      logger.error("refundPayment() — Missing wallet: buyerId={}, sellerId={}", buyerId, sellerId);
-      return false;
-    }
-    if (sellerWalletCheck.getBalance().compareTo(amount) < 0) {
-      logger.warn("refundPayment() — Seller {} insufficient balance for refund: have={}, need={}",
-          sellerId, sellerWalletCheck.getBalance(), amount);
-      return false;
-    }
-
-    // ── Transaction ──────────────────────────────────────────────────────
-    Connection conn = null;
-    WalletDTO  buyerWalletLocked  = null;
-    WalletDTO  sellerWalletLocked = null;
-
-    try {
-      conn = DBConnection.getConnection();
-      conn.setAutoCommit(false);
-
-      // =========================================================================
-      // CHỐNG DEADLOCK BẰNG CƠ CHẾ SẮP XẾP THỨ TỰ KHÓA (LOCK ORDERING)
-      // -------------------------------------------------------------------------
-      // Mục đích: Ép tất cả các luồng giao dịch đồng thời phải chiếm khóa (Lock)
-      // các tài khoản theo cùng một thứ tự ID tăng dần, triệt tiêu vòng lặp chờ nhau.
-      //
-      // Ví dụ kịch bản lỗi nếu KHÔNG sắp xếp (Mặc định khóa Buyer trước):
-      //   - Luồng 1 (A chuyển tiền cho B): Khóa Buyer A -> Đợi khóa Seller B
-      //   - Luồng 2 (B chuyển tiền cho A): Khóa Buyer B -> Đợi khóa Seller A
-      //   ==> KẾT QUẢ: Hai luồng đứng đợi nhau mãi mãi -> Sập Connection Pool.
-      //
-      // Giải pháp (Cố định thứ tự): Nếu A < B, cả Luồng 1 và Luồng 2 đều phải
-      // ưu tiên tranh chấp khóa tài khoản A trước. Luồng nào đến sau sẽ bị chặn (Block)
-      // ngay từ bước 1, luồng đến trước xử lý xong xuôi sẽ giải phóng cho luồng sau.
-      // =========================================================================
-      if (buyerId < sellerId) {
-        buyerWalletLocked  = walletDAO.lockByUserId(conn, buyerId);
-        sellerWalletLocked = walletDAO.lockByUserId(conn, sellerId);
-      } else {
-        sellerWalletLocked = walletDAO.lockByUserId(conn, sellerId);
-        buyerWalletLocked  = walletDAO.lockByUserId(conn, buyerId);
-      }
-
-      if (buyerWalletLocked == null || sellerWalletLocked == null) {
-        conn.rollback();
-        logger.error("refundPayment() — Could not lock wallets");
-        return false;
-      }
-
-      int buyerWalletId  = buyerWalletLocked.getWalletId();
-      int sellerWalletId = sellerWalletLocked.getWalletId();
-
-      // Trừ tiền seller
-      boolean withdrawn = walletDAO.withdrawInTx(conn, sellerWalletId, amount);
-      if (!withdrawn) {
-        conn.rollback();
-        logger.warn("refundPayment() — Seller {} concurrent withdraw failed", sellerId);
-        return false;
-      }
-
-      // Cộng tiền buyer
-      walletDAO.depositInTx(conn, buyerWalletId, amount);
-
-      // Audit log seller (tiền ra)
-      walletTxDAO.logTransactionInTx(conn,
-          sellerWalletId, sellerId,
-          WalletTransactionType.REFUND,
-          amount,
-          auctionId,
-          "Refund issued for auction #" + auctionId + " — " + itemName);
-
-      // Audit log buyer (tiền vào)
-      walletTxDAO.logTransactionInTx(conn,
-          buyerWalletId, buyerId,
-          WalletTransactionType.REFUND,
-          amount,
-          auctionId,
-          "Refund received for auction #" + auctionId + " — " + itemName);
-
-      // COMPLETED → REFUNDED
-      boolean refunded = paymentDAO.refundPaymentInTx(conn, paymentId);
-      if (!refunded) {
-        conn.rollback();
-        logger.warn("refundPayment() — Payment {} already refunded (concurrent)", paymentId);
-        return false;
-      }
-
-      conn.commit();
-      logger.info("refundPayment() — SUCCESS auctionId={}, buyer={}, seller={}, amount={}",
-          auctionId, buyerId, sellerId, amount);
-
-    } catch (SQLException e) {
-      logger.error("refundPayment() — DB error for auctionId={}", auctionId, e);
-      rollbackQuietly(conn);
-      return false;
-    } finally {
-      closeQuietly(conn);
-    }
-
-    // ── Sau commit: push realtime ─────────────────────────────────────────
-    BigDecimal newBuyerBalance  = buyerWalletLocked.getBalance().add(amount);
-    BigDecimal newSellerBalance = sellerWalletLocked.getBalance().subtract(amount);
-
-    pushNotif(buyerId,
-        "Refund Received 💸",
-        String.format("You received a refund of %s for [%s].", amount.toPlainString(), itemName),
-        NotificationType.SYSTEM, auctionId);
-
-    pushNotif(sellerId,
-        "Refund Issued",
-        String.format("A refund of %s was deducted for [%s].", amount.toPlainString(), itemName),
-        NotificationType.SYSTEM, auctionId);
-
-    pushWalletUpdate(buyerId,  newBuyerBalance);
-    pushWalletUpdate(sellerId, newSellerBalance);
-
-    return true;
-  }
-
-
-  /**
-   * Tạo bản ghi Payment ở trạng thái PENDING khi auction kết thúc có người thắng.
-   * Được gọi từ PaymentTriggerObserver hoặc AuctionService.onAuctionClosed()
+   * Tạo bản ghi PENDING payment. Chỉ gọi khi auction kết thúc có người thắng.
+   * Idempotent: kiểm tra exists trước khi tạo.
    */
   public boolean createPendingPayment(int auctionId, String itemName) {
+    Optional<Auction> opt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
+    if (opt.isEmpty()) {
+      logger.warn("createPendingPayment() – Auction {} not found", auctionId);
+      return false;
+    }
+
+    Auction auction = opt.get();
+
+    // 1. Lấy thông tin người thắng (nếu không có → không tạo payment)
+    User winner = auction.getCurrentLeader();
+    if (winner == null) {
+      logger.warn("createPendingPayment() – No winner for auction {}", auctionId);
+      return false;
+    }
+
+    // 2. Parse buyerId và sellerId từ String sang int (an toàn)
+    int buyerId, sellerId;
     try {
-      // Lấy thông tin auction để lấy winner và seller
-      AuctionDAO auctionDAO = new AuctionDAO();
-      Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
-      Auction auction ;
-      if (auctionOpt.isPresent()) {
-        auction = auctionOpt.get();
-      } else {
-        auction = auctionDAO.getById(auctionId);
-        if (auction == null) {
-          logger.warn("createPendingPayment - Auction not found: {}", auctionId);
-          return false;
-        }
-        AuctionManager.getInstance().loadAuction(auction);
-      }
+      buyerId = Integer.parseInt(winner.getId());
+      sellerId = Integer.parseInt(auction.getSellerId());
+    } catch (NumberFormatException e) {
+      logger.error("createPendingPayment() – Invalid ID format. WinnerId: {}, SellerId: {}",
+          winner.getId(), auction.getSellerId());
+      return false;
+    }
 
+    if (buyerId <= 0 || sellerId <= 0) {
+      logger.warn("createPendingPayment() – Invalid buyer/seller for auction {}", auctionId);
+      return false;
+    }
 
-      if (auction.getCurrentLeader() == null) {
-        logger.warn("createPendingPayment - No winner for auction {}", auctionId);
+    // 3. Idempotency check
+    if (isPaymentExistsForAuction(auctionId)) {
+      logger.info("createPendingPayment() – Payment already exists for auction {}", auctionId);
+      return true;   // Idempotent: coi như thành công
+    }
+
+    // 4. Tạo payment PENDING với amount = currentPrice (giá cuối)
+    BigDecimal finalPrice = auction.getCurrentPrice();
+    return paymentDAO.createPayment(auctionId, buyerId, sellerId, finalPrice);
+  }
+
+  /**
+   * Xử lý thanh toán từ buyer cho auction (PENDING → COMPLETED).
+   * Sử dụng transaction + lock để chống xử lý trùng.
+   */
+  public boolean processPayment(int auctionId, String itemName) {
+    Connection conn = null;
+    try {
+      conn = DBConnection.getConnection();
+      conn.setAutoCommit(false);
+
+      // 1. Lock & validate payment PENDING
+      PaymentDTO payment = lockAndVerifyPayment(conn, auctionId, PaymentStatus.PENDING);
+      if (payment == null) {
+        conn.rollback();
         return false;
       }
 
-      int buyerId = Integer.parseInt(auction.getCurrentLeader().getId());
-      int sellerId = Integer.parseInt(auction.getSellerId());
-      BigDecimal amount = auction.getCurrentPrice();
+      int buyerId   = payment.getBuyerId();
+      int sellerId  = payment.getSellerId();
+      BigDecimal amount = payment.getAmount();
 
-      boolean created = paymentDAO.createPayment(auctionId, buyerId, sellerId, amount);
+      // 2. Lock ví buyer & seller
+      WalletDTO[] wallets = lockWallets(conn, buyerId, sellerId);
+      if (wallets == null) {
+        conn.rollback();
+        return false;
+      }
+      WalletDTO buyerWallet = wallets[0];
+      WalletDTO sellerWallet = wallets[1];
 
-      if (created) {
-        logger.info("Created PENDING Payment for auctionId={}, buyerId={}, amount={}",
-            auctionId, buyerId, amount);
+      // 3. Kiểm tra số dư buyer, nếu thiếu → fail payment
+      if (buyerWallet.getBalance().compareTo(amount) < 0) {
+        paymentDAO.failPaymentInTx(conn, payment.getPaymentId());
+        conn.commit();
 
-        // Notify cho buyer
-        pushNotif(buyerId, "Payment Required",
-            String.format("You won [%s] for $%s. Please complete payment.", itemName, amount),
+        notificationService.push(buyerId, "Payment Failed",
+            String.format("Insufficient balance to pay %s for [%s].", amount.toPlainString(), itemName),
             NotificationType.PAYMENT_DUE, auctionId);
+        return false;
       }
 
-      return created;
+      // 4. Chuyển tiền trong transaction
+      walletDAO.withdrawInTx(conn, buyerWallet.getWalletId(), amount);
+      walletDAO.depositInTx(conn, sellerWallet.getWalletId(), amount);
 
-    } catch (Exception e) {
-      logger.error("Failed to create pending payment for auctionId={}", auctionId, e);
+      // 5. Ghi log giao dịch
+      walletTxDAO.logTransactionInTx(conn, buyerWallet.getWalletId(), buyerId,
+          WalletTransactionType.PAYMENT, amount, auctionId,
+          "Payment for auction #" + auctionId + " – " + itemName);
+      walletTxDAO.logTransactionInTx(conn, sellerWallet.getWalletId(), sellerId,
+          WalletTransactionType.PAYMENT, amount, auctionId,
+          "Received payment for auction #" + auctionId + " – " + itemName);
+
+      // 6. Cập nhật payment → COMPLETED
+      paymentDAO.completePaymentInTx(conn, payment.getPaymentId());
+
+      conn.commit();
+
+      // 7. Post-commit: đồng bộ auction + notification + wallet update
+      syncAuctionToPaid(auctionId, itemName);
+      notifyPaymentSuccess(buyerId, sellerId, amount, itemName, auctionId);
+      pushWalletUpdate(buyerId, buyerWallet.getBalance().subtract(amount));
+      pushWalletUpdate(sellerId, sellerWallet.getBalance().add(amount));
+
+      return true;
+
+    } catch (SQLException e) {
+      rollbackQuietly(conn);
+      logger.error("processPayment() – DB error for auction {}", auctionId, e);
       return false;
+    } finally {
+      closeQuietly(conn);
     }
   }
 
-  // ============================================================
-  // Private Helpers
-  // ============================================================
-
   /**
-   * Ghi notification vào DB + đẩy realtime qua Dispatcher.
-   * DB fail chỉ log warning — không ảnh hưởng kết quả thanh toán.
+   * Hoàn tiền (COMPLETED → REFUNDED). Dùng transaction + lock tương tự.
    */
-  private void pushNotif(int userId, String title, String message,
-      NotificationType type, int relatedId) {
+  public boolean refundPayment(int auctionId, String itemName) {
+    Connection conn = null;
     try {
-      Notification n = new Notification();
-      n.setUserId(userId);
-      n.setTitle(title);
-      n.setContent(message);
-      n.setType(type);
-      n.setRead(false);
-      n.setRelatedId(relatedId);
-      notifDAO.insert(n);
-    } catch (Exception e) {
-      logger.warn("pushNotif() — DB insert failed for userId={} (non-critical)", userId, e);
+      conn = DBConnection.getConnection();
+      conn.setAutoCommit(false);
+
+      // 1. Lock & verify payment COMPLETED
+      PaymentDTO payment = lockAndVerifyPayment(conn, auctionId, PaymentStatus.COMPLETED);
+      if (payment == null) {
+        conn.rollback();
+        return false;
+      }
+
+      int buyerId   = payment.getBuyerId();
+      int sellerId  = payment.getSellerId();
+      BigDecimal amount = payment.getAmount();
+
+      // 2. Lock ví seller & buyer (ngược hướng)
+      WalletDTO[] wallets = lockWallets(conn, sellerId, buyerId);
+      if (wallets == null) {
+        conn.rollback();
+        return false;
+      }
+      WalletDTO sellerWallet = wallets[0];
+      WalletDTO buyerWallet = wallets[1];
+
+      // 3. Kiểm tra số dư seller
+      if (sellerWallet.getBalance().compareTo(amount) < 0) {
+        // Không đủ tiền hoàn → rollback, không thay đổi gì
+        conn.rollback();
+        logger.warn("refundPayment() – Seller insufficient balance for refund");
+        return false;
+      }
+
+      // 4. Chuyển tiền ngược: seller → buyer
+      walletDAO.withdrawInTx(conn, sellerWallet.getWalletId(), amount);
+      walletDAO.depositInTx(conn, buyerWallet.getWalletId(), amount);
+
+      // 5. Ghi log
+      walletTxDAO.logTransactionInTx(conn, sellerWallet.getWalletId(), sellerId,
+          WalletTransactionType.REFUND, amount, auctionId,
+          "Refund issued for auction #" + auctionId + " – " + itemName);
+      walletTxDAO.logTransactionInTx(conn, buyerWallet.getWalletId(), buyerId,
+          WalletTransactionType.REFUND, amount, auctionId,
+          "Refund received for auction #" + auctionId + " – " + itemName);
+
+      // 6. Cập nhật payment → REFUNDED
+      paymentDAO.refundPaymentInTx(conn, payment.getPaymentId());
+
+      conn.commit();
+
+      // 7. Post-commit notification + wallet update
+      notificationService.push(buyerId, "Hoàn tiền đấu giá",
+          "Bạn đã được hoàn lại " + amount + " từ phiên: " + itemName,
+          NotificationType.SYSTEM, auctionId);
+      notificationService.push(sellerId, "Rút tiền hoàn trả",
+          "Hệ thống đã hoàn trả " + amount + " cho người mua của phiên: " + itemName,
+          NotificationType.SYSTEM, auctionId);
+
+      pushWalletUpdate(buyerId, buyerWallet.getBalance().add(amount));
+      pushWalletUpdate(sellerId, sellerWallet.getBalance().subtract(amount));
+
+      return true;
+
+    } catch (SQLException e) {
+      rollbackQuietly(conn);
+      logger.error("refundPayment() – DB error for auction {}", auctionId, e);
+      return false;
+    } finally {
+      closeQuietly(conn);
     }
-    NotificationDispatcher.getInstance().submit(
-        new NotificationEvent(userId, title, message, type, relatedId)
-    );
+  }
+
+  // ==================== HELPER METHODS ====================
+
+  /**
+   * Lock dòng payment theo auctionId và kiểm tra trạng thái mong đợi.
+   * @return PaymentDTO nếu đúng trạng thái, null nếu không tồn tại hoặc sai trạng thái.
+   *         Caller phải rollback nếu cần.
+   */
+  private PaymentDTO lockAndVerifyPayment(Connection conn, int auctionId, PaymentStatus expected) throws SQLException {
+    PaymentDTO payment = paymentDAO.lockPaymentByAuctionId(conn, auctionId);
+    if (payment == null) {
+      logger.warn("lockAndVerifyPayment() – No payment for auctionId={}", auctionId);
+      return null;
+    }
+    if (payment.getStatus() != expected) {
+      logger.warn("lockAndVerifyPayment() – Payment {} is {} (expected {})",
+          payment.getPaymentId(), payment.getStatus(), expected);
+      return null;
+    }
+    return payment;
   }
 
   /**
-   * Gửi WALLET_UPDATE về client để cập nhật Label số dư ngay lập tức.
-   * Protocol: {@code WALLET_UPDATE|userId|newBalance}
+   * Lock ví của hai user theo thứ tự ID để tránh deadlock.
+   * @return mảng [firstUserWallet, secondUserWallet] hoặc null nếu lỗi.
    */
+  private WalletDTO[] lockWallets(Connection conn, int userId1, int userId2) throws SQLException {
+    WalletDTO w1, w2;
+    if (userId1 < userId2) {
+      w1 = walletDAO.lockByUserId(conn, userId1);
+      w2 = walletDAO.lockByUserId(conn, userId2);
+    } else {
+      w2 = walletDAO.lockByUserId(conn, userId2);
+      w1 = walletDAO.lockByUserId(conn, userId1);
+    }
+    if (w1 == null || w2 == null) {
+      logger.error("lockWallets() – Wallet not found for userId1={}, userId2={}", userId1, userId2);
+      return null;
+    }
+    return new WalletDTO[] { w1, w2 }; // theo đúng thứ tự userId1, userId2
+  }
+
+  /** Gửi thông báo thanh toán thành công cho buyer & seller */
+  private void notifyPaymentSuccess(int buyerId, int sellerId, BigDecimal amount, String itemName, int auctionId) {
+    notificationService.push(buyerId, "Thanh toán thành công",
+        "Bạn đã hoàn tất thanh toán " + amount + " cho vật phẩm: " + itemName,
+        NotificationType.SYSTEM, auctionId);
+    notificationService.push(sellerId, "Nhận tiền thanh toán",
+        "Bạn đã nhận được " + amount + " từ phiên đấu giá vật phẩm: " + itemName,
+        NotificationType.PAYMENT_RECEIVED, auctionId);
+  }
+
+  /** Đồng bộ Auction → PAID (RAM + DB) */
+  private void syncAuctionToPaid(int auctionId, String itemName) {
+    try {
+      Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
+      if (auctionOpt.isPresent()) {
+        Auction auction = auctionOpt.get();
+        auction.markPaid();
+        auctionDAO.updateStatus(auctionId, server.common.enums.AuctionStatus.PAID);
+        logger.info("syncAuctionToPaid() – Auction {} state set to PAID", auctionId);
+      } else {
+        logger.warn("syncAuctionToPaid() – Auction {} not found in manager", auctionId);
+      }
+    } catch (Exception e) {
+      logger.error("syncAuctionToPaid() – Failed to update auction status for id={}", auctionId, e);
+    }
+  }
+
   private void pushWalletUpdate(int userId, BigDecimal newBalance) {
-    NotificationDispatcher.getInstance().submit(
-        new WalletUpdateEvent(userId, newBalance)
-    );
+    NotificationDispatcher.getInstance().submit(new WalletUpdateEvent(userId, newBalance));
   }
 
   private void rollbackQuietly(Connection conn) {
     if (conn == null) return;
-    try { conn.rollback(); }
-    catch (SQLException e) { logger.error("rollbackQuietly() failed", e); }
+    try { conn.rollback(); } catch (SQLException e) { logger.error("rollbackQuietly() failed", e); }
   }
 
   private void closeQuietly(Connection conn) {

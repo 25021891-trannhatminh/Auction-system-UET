@@ -49,7 +49,26 @@ public class PaymentTriggerObserver implements AuctionEventListener {
    */
   @Override
   public void onAuctionEnded(int userId, int auctionId, String itemName, BigDecimal finalPrice) {
-    paymentExecutor.submit(() -> processAuctionClosure(auctionId, itemName));
+    paymentExecutor.submit(() -> {
+      try {
+        logger.info("PaymentTriggerObserver [WORKER] — Processing auction closure: id={}, item={}", auctionId, itemName);
+
+        // Idempotency check – tránh tạo trùng payment record
+        if (paymentService.isPaymentExistsForAuction(auctionId)) {
+          logger.info("PaymentTriggerObserver [WORKER] — Payment record already exists for auction id={}, skipping.", auctionId);
+          return;
+        }
+
+        boolean success = paymentService.createPendingPayment(auctionId, itemName);
+        if (success) {
+          logger.info("PaymentTriggerObserver [WORKER] — Pending payment initialized for auction id={}", auctionId);
+        } else {
+          logger.warn("PaymentTriggerObserver [WORKER] — Failed to initialize pending payment for auction id={}", auctionId);
+        }
+      } catch (Exception e) {
+        logger.error("PaymentTriggerObserver [WORKER] — Critical error for auctionId={}", auctionId, e);
+      }
+    });
   }
 
   @Override
@@ -111,26 +130,7 @@ public class PaymentTriggerObserver implements AuctionEventListener {
   // INTERNAL PAYMENT WORKFLOW
   // =========================================================================
 
-  /**
-   * Điều phối luồng nghiệp vụ tài chính dưới tầng Service.
-   */
-  private void processAuctionClosure(int auctionId, String itemName) {
-    try {
-      logger.info("Processing payment closure for auction: id={}, item={}", auctionId, itemName);
 
-      // Khi Auction end => Tạo 1 Payment PENDING cho winner
-      boolean success = paymentService.createPendingPayment(auctionId, itemName);
-
-      if (success) {
-        logger.info("Payment completed successfully for auction id={}", auctionId);
-      } else {
-        logger.warn("Payment workflow execution failed for auction id={}", auctionId);
-      }
-
-    } catch (Exception e) {
-      logger.error("Critical error while processing auction closure for auctionId={}", auctionId, e);
-    }
-  }
 
   // =========================================================================
   // RESOURCE SHUTDOWN MANAGEMENT

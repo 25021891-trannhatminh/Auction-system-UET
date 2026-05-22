@@ -82,6 +82,8 @@ public class PaymentDAO {
     private static final String SQL_SELECT_PENDING =
         SQL_SELECT_BASE + " WHERE status = 'PENDING' ORDER BY created_at ASC";
 
+    private static final String SQL_FIND_BY_AUCTION_ID =
+        "SELECT 1 FROM payments WHERE auction_id = ? LIMIT 1";
     // ============================================================
     // INSERT Method
     // ============================================================
@@ -281,6 +283,20 @@ public class PaymentDAO {
         }
         return list;
     }
+    public boolean existsByAuctionId(int auctionId) {
+
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_FIND_BY_AUCTION_ID)) {
+
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next(); // Nếu tìm thấy dù chỉ 1 dòng => trả về true
+            }
+        } catch (SQLException e) {
+            // Log lỗi nếu cần thiết
+            return false;
+        }
+    }
 
     /**
      * Lịch sử giao dịch của seller, mới nhất trước.
@@ -298,6 +314,26 @@ public class PaymentDAO {
             logger.error("getPaymentsBySeller() failed for sellerId={}", sellerId, e);
         }
         return list;
+    }
+
+    public PaymentDTO lockPaymentByAuctionId(Connection conn, int auctionId) throws SQLException {
+        String sql = SQL_SELECT_BASE + " WHERE auction_id = ? FOR UPDATE";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return mapRow(rs);
+            }
+        }
+        return null;
+    }
+
+    public boolean createPayment(PaymentDTO payment) {
+        return createPayment(
+            payment.getAuctionId(),
+            payment.getBuyerId(),
+            payment.getSellerId(),
+            payment.getAmount()
+        );
     }
 
     /**

@@ -54,6 +54,8 @@ public class Auction extends Entity {
     private final LocalDateTime startTime;
     private       LocalDateTime endTime;
 
+    private transient volatile boolean isTimeExtendedDuringRuntime = false;
+
     /**
      * Anti-sniping config:
      *   snipeWindowSeconds   — nếu bid trong khoảng này trước endTime → gia hạn
@@ -269,6 +271,8 @@ public class Auction extends Entity {
             lock.unlock();
         }
 
+
+
         // ── Step 8: Notify observers NGOÀI lock ──────────────────────────────
         // Quan trọng: notify ngoài lock để tránh deadlock
         // (Observer có thể gọi lại các method khác của Auction)
@@ -414,6 +418,17 @@ public class Auction extends Entity {
         if (status != AuctionStatus.RUNNING) return 0;
         long secs = ChronoUnit.SECONDS.between(LocalDateTime.now(), endTime);
         return Math.max(0, secs);
+    }
+
+    public boolean checkAndResetExtensionFlag() {
+        lock.lock();
+        try {
+            boolean flag = isTimeExtendedDuringRuntime;
+            isTimeExtendedDuringRuntime = false; // Reset sau khi đọc
+            return flag;
+        } finally {
+            lock.unlock();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

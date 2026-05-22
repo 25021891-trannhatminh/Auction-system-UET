@@ -24,6 +24,7 @@ import java.util.Map;
 import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
+import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
 import server.database.DBConnection;
@@ -137,6 +138,32 @@ public class ClientHandler implements Runnable {
             case ProtocolConstants.LOGIN:
                 String loginResult = authHandler.handleLogin(request, this);
                 send(loginResult);
+                // Đồng bộ và lưu giữ trạng thái authenticated user vào bên trong Connection Handler
+                if (loginResult.startsWith("LOGIN_SUCCESS")) {
+                    try {
+                        String[] parts = loginResult.split(" ");
+                        String[] fields = parts[1].split("\\|");
+                        int loggedInUserId = Integer.parseInt(fields[0]);
+                        String loggedInUsername = fields[1];
+
+                        this.userId = loggedInUserId;
+                        this.username = loggedInUsername;
+
+                        // Đăng ký session lên bộ quản lý tập trung toàn cục
+                        ClientManager.add(loggedInUserId, this);
+                        // Sử dụng identifier và password đã có sẵn trong request LOGIN
+                        String identifier = request[1];
+                        String password = request[2];
+                        User loginUser = authService.getUser(identifier, password); // Lấy đối tượng User đầy đủ
+                        if (loginUser != null) {
+                            auctionService.registerOrGetUser(loginUser); // Đảm bảo user có trong AuctionManager
+                        } else {
+                            System.err.println("Không thể lấy thông tin User từ DB sau khi login thành công, userId=" + loggedInUserId);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Lỗi phân tách chuỗi khi xử lý trạng thái LOGIN: " + e.getMessage());
+                    }
+                }
                 break;
             case ProtocolConstants.REGISTER:
                 String registerResult = authHandler.handleRegister(request);
@@ -151,8 +178,7 @@ public class ClientHandler implements Runnable {
                 //   → log wallet_transactions → update payments → COMMIT
                 // Sau commit: push PUSH_NOTIF + WALLET_UPDATE realtime về buyer và seller.
                 //
-                // Sau khi PaymentService thành công, gọi auctionService.confirmPayment()
-                // để đồng bộ RAM + DB auction status → PAID.
+                // LƯU Ý: Không gọi auctionService ở đây nữa để đảm bảo Separation of Concerns.
                 if (request.length < 2) {
                     send("PAYMENT_FAIL INVALID_FORMAT");
                     break;
@@ -166,8 +192,6 @@ public class ClientHandler implements Runnable {
                     boolean ok = paymentService.processPayment(auctionId, itemName);
                     if (ok) {
                         send("PAYMENT_SUCCESS " + auctionId);
-                        // Đồng bộ RAM + DB auction status → PAID
-                        auctionService.confirmPayment(auctionId);
                     } else {
                         send("PAYMENT_FAIL " + auctionId);
                     }
@@ -451,7 +475,7 @@ public class ClientHandler implements Runnable {
         }
         String sql = "SELECT role, status FROM accounts WHERE user_id = ?";
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+            PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next()
@@ -719,8 +743,8 @@ public class ClientHandler implements Runnable {
 
         send("USER_AUCTIONS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
                 send("USER_AUCTION " + fields(
