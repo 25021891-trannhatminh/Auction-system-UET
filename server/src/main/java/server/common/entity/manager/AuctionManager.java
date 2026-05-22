@@ -6,7 +6,7 @@ import server.common.entity.AutoBidConfig;
 import server.common.entity.BidTransaction;
 import server.common.entity.Item;
 import server.common.entity.User;
-import server.common.entity.AuctionObserver;
+import server.service.listeners.AuctionEventListener;
 import server.common.enums.AuctionStatus;
 import server.common.model.BidResultDTO;
 import server.repository.AuctionDAO;
@@ -99,10 +99,10 @@ public class AuctionManager {
       Ví dụ: NotificationService đăng ký ở đây để lưu notification vào DB.
 
       UI/Server:
-        ServerBroadcaster implements AuctionObserver và đăng ký ở đây
+        ServerBroadcaster implements AuctionEventListener và đăng ký ở đây
         để push update đến toàn bộ client đang connect.
      */
-    private final List<AuctionObserver> globalObservers
+    private final List<AuctionEventListener> globalObservers
         = new CopyOnWriteArrayList<>();
 
     /*
@@ -520,7 +520,7 @@ public class AuctionManager {
      * Thêm global observer — nhận event từ TẤT CẢ phiên.
      * ⚠️  Kết nối Server: ClientHandler/NotificationService gọi method này khi connect.
      */
-    public void addGlobalObserver(AuctionObserver observer) {
+    public void addGlobalObserver(AuctionEventListener observer) {
         globalObservers.add(observer);
         // Đăng ký vào tất cả auction đang active
         auctionMap.values().stream()
@@ -529,7 +529,7 @@ public class AuctionManager {
             .forEach(a -> a.addObserver(observer));
     }
 
-    public void removeGlobalObserver(AuctionObserver observer) {
+    public void removeGlobalObserver(AuctionEventListener observer) {
         globalObservers.remove(observer);
         auctionMap.values().forEach(a -> a.removeObserver(observer));
     }
@@ -538,12 +538,12 @@ public class AuctionManager {
      * Thêm observer cho một phiên cụ thể.
      * ⚠️  Kết nối UI: Bidder "vào xem" một phiên → addObserver cho phiên đó.
      */
-    public void addObserverToAuction(String auctionId, AuctionObserver observer) {
+    public void addObserverToAuction(String auctionId, AuctionEventListener observer) {
         Auction auction = auctionMap.get(auctionId);
         if (auction != null) auction.addObserver(observer);
     }
 
-    public void removeObserverFromAuction(String auctionId, AuctionObserver observer) {
+    public void removeObserverFromAuction(String auctionId, AuctionEventListener observer) {
         Auction auction = auctionMap.get(auctionId);
         if (auction != null) auction.removeObserver(observer);
     }

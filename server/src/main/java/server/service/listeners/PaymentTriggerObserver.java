@@ -2,6 +2,7 @@ package server.service.listeners;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.common.enums.NotificationType;
 import server.service.PaymentService;
 
 import java.math.BigDecimal;
@@ -93,6 +94,11 @@ public class PaymentTriggerObserver implements AuctionEventListener {
 
   @Override
   public void onItemRejected(int sellerId, int itemId, String itemName) {
+    // Không cần xử lý tại listener này (NO-OP)
+  }
+
+  @Override
+  public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
     // Không cần xử lý tại listener này (NO-OP)
   }
 

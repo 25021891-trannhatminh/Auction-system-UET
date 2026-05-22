@@ -84,6 +84,14 @@ public class NotificationEventHandler implements AuctionEventListener {
   }
 
   @Override
+  public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
+    notificationService.push(-1, "Auction Extended Time",
+        "Auction [" + itemName + "] has been extended by "
+            + addedSeconds + " seconds.",
+        NotificationType.TIME_EXTENDED, auctionId);
+  }
+
+  @Override
   public void onSystemNotification(int userId, String title, String message) {
     notificationService.push(userId, title, message, NotificationType.SYSTEM);
   }

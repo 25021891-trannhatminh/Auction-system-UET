@@ -12,7 +12,6 @@ import server.service.listeners.AuctionEventListener;
 import server.common.model.BidResultDTO;
 import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
-import server.service.listeners.ObserverToNotificationEventAdapter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -42,9 +41,7 @@ public class AuctionService {
   // Singleton domain manager
   private final AuctionManager auctionManager = AuctionManager.getInstance();
   private final PaymentService paymentService = new PaymentService();
-  // Support
-  private final ObserverToNotificationEventAdapter domainAdapter;
-  private final AdminService adminService;
+
 
   /**
    * Khởi tạo service đấu giá và nối các callback vòng đời auction.
@@ -53,16 +50,12 @@ public class AuctionService {
    * do scheduler trong AuctionManager thực hiện được đồng bộ ngược xuống DB và notification.</p>
    */
   public AuctionService() {
-    this.domainAdapter = new ObserverToNotificationEventAdapter(this);
-
-    // Đăng ký adapter vào AuctionManager ngay khi tạo service
-    auctionManager.addGlobalObserver(domainAdapter);
 
     // Scheduler trong AuctionManager đổi trạng thái RAM; Service nhận callback để đồng bộ DB + notify.
     auctionManager.setOnAuctionStartedCallback(this::onAuctionStarted);
     auctionManager.setOnAuctionClosedCallback(this::onAuctionClosed);
 
-    this.adminService = new AdminService(this);
+    AuctionManager.getInstance().setOnAuctionClosedCallback(this::onAuctionClosed);
 
     logger.info("AuctionService initialized with ObserverToNotificationEventAdapter and lifecycle callbacks");
   }
@@ -660,82 +653,6 @@ public class AuctionService {
     }
   }
 
-  /**
-   * Kết thúc phiên đấu giá (Thành công hoặc Không ai mua): Persist trạng thái và phân phối thông báo.
-   */
-  public void endAuction(String auctionId) {
-    int auctionIdInt = Integer.parseInt(auctionId);
-
-    // Lấy thông tin phiên đấu giá từ bộ nhớ RAM (Engine quản lý)
-    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
-    if (auctionOpt.isEmpty()) {
-      logger.error("endAuction() — Critical: Auction ID {} not found in memory engine.", auctionId);
-      return;
-    }
-    Auction auction = auctionOpt.get();
-
-    // Lấy tên Item theo cấu trúc yêu cầu kèm null-check phòng thủ (Tránh lỗi NullPointerException)
-    String itemName = auction.getItem() != null
-        ? "Auction #" + auctionId + ": " + auction.getItem().getName()
-        : "Auction #" + auctionId + ": Unknown Item";
-
-    // ── Bước 1: Gọi hàm đóng gói sẵn có của lớp Auction để cập nhật trạng thái trên RAM an toàn ──
-    try {
-      auction.closeSession();
-    } catch (IllegalStateException e) {
-      logger.error("endAuction() — Closing session aborted due to invalid state for auctionId={}", auctionId, e);
-      return;
-    }
-
-    // Kiểm tra an toàn xem có người tham gia đặt giá hay không (Null-check Leader) ──
-    if (auction.getCurrentLeader() != null) {
-      // Trường hợp 1: Có người chiến thắng cuộc đua giá
-      int winnerId = Integer.parseInt(auction.getCurrentLeader().getId());
-      BigDecimal finalPrice = auction.getCurrentPrice();
-
-      logger.info("endAuction() — Auction {} concluded. winnerId={}, finalPrice={}",
-          auctionId, winnerId, finalPrice);
-
-      // Gọi hàm để đồng bộ kết quả (Cập nhật trạng thái FINISHED và đổi Item sang SOLD) xuống DB
-      onAuctionClosed(auction);
-
-      // Gửi thông báo kết quả cho người thắng cuộc
-      try {
-        notifyAuctionWon(winnerId, auctionIdInt, itemName, finalPrice);
-        notifyPaymentDue(winnerId, auctionIdInt, itemName, finalPrice);
-      } catch (Exception e) {
-        logger.error("endAuction() — Failed to notify winner user {}", winnerId, e);
-      }
-
-      // Gửi thông báo cho toàn bộ những người còn lại (những người đã thua cuộc)
-      // Dựa theo lớp BidTransactionDAO bạn cung cấp, hàm truy vấn id người dùng là getBiddersByAuctionId
-      List<Integer> allBidders = bidTransactionDAO.getBiddersByAuctionId(auctionIdInt);
-      for (Integer bidderId : allBidders) {
-        if (!bidderId.equals(winnerId)) {
-          // Bọc try-catch độc lập cho từng người nhận thông báo để không bẻ gãy vòng lặp ── tránh trường hợp 1 bidder lỗi connection, các bidder khác mất notify
-          try {
-            notifyAuctionLost(bidderId, auctionIdInt, itemName);
-          } catch (Exception e) {
-            logger.error("endAuction() — Failed to send lost notification to user {} but continuing loop iteration.", bidderId, e);
-          }
-        }
-      }
-
-    } else {
-      // Trường hợp 2: Phiên kết thúc mà không một ai đặt giá (Leader bị null)
-      logger.warn("endAuction() — Auction {} ended with NO BIDS. Rolling back item status.", auctionId);
-
-      // Đồng bộ DB (onAuctionClosed sẽ nhận diện không leader và tự động rollback Item status về AVAILABLE)
-      onAuctionClosed(auction);
-    }
-
-    // Phát thông báo sự kiện đóng phòng chung cho toàn bộ hệ thống
-    try {
-      notifyAuctionEnded(Integer.parseInt(auction.getSellerId()), auctionIdInt, itemName, auction.getCurrentPrice());
-    } catch (Exception e) {
-      logger.error("endAuction() — Exception caught during auction ended global broadcast event.", e);
-    }
-  }
 
   /**
    * Đăng ký người nghe sự kiện (vd: NotificationHandler)

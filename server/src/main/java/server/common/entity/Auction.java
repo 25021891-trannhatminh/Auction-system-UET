@@ -5,6 +5,7 @@ import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
+import server.service.listeners.AuctionEventListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -82,7 +83,7 @@ public class Auction extends Entity {
     private final List<BidTransaction> bidHistory;
 
     // ── Observer list ─────────────────────────────────────────────────────────
-    private final List<AuctionObserver> observers;
+    private final List<AuctionEventListener> observers;
 
     // ── Concurrency lock ──────────────────────────────────────────────────────
     /**
@@ -419,38 +420,49 @@ public class Auction extends Entity {
     //  Observer management
     // ─────────────────────────────────────────────────────────────────────────
 
-    public void addObserver(AuctionObserver observer) {
+    public void addObserver(AuctionEventListener observer) {
         synchronized (observers) { observers.add(observer); }
     }
 
-    public void removeObserver(AuctionObserver observer) {
+    public void removeObserver(AuctionEventListener observer) {
         synchronized (observers) { observers.remove(observer); }
     }
 
     private void notifyBidUpdated(BidTransaction transaction) {
-        List<AuctionObserver> snapshot;
+        List<AuctionEventListener> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
-            try { obs.onBidUpdated(this, transaction); }
-            catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+            try {
+                int bidderId = Integer.parseInt(transaction.getBidderId());
+                int auctionId = Integer.parseInt(this.getId());
+                obs.onBidPlaced(bidderId,auctionId,this.item.getName(),transaction.getAmount());
+            } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+
         });
     }
 
     private void notifyAuctionClosed() {
-        List<AuctionObserver> snapshot;
+        List<AuctionEventListener> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
-            try { obs.onAuctionClosed(this); }
-            catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+            try {
+                int winnerId = Integer.parseInt(this.getCurrentLeader().getId());
+                int auctionId = Integer.parseInt(this.getId());
+                obs.onAuctionEnded(winnerId,auctionId,this.item.getName(),this.getCurrentPrice());
+            } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+
         });
     }
 
     private void notifyTimeExtended(int seconds) {
-        List<AuctionObserver> snapshot;
+        List<AuctionEventListener> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
-            try { obs.onTimeExtended(this, seconds); }
-            catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+            try {
+                int auctionId = Integer.parseInt(this.getId());
+                obs.onTimeExtended(auctionId,this.getItem().getName(), seconds);
+            } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+
         });
     }
 

@@ -23,5 +23,7 @@ public interface AuctionEventListener {
 
   void onItemRejected(int sellerId, int itemId, String itemName);
 
+  void onTimeExtended(int auctionId, String itemName, int addedSeconds);
+
   void onSystemNotification(int userId, String title, String message);
 }
