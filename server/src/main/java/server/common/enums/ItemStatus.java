@@ -6,5 +6,5 @@ public enum ItemStatus {
   AVAILABLE,
   IN_AUCTION,
   SOLD,
-  REMOVED
+    APPROVED, REMOVED
 }

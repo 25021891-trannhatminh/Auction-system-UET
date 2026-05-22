@@ -51,6 +51,7 @@ public class ClientHandler implements Runnable {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+    private final BidHandler bidHandler;
 
     // Infor Account connect với Server
     private String username = "Guest"; // Tên hiển thị mặc định
@@ -81,6 +82,7 @@ public class ClientHandler implements Runnable {
         this.adminService   = new AdminService(auctionService);
         this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
+        this.bidHandler = new BidHandler(auctionService);
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -261,21 +263,8 @@ public class ClientHandler implements Runnable {
                     send("FAIL INVALID_BID_FORMAT");
                     return;
                 }
-                try {
-                    int auctionId = Integer.parseInt(request[1]);
-                    BigDecimal amount = new BigDecimal(request[2]);
-
-                    // ✅ Gọi BidTransactionDAO.placeBid() — có Transaction + Row Locking sẵn!
-                    // Không cần synchronized nữa vì BidTransactionDAO đã xử lý bằng SELECT FOR UPDATE
-                    boolean ok = bidTransactionDAO.placeBid(auctionId, this.userId, amount, false);
-                    if (ok) {
-                        ClientManager.broadcast("NEW_BID " + this.username + " " + auctionId + " " + amount);
-                    } else {
-                        send("FAIL BID_TOO_LOW_OR_NOT_RUNNING");
-                    }
-                } catch (NumberFormatException e) {
-                    send("FAIL INVALID_FORMAT");
-                }
+                String result = bidHandler.handleBid(request[1],request[2],this.userId,this.username);
+                send(result);
                 break;
 
             case "MSG":

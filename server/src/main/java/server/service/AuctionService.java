@@ -796,4 +796,23 @@ public class AuctionService {
   public void notifySystemNotification(int userId, String title, String message) {
     listeners.forEach(l -> l.onSystemNotification(userId, title, message));
   }
+/**
+ * Tìm User theo ID.
+ * 
+ * @param userId ID của user (dạng String)
+ * @return User object hoặc null nếu không tìm thấy
+ */
+  public User findUserById(String userId) {
+    return auctionManager.findUserById(userId).orElse(null);
+  }
+
+/**
+ * Tìm Auction theo ID.
+ * 
+ * @param auctionId ID của phiên (dạng String)
+ * @return Auction object hoặc null nếu không tìm thấy
+ */
+  public Auction findAuctionById(String auctionId) {
+    return auctionManager.getAuction(auctionId).orElse(null);
+  }
 }

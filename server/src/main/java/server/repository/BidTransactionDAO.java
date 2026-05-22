@@ -1,8 +1,13 @@
 package server.repository;
 
-import server.common.enums.BidStatus;
+import server.common.entity.Auction;
 import server.common.entity.BidTransaction;
+import server.common.entity.User;
+import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.InvalidBidException;
+import server.common.entity.manager.AuctionManager;
 import server.database.DBConnection;
+import server.common.enums.BidStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,87 +51,109 @@ public class BidTransactionDAO {
     private static final String SELECT_DISTINCT_BIDDERS =
         "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
     /**
-     * Đặt giá đấu giá - Đảm bảo tính nguyên tử và chống Race Condition.
+     * Đặt giá - Gọi vào Auction.placeBid() để xử lý logic, sau đó lưu DB.
      */
     public boolean placeBid(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid) {
-        // 1. Fail-fast: Kiểm tra dữ liệu đầu vào ngay lập tức để tiết kiệm tài nguyên
+        // Kiểm tra đầu vào
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             logger.warn("placeBid() - Invalid amount: {}", amount);
             return false;
         }
 
-        try (Connection conn = DBConnection.getConnection()) {
-            // Tắt Auto-commit để bắt đầu Transaction
-            conn.setAutoCommit(false);
-
-            try {
-                // Bước 1: Khóa hàng (Row-level Lock) để ngăn Race Condition
-                BigDecimal currentPrice;
-                BigDecimal minIncrement;
-                int currentWinnerId;
-
-                try (PreparedStatement ps = conn.prepareStatement(SQL_LOCK_AUCTION)) {
-                    ps.setInt(1, auctionId);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (!rs.next()) {
-                            logger.warn("placeBid() - Auction {} not found", auctionId);
-                            conn.rollback();
-                            return false;
-                        }
-
-                        // Kiểm tra trạng thái phiên đấu giá
-                        if (!"RUNNING".equals(rs.getString("status"))) {
-                            logger.warn("placeBid() - Auction {} is not RUNNING", auctionId);
-                            conn.rollback();
-                            return false;
-                        }
-
-                        currentPrice = rs.getBigDecimal("current_price");
-                        minIncrement = rs.getBigDecimal("min_bid_increment");
-                        currentWinnerId = rs.getInt("current_winner_id");
-                    }
-                }
-
-                // Bước 2: Logic nghiệp vụ nâng cao
-                // Kiểm tra nếu người dùng hiện tại đang là người giữ giá cao nhất (Chống Self-outbid)
-                if (currentWinnerId == bidderId) {
-                    logger.info("placeBid() - Bidder {} is already the winner for auction {}", bidderId, auctionId);
-                    conn.rollback();
-                    return false;
-                }
-
-                // Kiểm tra bước giá tối thiểu
-                BigDecimal minRequired = currentPrice.add(minIncrement);
-                if (amount.compareTo(minRequired) < 0) {
-                    logger.warn("placeBid() - Amount {} too low (min: {})", amount, minRequired);
-                    conn.rollback();
-                    return false;
-                }
-
-                // Bước 3: Cập nhật thông tin Auction (Giá mới, người thắng mới)
-                executeStatement(conn, SQL_UPDATE_AUCTION, amount, bidderId, auctionId);
-
-                // Bước 4: Chuyển các lượt thắng cũ thành OUTBID
-                executeStatement(conn, SQL_OUTBID_PREVIOUS, BidStatus.OUTBID.name(), auctionId, BidStatus.WINNING.name());
-
-                // Bước 5: Ghi nhận lượt bid mới là WINNING
-                executeStatement(conn, SQL_INSERT_BID, auctionId, bidderId, amount, isAutoBid, BidStatus.WINNING.name());
-
-                // Kết thúc giao dịch thành công
-                conn.commit();
-                logger.info("placeBid() - Success: Auction {}, Bidder {}, Amount {}", auctionId, bidderId, amount);
-                return true;
-
-            } catch (SQLException e) {
-                logger.error("placeBid() - Transaction failed, rolling back. Error: {}", e.getMessage());
-                conn.rollback();
+        try {
+            // 1. Lấy Auction từ AuctionManager
+            Auction auction = AuctionManager.getInstance()
+                    .getAuction(String.valueOf(auctionId))
+                    .orElse(null);
+            if (auction == null) {
+                logger.warn("placeBid() - Auction {} not found", auctionId);
                 return false;
             }
-        } catch (SQLException e) {
-            logger.error("placeBid() - Connection error: {}", e.getMessage());
+
+            // 2. Lấy User từ AuctionManager
+            User bidder = AuctionManager.getInstance()
+                    .findUserById(String.valueOf(bidderId))
+                    .orElse(null);
+            if (bidder == null) {
+                logger.warn("placeBid() - Bidder {} not found", bidderId);
+                return false;
+            }
+
+            // 3.  GỌI CORE LOGIC TRONG AUCTION
+            BidTransaction tx = auction.placeBid(bidder, amount, isAutoBid);
+
+            // 4. Lưu vào DB
+            if (tx != null) {
+                return saveToDatabase(tx);
+            }
+            return false;
+
+        } catch (AuctionClosedException e) {
+            logger.warn("placeBid() - Auction closed: {}", e.getMessage());
+            return false;
+        } catch (InvalidBidException e) {
+            logger.warn("placeBid() - Invalid bid: {}", e.getMessage());
+            return false;
+        } catch (Exception e) {
+            logger.error("placeBid() - Error: {}", e.getMessage());
             return false;
         }
     }
+
+    /**
+     * Lưu bid transaction vào database.
+     */
+    private boolean saveToDatabase(BidTransaction tx) {
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+
+            try {
+                int auctionId = Integer.parseInt(tx.getAuctionId());
+                int bidderId = Integer.parseInt(tx.getBidderId());
+
+                // Bước 1: Cập nhật auction (giá mới, người thắng mới)
+                try (PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_AUCTION)) {
+                    ps.setBigDecimal(1, tx.getAmount());
+                    ps.setInt(2, bidderId);
+                    ps.setInt(3, auctionId);
+                    ps.executeUpdate();
+                }
+
+                // Bước 2: Đánh dấu bid cũ thành OUTBID
+                try (PreparedStatement ps = conn.prepareStatement(SQL_OUTBID_PREVIOUS)) {
+                    ps.setString(1, BidStatus.OUTBID.name());
+                    ps.setInt(2, auctionId);
+                    ps.setString(3, BidStatus.WINNING.name());
+                    ps.executeUpdate();
+                }
+
+                // Bước 3: Insert bid mới
+                try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT_BID)) {
+                    ps.setInt(1, auctionId);
+                    ps.setInt(2, bidderId);
+                    ps.setBigDecimal(3, tx.getAmount());
+                    ps.setBoolean(4, tx.isAutoBid());
+                    ps.setString(5, tx.getStatus().name());
+                    ps.executeUpdate();
+                }
+
+                conn.commit();
+                logger.info("saveToDatabase() - Saved bid: auction={}, bidder={}, amount={}",
+                        auctionId, bidderId, tx.getAmount());
+                return true;
+
+            } catch (SQLException e) {
+                conn.rollback();
+                logger.error("saveToDatabase() - Transaction failed: {}", e.getMessage());
+                return false;
+            }
+
+        } catch (SQLException e) {
+            logger.error("saveToDatabase() - Connection error: {}", e.getMessage());
+            return false;
+        }
+    }
+
 
     /**
      * Truy vấn lịch sử đặt giá.
