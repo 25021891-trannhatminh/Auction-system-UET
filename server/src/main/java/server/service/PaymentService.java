@@ -3,7 +3,9 @@ package server.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import server.common.entity.Auction;
 import server.common.entity.Notification;
+import server.common.entity.manager.AuctionManager;
 import server.common.enums.NotificationType;
 import server.common.enums.PaymentStatus;
 import server.common.enums.WalletTransactionType;
@@ -21,6 +23,7 @@ import server.repository.WalletTransactionDAO;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Optional;
 
 /**
  * PaymentService — điều phối toàn bộ vòng đời thanh toán.
@@ -375,6 +378,50 @@ public class PaymentService {
     pushWalletUpdate(sellerId, newSellerBalance);
 
     return true;
+  }
+
+
+  /**
+   * Tạo bản ghi Payment ở trạng thái PENDING khi auction kết thúc có người thắng.
+   * Được gọi từ PaymentTriggerObserver hoặc AuctionService.onAuctionClosed()
+   */
+  public boolean createPendingPayment(int auctionId, String itemName) {
+    try {
+      // Lấy thông tin auction để lấy winner và seller
+      Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
+      if (auctionOpt.isEmpty()) {
+        logger.warn("createPendingPayment - Auction not found: {}", auctionId);
+        return false;
+      }
+
+      Auction auction = auctionOpt.get();
+      if (auction.getCurrentLeader() == null) {
+        logger.warn("createPendingPayment - No winner for auction {}", auctionId);
+        return false;
+      }
+
+      int buyerId = Integer.parseInt(auction.getCurrentLeader().getId());
+      int sellerId = Integer.parseInt(auction.getSellerId());
+      BigDecimal amount = auction.getCurrentPrice();
+
+      boolean created = paymentDAO.createPayment(auctionId, buyerId, sellerId, amount);
+
+      if (created) {
+        logger.info("✅ Created PENDING Payment for auctionId={}, buyerId={}, amount={}",
+            auctionId, buyerId, amount);
+
+        // Notify cho buyer
+        pushNotif(buyerId, "Payment Required",
+            String.format("You won [%s] for $%s. Please complete payment.", itemName, amount),
+            NotificationType.PAYMENT_DUE, auctionId);
+      }
+
+      return created;
+
+    } catch (Exception e) {
+      logger.error("Failed to create pending payment for auctionId={}", auctionId, e);
+      return false;
+    }
   }
 
   // ============================================================

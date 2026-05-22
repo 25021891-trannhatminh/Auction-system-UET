@@ -112,8 +112,8 @@ public class PaymentTriggerObserver implements AuctionEventListener {
     try {
       logger.info("Processing payment closure for auction: id={}, item={}", auctionId, itemName);
 
-      // Kích hoạt xử lý trừ tiền/kết chuyển dòng tiền
-      boolean success = paymentService.processPayment(auctionId, itemName);
+      // Khi Auction end => Tạo 1 Payment PENDING cho winner
+      boolean success = paymentService.createPendingPayment(auctionId, itemName);
 
       if (success) {
         logger.info("Payment completed successfully for auction id={}", auctionId);
