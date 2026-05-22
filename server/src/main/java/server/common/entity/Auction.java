@@ -99,6 +99,21 @@ public class Auction extends Entity {
     //  Constructors
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Tạo auction mới ở tầng domain trước khi persist xuống DB.
+     *
+     * <p>{@code reservePrice} được chuẩn hóa về {@link BigDecimal#ZERO} khi client
+     * gửi trống để các bước so sánh giá sau này không bị lỗi {@code null}.</p>
+     *
+     * @param item item được đem ra đấu giá
+     * @param sellerId ID người bán sở hữu item
+     * @param startTime thời điểm bắt đầu phiên
+     * @param endTime thời điểm kết thúc phiên
+     * @param minBidIncrement bước nhảy giá tối thiểu
+     * @param reservePrice giá sàn; có thể {@code null}
+     * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
+     * @param snipeExtensionSeconds thời gian gia hạn khi có bid sát giờ
+     */
     public Auction(Item item, String sellerId,
         LocalDateTime startTime, LocalDateTime endTime,
         BigDecimal minBidIncrement, BigDecimal reservePrice,
@@ -113,7 +128,7 @@ public class Auction extends Entity {
         this.endTime               = endTime;
         this.startingPrice         = item.getStartingPrice();
         this.minBidIncrement       = minBidIncrement;
-        this.reservePrice          = reservePrice;
+        this.reservePrice          = reservePrice == null ? BigDecimal.ZERO : reservePrice;
         this.snipeWindowSeconds    = snipeWindowSeconds;
         this.snipeExtensionSeconds = snipeExtensionSeconds;
         this.status                = AuctionStatus.OPEN;
@@ -124,7 +139,28 @@ public class Auction extends Entity {
         this.observers             = new ArrayList<>();
     }
 
-    /** Constructor load từ DB — truyền vào state đã lưu */
+    /**
+     * Khởi tạo lại auction từ dữ liệu đã lưu trong DB.
+     *
+     * <p>Constructor này giữ nguyên ID, thời gian tạo, current price, leader và status
+     * để AuctionManager có thể schedule tiếp sau khi server restart.
+     * {@code reservePrice} cũng được chuẩn hóa về {@link BigDecimal#ZERO} nếu DB trả về null.</p>
+     *
+     * @param id ID auction trong DB
+     * @param createdAt thời điểm auction được tạo
+     * @param item item thuộc phiên đấu giá
+     * @param sellerId ID người bán
+     * @param startTime thời điểm bắt đầu phiên
+     * @param endTime thời điểm kết thúc phiên
+     * @param lastBidTime thời điểm bid gần nhất, có thể {@code null}
+     * @param currentPrice giá hiện tại
+     * @param minBidIncrement bước nhảy giá tối thiểu
+     * @param reservePrice giá sàn, có thể {@code null}
+     * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
+     * @param snipeExtensionSeconds thời gian gia hạn khi có bid sát giờ
+     * @param status trạng thái auction đã lưu
+     * @param currentLeader user đang thắng, có thể {@code null}
+     */
     public Auction(String id, LocalDateTime createdAt,
         Item item, String sellerId,
         LocalDateTime startTime, LocalDateTime endTime,
@@ -142,7 +178,7 @@ public class Auction extends Entity {
         this.startingPrice         = item.getStartingPrice();
         this.currentPrice          = currentPrice;
         this.minBidIncrement       = minBidIncrement;
-        this.reservePrice          = reservePrice;
+        this.reservePrice          = reservePrice == null ? BigDecimal.ZERO : reservePrice;
         this.snipeWindowSeconds    = snipeWindowSeconds;
         this.snipeExtensionSeconds = snipeExtensionSeconds;
         this.status                = status;
@@ -485,6 +521,26 @@ public class Auction extends Entity {
     public int              getSnipeExtensionSeconds(){ return snipeExtensionSeconds; }
     public int              getTotalBids()           { return bidHistory.size(); }
     public List<BidTransaction> getBidHistory()      { return Collections.unmodifiableList(bidHistory); }
+
+    /**
+     * Khôi phục lịch sử bid từ DB khi server restart hoặc khi reload auction sau khi tạo.
+     *
+     * <p>Danh sách này giúp các logic đóng phiên, xác định người thắng và thống kê số bid
+     * nhìn thấy đúng dữ liệu đã persist, thay vì coi auction trong RAM là chưa từng có bid.</p>
+     *
+     * @param transactions danh sách bid transaction đã đọc từ DB; có thể {@code null}
+     */
+    public void restoreBidHistory(List<BidTransaction> transactions) {
+        lock.lock();
+        try {
+            bidHistory.clear();
+            if (transactions != null) {
+                bidHistory.addAll(transactions);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Helpers

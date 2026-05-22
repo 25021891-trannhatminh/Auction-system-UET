@@ -46,14 +46,25 @@ public class AuctionService {
   private final ObserverToNotificationEventAdapter domainAdapter;
   private final AdminService adminService;
 
+  /**
+   * Khởi tạo service đấu giá và nối các callback vòng đời auction.
+   *
+   * <p>Callback {@code onAuctionStarted}/{@code onAuctionClosed} giúp các thay đổi trạng thái
+   * do scheduler trong AuctionManager thực hiện được đồng bộ ngược xuống DB và notification.</p>
+   */
   public AuctionService() {
     this.domainAdapter = new ObserverToNotificationEventAdapter(this);
 
     // Đăng ký adapter vào AuctionManager ngay khi tạo service
-    AuctionManager.getInstance().addGlobalObserver(domainAdapter);
+    auctionManager.addGlobalObserver(domainAdapter);
+
+    // Scheduler trong AuctionManager đổi trạng thái RAM; Service nhận callback để đồng bộ DB + notify.
+    auctionManager.setOnAuctionStartedCallback(this::onAuctionStarted);
+    auctionManager.setOnAuctionClosedCallback(this::onAuctionClosed);
+
     this.adminService = new AdminService(this);
 
-    logger.info("AuctionService initialized with ObserverToNotificationEventAdapter");
+    logger.info("AuctionService initialized with ObserverToNotificationEventAdapter and lifecycle callbacks");
   }
 
   // =========================================================================
@@ -114,45 +125,49 @@ public class AuctionService {
   //  TẠO AUCTION
 
   /**
-   * Tạo phiên đấu giá mới: gọi AuctionManager tạo in-memory → persist DB.
+   * Tạo phiên đấu giá mới theo flow DB trước, memory sau.
    *
-   * Sau khi gọi method này, item_status sẽ chuyển sang IN_AUCTION
-   * và auction sẽ tự mở/đóng theo lịch.
+   * <p>AuctionDAO sẽ persist auction và đổi item sang {@code IN_AUCTION} trong cùng transaction.
+   * Sau khi có entity đã reload với {@code auction_id} thật, service mới đưa auction vào
+   * AuctionManager để scheduler open/close quản lý tiếp.</p>
    *
-   * @return Auction vừa tạo, hoặc null nếu DB write thất bại.
+   * @param item item sẽ được đưa vào auction
+   * @param sellerId ID người bán
+   * @param startTime thời điểm bắt đầu phiên
+   * @param endTime thời điểm kết thúc phiên
+   * @param minBidIncrement bước nhảy giá tối thiểu
+   * @param reservePrice giá sàn, có thể {@code null}
+   * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
+   * @param snipeExtensionSeconds thời gian gia hạn khi có bid sát giờ
+   * @return auction vừa tạo và đã load vào AuctionManager, hoặc {@code null} nếu lưu DB thất bại
    */
   public Auction createAuction(Item item, String sellerId,
       LocalDateTime startTime, LocalDateTime endTime,
       BigDecimal minBidIncrement, BigDecimal reservePrice,
       int snipeWindowSeconds, int snipeExtensionSeconds) {
 
-    // Bước 1: Tạo in-memory (lên lịch scheduleOpen/Close ngay)
-    Auction auction = auctionManager.createAuction(
+    // Persist trước để lấy auction_id thật từ DB, tránh AuctionManager giữ UUID tạm.
+    Auction savedAuction = auctionDAO.createAuction(
         item, sellerId, startTime, endTime,
         minBidIncrement, reservePrice,
         snipeWindowSeconds, snipeExtensionSeconds
     );
 
-    // Bước 2: Persist DB
-    boolean savedAuction = auctionDAO.create(auction);
-    if (!savedAuction) {
-      logger.error("createAuction() — DB write failed for itemId={}", item.getId());
-      // Rollback memory: xóa khỏi manager vì DB thất bại
-      // (AuctionManager cần expose removeAuction — nếu chưa có thì log warning)
-      logger.warn("createAuction() — Auction {} created in memory but NOT in DB. " +
-          "Manual cleanup required.", auction.getId());
+    if (savedAuction == null) {
+      logger.error("createAuction() — DB write failed for itemId={}", item != null ? item.getId() : "null");
       return null;
     }
-    // Bước 3: Cập nhật trạng thái item → IN_AUCTION
-    // Cập nhật trạng thái item → IN_AUCTION trên cả 2 tầng
-    if (item != null) {
-      item.setStatus(ItemStatus.IN_AUCTION); // Khóa trạng thái trên RAM luôn
-      itemDAO.updateStatus(Integer.parseInt(item.getId()), ItemStatus.IN_AUCTION);
+
+    if (savedAuction.getItem() != null) {
+      savedAuction.getItem().setStatus(ItemStatus.IN_AUCTION);
     }
 
-    logger.info("createAuction() — Auction {} created. Item {} → IN_AUCTION",
-        auction.getId(), item.getId());
-    return auction;
+    // Đưa entity đã có ID DB thật vào AuctionManager để scheduler open/close quản lý tiếp.
+    auctionManager.loadAuction(savedAuction);
+
+    logger.info("createAuction() — Auction {} created and loaded into AuctionManager. Item {} → IN_AUCTION",
+        savedAuction.getId(), savedAuction.getItem() != null ? savedAuction.getItem().getId() : "null");
+    return savedAuction;
   }
 
   // =========================================================================
@@ -452,21 +467,19 @@ public class AuctionService {
   // =========================================================================
 
   /**
-   * Admin force-close phiên: uỷ quyền cho AuctionManager.
-   * AuctionManager.forceCloseAuction() đã fire onAuctionClosedCallback → onAuctionClosed()
-   * nên Service không cần gọi thêm gì.
+   * Admin force-close phiên và để AuctionManager phát callback đóng phiên đúng một lần.
+   *
+   * <p>Trước đây service gọi thêm {@code onAuctionClosed()} sau khi force close, dễ gây double update
+   * hoặc double notification. Flow mới chỉ uỷ quyền cho AuctionManager vì manager đã gọi
+   * {@code onAuctionClosedCallback} sau khi đổi trạng thái.</p>
+   *
+   * @param auctionId ID auction cần đóng cưỡng bức
+   * @param reason lý do đóng phiên
    */
   public void forceCloseAuction(String auctionId, String reason) {
+    // AuctionManager.forceCloseAuction() đã gọi onAuctionClosedCallback.
+    // Không gọi onAuctionClosed() lần hai để tránh double update/double notification.
     auctionManager.forceCloseAuction(auctionId, reason);
-
-    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
-    auctionOpt.ifPresent(auction -> {
-      if (auction.getStatus() == AuctionStatus.FINISHED || auction.getStatus() == AuctionStatus.CANCELED) {
-        onAuctionClosed(auction);
-      } else {
-        logger.warn("forceCloseAuction() — Auction {} still in status {} after force close, skipping onAuctionClosed.", auctionId, auction.getStatus());
-      }
-    });
   }
 
 

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,8 +22,14 @@ public class BidTransactionDAO {
 
     // SQL Constants - Sử dụng Text Block để dễ quản lý
     private static final String SQL_LOCK_AUCTION = """
-            SELECT current_price, status, min_bid_increment, current_winner_id
+            SELECT current_price, status, min_bid_increment, current_winner_id,
+                   seller_id, start_time, end_time
             FROM auctions WHERE auction_id = ? FOR UPDATE
+            """;
+
+    private static final String SQL_MARK_RUNNING = """
+            UPDATE auctions SET status = 'RUNNING'
+            WHERE auction_id = ? AND status = 'OPEN'
             """;
 
     private static final String SQL_UPDATE_AUCTION = """
@@ -46,7 +53,17 @@ public class BidTransactionDAO {
     private static final String SELECT_DISTINCT_BIDDERS =
         "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
     /**
-     * Đặt giá đấu giá - Đảm bảo tính nguyên tử và chống Race Condition.
+     * Đặt giá đấu giá bằng transaction DB để đảm bảo tính nguyên tử và chống race condition.
+     *
+     * <p>Method này khóa row auction bằng {@code SELECT ... FOR UPDATE}, tự kích hoạt auction
+     * từ {@code OPEN} sang {@code RUNNING} nếu thời gian đã bắt đầu, chặn seller tự bid,
+     * cập nhật giá hiện tại và ghi bid transaction trong cùng một commit.</p>
+     *
+     * @param auctionId ID auction cần đặt giá
+     * @param bidderId ID user đặt giá
+     * @param amount số tiền bid
+     * @param isAutoBid {@code true} nếu bid sinh bởi auto-bid engine
+     * @return {@code true} nếu bid được chấp nhận và đã ghi DB; ngược lại {@code false}
      */
     public boolean placeBid(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid) {
         // 1. Fail-fast: Kiểm tra dữ liệu đầu vào ngay lập tức để tiết kiệm tài nguyên
@@ -64,6 +81,7 @@ public class BidTransactionDAO {
                 BigDecimal currentPrice;
                 BigDecimal minIncrement;
                 int currentWinnerId;
+                int sellerId;
 
                 try (PreparedStatement ps = conn.prepareStatement(SQL_LOCK_AUCTION)) {
                     ps.setInt(1, auctionId);
@@ -74,9 +92,22 @@ public class BidTransactionDAO {
                             return false;
                         }
 
-                        // Kiểm tra trạng thái phiên đấu giá
-                        if (!"RUNNING".equals(rs.getString("status"))) {
-                            logger.warn("placeBid() - Auction {} is not RUNNING", auctionId);
+                        String status = rs.getString("status");
+                        LocalDateTime now = LocalDateTime.now();
+                        LocalDateTime startTime = rs.getTimestamp("start_time").toLocalDateTime();
+                        LocalDateTime endTime = rs.getTimestamp("end_time").toLocalDateTime();
+
+                        // Nếu DB còn OPEN nhưng thời gian đã bắt đầu, chuyển RUNNING ngay trong transaction.
+                        // Điều này tránh lỗi UI hiển thị RUNNING còn bid DAO lại từ chối vì DB vẫn OPEN.
+                        if ("OPEN".equals(status) && !now.isBefore(startTime) && now.isBefore(endTime)) {
+                            executeStatement(conn, SQL_MARK_RUNNING, auctionId);
+                            status = "RUNNING";
+                            logger.info("placeBid() - Auto-activated auction {} before accepting bid", auctionId);
+                        }
+
+                        if (!"RUNNING".equals(status) || !now.isBefore(endTime)) {
+                            logger.warn("placeBid() - Auction {} is not biddable. status={}, now={}, endTime={}",
+                                auctionId, status, now, endTime);
                             conn.rollback();
                             return false;
                         }
@@ -84,10 +115,17 @@ public class BidTransactionDAO {
                         currentPrice = rs.getBigDecimal("current_price");
                         minIncrement = rs.getBigDecimal("min_bid_increment");
                         currentWinnerId = rs.getInt("current_winner_id");
+                        sellerId = rs.getInt("seller_id");
                     }
                 }
 
                 // Bước 2: Logic nghiệp vụ nâng cao
+                if (sellerId == bidderId) {
+                    logger.info("placeBid() - Seller {} cannot bid on own auction {}", bidderId, auctionId);
+                    conn.rollback();
+                    return false;
+                }
+
                 // Kiểm tra nếu người dùng hiện tại đang là người giữ giá cao nhất (Chống Self-outbid)
                 if (currentWinnerId == bidderId) {
                     logger.info("placeBid() - Bidder {} is already the winner for auction {}", bidderId, auctionId);
