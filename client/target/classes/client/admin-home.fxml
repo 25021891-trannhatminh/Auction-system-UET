@@ -44,9 +44,20 @@
                             <children>
                                 <VBox spacing="11.0" styleClass="profile-card">
                                     <children>
-                                        <StackPane styleClass="avatar-circle">
+                                        <StackPane maxWidth="Infinity" styleClass="profile-top-row">
                                             <children>
-                                                <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AD" />
+                                                <StackPane styleClass="avatar-circle" StackPane.alignment="CENTER">
+                                                    <children>
+                                                        <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AD" />
+                                                    </children>
+                                                </StackPane>
+
+                                                <StackPane styleClass="notification-bell-wrap" StackPane.alignment="TOP_RIGHT">
+                                                    <children>
+                                                        <Button fx:id="notificationBellButton" mnemonicParsing="false" onAction="#handleNotificationBell" styleClass="notification-bell-btn" text="🔔" />
+                                                        <Label fx:id="notificationBadgeLabel" styleClass="notification-badge" text="0" StackPane.alignment="TOP_RIGHT" />
+                                                    </children>
+                                                </StackPane>
                                             </children>
                                         </StackPane>
 
@@ -130,20 +141,10 @@
                                     </children>
                                 </FlowPane>
 
-                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                <VBox spacing="12.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
-                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="Control Center" />
-                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="Practical admin workspace for auction health, moderation queues, and operational data." wrapText="true" />
-
                                         <FlowPane fx:id="adminActionBar" hgap="7.0" vgap="7.0" />
-
-                                        <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">
-                                            <children>
-                                                <Label fx:id="tableTitleLabel" styleClass="table-title" text="Operational Queue" />
-                                                <VBox fx:id="dataRowsBox" spacing="7.0" VBox.vgrow="ALWAYS" />
-                                            </children>
-                                        </VBox>
-
+                                        <VBox fx:id="dataRowsBox" spacing="9.0" styleClass="workspace-body" VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
                             </children>

@@ -27,16 +27,70 @@
 }
 
 .sidebar-shell {
-    -fx-background-color: linear-gradient(to bottom, #1c3f38, #0d241f);
+    -fx-background-color: linear-gradient(to bottom, #001100, #000800);
     -fx-background-radius: 24;
+    -fx-border-color: rgba(0, 85, 0, 0.46);
+    -fx-border-radius: 24;
     -fx-padding: 16 12 16 12;
 }
 
 .profile-card {
-    -fx-background-color: rgba(255, 255, 255, 0.055);
+    -fx-background-color: rgba(255, 255, 255, 0.052);
     -fx-background-radius: 20;
+    -fx-border-color: rgba(255, 255, 255, 0.060);
+    -fx-border-radius: 20;
     -fx-padding: 14;
     -fx-alignment: center;
+}
+
+.profile-top-row {
+    -fx-min-height: 62;
+    -fx-pref-height: 62;
+}
+
+.notification-bell-wrap {
+    -fx-min-width: 40;
+    -fx-min-height: 40;
+    -fx-pref-width: 40;
+    -fx-pref-height: 40;
+}
+
+.notification-bell-btn {
+    -fx-background-color: rgba(247, 243, 233, 0.10);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(209, 177, 93, 0.34);
+    -fx-border-radius: 999;
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-pref-width: 34;
+    -fx-pref-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+    -fx-padding: 0;
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 14px;
+    -fx-cursor: hand;
+}
+
+.notification-bell-btn:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.22);
+    -fx-border-color: rgba(209, 177, 93, 0.72);
+}
+
+.notification-badge {
+    -fx-background-color: #d1b15d;
+    -fx-background-radius: 999;
+    -fx-border-color: #001100;
+    -fx-border-radius: 999;
+    -fx-border-width: 2;
+    -fx-min-width: 17;
+    -fx-min-height: 17;
+    -fx-pref-height: 17;
+    -fx-padding: 1 5 1 5;
+    -fx-alignment: center;
+    -fx-text-fill: #001100;
+    -fx-font-size: 9px;
+    -fx-font-weight: 900;
 }
 
 .avatar-circle {
@@ -150,6 +204,114 @@
     -fx-padding: 10 14 10 14;
     -fx-cursor: hand;
     -fx-max-width: Infinity;
+}
+
+.notification-popup {
+    -fx-background-color: #071107;
+    -fx-background-radius: 22;
+    -fx-border-color: rgba(209, 177, 93, 0.32);
+    -fx-border-radius: 22;
+    -fx-padding: 14;
+    -fx-pref-width: 334;
+    -fx-max-width: 334;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.32), 24, 0.20, 0, 8);
+}
+
+.notification-popup-header {
+    -fx-padding: 0 0 4 0;
+}
+
+.notification-popup-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 15px;
+    -fx-font-weight: 900;
+}
+
+.notification-clear-btn {
+    -fx-background-color: rgba(209, 177, 93, 0.14);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(209, 177, 93, 0.36);
+    -fx-border-radius: 999;
+    -fx-padding: 6 10 6 10;
+    -fx-text-fill: #d1b15d;
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-cursor: hand;
+}
+
+.notification-clear-btn:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.24);
+}
+
+.notification-list-scroll,
+.notification-list-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.notification-list-scroll {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+    -fx-pref-height: 286;
+    -fx-max-height: 286;
+}
+
+.notification-list {
+    -fx-background-color: transparent;
+}
+
+.notification-empty {
+    -fx-background-color: rgba(255, 255, 255, 0.045);
+    -fx-background-radius: 16;
+    -fx-padding: 14;
+    -fx-text-fill: rgba(247, 243, 233, 0.68);
+    -fx-font-size: 12px;
+    -fx-line-spacing: 2;
+}
+
+.notification-item {
+    -fx-background-color: rgba(255, 255, 255, 0.052);
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(255, 255, 255, 0.060);
+    -fx-border-radius: 16;
+    -fx-padding: 11;
+}
+
+.notification-item:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.080);
+    -fx-border-color: rgba(209, 177, 93, 0.30);
+}
+
+.notification-item-icon {
+    -fx-background-color: rgba(209, 177, 93, 0.18);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(209, 177, 93, 0.44);
+    -fx-border-radius: 999;
+    -fx-min-width: 28;
+    -fx-min-height: 28;
+    -fx-pref-width: 28;
+    -fx-pref-height: 28;
+    -fx-text-fill: #d1b15d;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.notification-item-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.notification-item-message {
+    -fx-text-fill: rgba(247, 243, 233, 0.68);
+    -fx-font-size: 11px;
+    -fx-line-spacing: 2;
+}
+
+.notification-item-time {
+    -fx-text-fill: rgba(247, 243, 233, 0.42);
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
 }
 
 .content-shell {
@@ -1951,8 +2113,8 @@
 
 /* User dashboard darker navigation + real auction marketplace/detail views */
 .user-dashboard-root .sidebar-shell {
-    -fx-background-color: linear-gradient(to bottom, #0e2c26, #061714);
-    -fx-border-color: rgba(209, 177, 93, 0.10);
+    -fx-background-color: linear-gradient(to bottom, #001100, #000800);
+    -fx-border-color: rgba(0, 85, 0, 0.46);
     -fx-border-radius: 24;
 }
 
@@ -2154,8 +2316,8 @@
 
 /* Auction detail refinement: compact breadcrumb, image description line, and lean bid panel. */
 .user-dashboard-root .sidebar-shell {
-    -fx-background-color: linear-gradient(to bottom, #07231d, #020c0a);
-    -fx-border-color: rgba(209, 177, 93, 0.08);
+    -fx-background-color: linear-gradient(to bottom, #001100, #000800);
+    -fx-border-color: rgba(0, 85, 0, 0.46);
 }
 
 .user-dashboard-root .profile-card,
@@ -2257,4 +2419,47 @@
     -fx-border-color: #2a2a2a;
     -fx-border-radius: 32;
     -fx-padding: 22;
+}
+
+/* Flatten workspace content: remove the extra table card layer and repeated titles. */
+.workspace-body {
+    -fx-padding: 0;
+    -fx-fill-width: true;
+}
+
+.surface-card > .workspace-body {
+    -fx-max-width: Infinity;
+}
+
+.user-dashboard-root .surface-card {
+    -fx-padding: 22 24 24 24;
+}
+
+.user-dashboard-root .workspace-body {
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .browse-header {
+    -fx-padding: 0 0 4 0;
+}
+
+.user-dashboard-root .auction-grid {
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .pagination-bar {
+    -fx-padding: 6 0 0 0;
+}
+
+.user-dashboard-root .data-header,
+.user-dashboard-root .data-row {
+    -fx-max-width: Infinity;
+}
+
+.user-dashboard-root .data-row {
+    -fx-padding: 14 18 14 18;
+}
+
+.user-dashboard-root .data-header {
+    -fx-padding: 12 18 12 18;
 }

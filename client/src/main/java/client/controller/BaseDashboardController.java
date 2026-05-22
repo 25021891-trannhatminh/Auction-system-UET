@@ -1,6 +1,7 @@
 package client.controller;
 
 import client.SceneNavigator;
+import client.model.NotificationModel;
 import client.model.User;
 import client.service.NetworkManager;
 import client.service.NotificationUIHandler;
@@ -12,13 +13,22 @@ import java.util.List;
 import java.util.Map;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.geometry.Bounds;
+import javafx.geometry.Pos;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.stage.Popup;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
 /**
  * Shared base controller for role-specific dashboards.
@@ -29,6 +39,9 @@ public abstract class BaseDashboardController {
 
     protected NetworkManager networkManager;
     private java.util.function.Consumer<String> realtimeNotificationHandler;
+    private final List<NotificationModel> notificationInbox = new ArrayList<>();
+    private int unreadNotificationCount = 0;
+    private Popup notificationPopup;
 
     protected static class SectionContent {
         protected final String title;
@@ -82,6 +95,8 @@ public abstract class BaseDashboardController {
     @FXML protected Label emailLabel;
     @FXML protected Label roleLabel;
     @FXML protected Label avatarInitialsLabel;
+    @FXML protected Button notificationBellButton;
+    @FXML protected Label notificationBadgeLabel;
 
     @FXML protected Label headerTitleLabel;
     @FXML protected Label headerSubtitleLabel;
@@ -161,6 +176,7 @@ public abstract class BaseDashboardController {
         refreshUserMeta();
         collectDisplayLabels();
         registerNavigationButtons();
+        updateNotificationBadge();
         showSection(getDefaultSectionKey());
 
         this.networkManager = NetworkManager.getInstance();
@@ -179,11 +195,7 @@ public abstract class BaseDashboardController {
                 if (msg == null || msg.isBlank()) return;
 
                 if (msg.startsWith("PUSH_NOTIF|")) {
-                    // 1. Hiển thị Pop-up thông báo real-time lên màn hình ngay lập tức
-                    Platform.runLater(() -> notifUIHandler.handle(msg));
-
-                    // 2. Đẩy chuỗi xuống cho Controller con xử lý thay đổi UI (nếu cần)
-                    Platform.runLater(() -> handleRealtimeNotification(msg));
+                    Platform.runLater(() -> processPushNotification(msg));
                 } else {
                     // Xử lý các phản hồi nghiệp vụ thông thường
                     Platform.runLater(() -> handleBusinessResponse(msg));
@@ -193,6 +205,204 @@ public abstract class BaseDashboardController {
             // SỬA: Sử dụng .addMessageHandler() để chạy song song, KHÔNG DÙNG setMessageHandler()
             this.networkManager.addMessageHandler(realtimeNotificationHandler);
         }
+    }
+
+    @FXML
+    protected void handleNotificationBell(ActionEvent event) {
+        toggleNotificationCenter();
+    }
+
+    protected void processPushNotification(String rawMessage) {
+        rememberRealtimeNotification(rawMessage);
+        notifUIHandler.handle(rawMessage);
+        handleRealtimeNotification(rawMessage);
+    }
+
+    private void rememberRealtimeNotification(String rawMessage) {
+        NotificationModel notification = parseRealtimeNotification(rawMessage);
+        if (notification == null) {
+            return;
+        }
+
+        notificationInbox.add(0, notification);
+        while (notificationInbox.size() > 30) {
+            notificationInbox.remove(notificationInbox.size() - 1);
+        }
+
+        unreadNotificationCount++;
+        updateNotificationBadge();
+
+        if (notificationPopup != null && notificationPopup.isShowing()) {
+            refreshNotificationPopupContent();
+        }
+    }
+
+    private NotificationModel parseRealtimeNotification(String rawMessage) {
+        if (rawMessage == null || !rawMessage.startsWith("PUSH_NOTIF|")) {
+            return null;
+        }
+
+        String[] parts = rawMessage.split("\\|", 4);
+        if (parts.length < 4) {
+            return null;
+        }
+
+        return new NotificationModel(parts[1], parts[2], parts[3]);
+    }
+
+    private void toggleNotificationCenter() {
+        if (notificationPopup != null && notificationPopup.isShowing()) {
+            notificationPopup.hide();
+            return;
+        }
+
+        unreadNotificationCount = 0;
+        updateNotificationBadge();
+        showNotificationCenter();
+    }
+
+    private void showNotificationCenter() {
+        if (notificationBellButton == null || notificationBellButton.getScene() == null) {
+            return;
+        }
+
+        if (notificationPopup == null) {
+            notificationPopup = new Popup();
+            notificationPopup.setAutoFix(true);
+            notificationPopup.setAutoHide(true);
+            notificationPopup.setHideOnEscape(true);
+        }
+
+        refreshNotificationPopupContent();
+
+        Window owner = notificationBellButton.getScene().getWindow();
+        if (owner == null) {
+            return;
+        }
+
+        Bounds bounds = notificationBellButton.localToScreen(notificationBellButton.getBoundsInLocal());
+        double x = bounds == null ? owner.getX() + 18 : bounds.getMaxX() - 334;
+        double y = bounds == null ? owner.getY() + 80 : bounds.getMaxY() + 10;
+        notificationPopup.show(owner, Math.max(owner.getX() + 14, x), y);
+    }
+
+    private void refreshNotificationPopupContent() {
+        if (notificationPopup == null) {
+            return;
+        }
+
+        notificationPopup.getContent().setAll(buildNotificationCenter());
+    }
+
+    private VBox buildNotificationCenter() {
+        VBox panel = new VBox(12);
+        panel.getStyleClass().add("notification-popup");
+
+        var stylesheet = getClass().getResource("/client/dashboard.css");
+        if (stylesheet != null) {
+            panel.getStylesheets().add(stylesheet.toExternalForm());
+        }
+
+        Label title = new Label("Notifications");
+        title.getStyleClass().add("notification-popup-title");
+
+        Button markReadButton = new Button("Mark read");
+        markReadButton.getStyleClass().add("notification-clear-btn");
+        markReadButton.setOnAction(event -> {
+            unreadNotificationCount = 0;
+            updateNotificationBadge();
+            if (notificationPopup != null) {
+                notificationPopup.hide();
+            }
+        });
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox header = new HBox(10, title, spacer, markReadButton);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.getStyleClass().add("notification-popup-header");
+
+        VBox list = new VBox(8);
+        list.getStyleClass().add("notification-list");
+
+        if (notificationInbox.isEmpty()) {
+            Label empty = new Label("No notifications yet. New auction, item, and payment alerts will appear here.");
+            empty.setWrapText(true);
+            empty.getStyleClass().add("notification-empty");
+            list.getChildren().add(empty);
+        } else {
+            for (NotificationModel notification : notificationInbox) {
+                list.getChildren().add(buildNotificationRow(notification));
+            }
+        }
+
+        ScrollPane scrollPane = new ScrollPane(list);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.getStyleClass().add("notification-list-scroll");
+
+        panel.getChildren().addAll(header, scrollPane);
+        return panel;
+    }
+
+    private HBox buildNotificationRow(NotificationModel notification) {
+        Label icon = new Label(notificationIcon(notification.getType()));
+        icon.setAlignment(Pos.CENTER);
+        icon.getStyleClass().add("notification-item-icon");
+
+        Label title = new Label(cleanNotificationText(notification.getTitle(), "Notification"));
+        title.getStyleClass().add("notification-item-title");
+
+        Label message = new Label(cleanNotificationText(notification.getMessage(), ""));
+        message.setWrapText(true);
+        message.getStyleClass().add("notification-item-message");
+
+        Label time = new Label(notification.getFormattedTime());
+        time.getStyleClass().add("notification-item-time");
+
+        VBox copy = new VBox(3, title, message, time);
+        HBox.setHgrow(copy, Priority.ALWAYS);
+
+        HBox row = new HBox(10, icon, copy);
+        row.setAlignment(Pos.TOP_LEFT);
+        row.getStyleClass().add("notification-item");
+        return row;
+    }
+
+    private String notificationIcon(String type) {
+        if (type == null) {
+            return "i";
+        }
+
+        return switch (type) {
+            case "OUTBID", "PAYMENT_DUE" -> "!";
+            case "AUCTION_LOST", "ITEM_REJECTED" -> "x";
+            case "AUCTION_WON", "ITEM_APPROVED", "BID_PLACED", "AUCTION_STARTED",
+                "PAYMENT_RECEIVED" -> "✓";
+            default -> "i";
+        };
+    }
+
+    private String cleanNotificationText(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.replace("\\n", " ").trim();
+    }
+
+    private void updateNotificationBadge() {
+        if (notificationBadgeLabel == null) {
+            return;
+        }
+
+        boolean visible = unreadNotificationCount > 0;
+        notificationBadgeLabel.setVisible(visible);
+        notificationBadgeLabel.setManaged(visible);
+        notificationBadgeLabel.setText(
+            unreadNotificationCount > 99 ? "99+" : String.valueOf(unreadNotificationCount)
+        );
     }
 
     /**
@@ -393,6 +603,11 @@ public abstract class BaseDashboardController {
         if (this.networkManager != null && this.realtimeNotificationHandler != null) {
             this.networkManager.removeMessageHandler(this.realtimeNotificationHandler);
             this.realtimeNotificationHandler = null; // Reset để tránh dọn dẹp nhầm lần sau
+        }
+
+        if (notificationPopup != null) {
+            notificationPopup.hide();
+            notificationPopup = null;
         }
 
         SessionManager.clear();

@@ -49,9 +49,20 @@
                             <children>
                                 <VBox spacing="11.0" styleClass="profile-card">
                                     <children>
-                                        <StackPane styleClass="avatar-circle">
+                                        <StackPane maxWidth="Infinity" styleClass="profile-top-row">
                                             <children>
-                                                <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AU" />
+                                                <StackPane styleClass="avatar-circle" StackPane.alignment="CENTER">
+                                                    <children>
+                                                        <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AU" />
+                                                    </children>
+                                                </StackPane>
+
+                                                <StackPane styleClass="notification-bell-wrap" StackPane.alignment="TOP_RIGHT">
+                                                    <children>
+                                                        <Button fx:id="notificationBellButton" mnemonicParsing="false" onAction="#handleNotificationBell" styleClass="notification-bell-btn" text="🔔" />
+                                                        <Label fx:id="notificationBadgeLabel" styleClass="notification-badge" text="0" StackPane.alignment="TOP_RIGHT" />
+                                                    </children>
+                                                </StackPane>
                                             </children>
                                         </StackPane>
 
@@ -64,7 +75,6 @@
                                 <VBox spacing="6.0">
                                     <children>
                                         <Label styleClass="menu-title" text="NAVIGATION" />
-                                        <Button fx:id="dashboardBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Dashboard" />
                                         <Button fx:id="auctionsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auctions" />
                                         <Button fx:id="myBidsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="My Bids" />
                                         <Button fx:id="autoBidsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auto Bids" />
@@ -134,18 +144,10 @@
                                     </children>
                                 </FlowPane>
 
-                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                <VBox spacing="12.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
-                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="User Auction Workspace" />
                                         <FlowPane fx:id="userActionBar" hgap="7.0" vgap="7.0" />
-
-                                        <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">
-                                            <children>
-                                                <Label fx:id="workspaceTitleLabel" styleClass="table-title" text="Action Needed" />
-                                                <VBox fx:id="workspaceBox" spacing="9.0" VBox.vgrow="ALWAYS" />
-                                            </children>
-                                        </VBox>
-
+                                        <VBox fx:id="workspaceBox" spacing="12.0" styleClass="workspace-body" VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
                             </children>

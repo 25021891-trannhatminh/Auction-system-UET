@@ -182,15 +182,26 @@ public class AuctionManager {
     }
 
     /**
-      Load auction từ DB vào memory (dùng khi server khởi động).
-      Nếu auction đang RUNNING → lên lịch đóng theo endTime còn lại.
+     * Load auction đã có ID thật từ DB vào memory.
+     *
+     * <p>Dùng khi server khởi động hoặc ngay sau khi admin tạo auction qua service.
+     * Auction {@code OPEN} được lên lịch cả mở và đóng; auction {@code RUNNING}
+     * chỉ cần lên lịch đóng lại theo {@code endTime}.</p>
+     *
+     * @param auction auction đã được persist hoặc reload từ DB; bỏ qua nếu {@code null}
      */
     public void loadAuction(Auction auction) {
+        if (auction == null) {
+            return;
+        }
+
         globalObservers.forEach(auction::addObserver);
         auctionMap.put(auction.getId(), auction);
 
-        // Nếu đang RUNNING → lên lịch đóng lại
-        if (auction.getStatus() == AuctionStatus.RUNNING) {
+        if (auction.getStatus() == AuctionStatus.OPEN) {
+            scheduleOpen(auction);
+            scheduleClose(auction);
+        } else if (auction.getStatus() == AuctionStatus.RUNNING) {
             scheduleClose(auction);
         }
     }

@@ -607,17 +607,22 @@ public class ItemDAO {
     }
 
     /**
-     * Chuyển đổi một hàng dữ liệu từ ResultSet sang đối tượng Item.
-     * ItemFactory để xác định kiểu Item
+     * Chuyển đổi một hàng dữ liệu từ {@link ResultSet} sang đúng subtype {@link Item}.
      *
-     * @param rs ResultSet đang trỏ tới hàng hiện tại
-     * @return Item
-     * @throws SQLException Nếu có lỗi khi đọc tên cột hoặc dữ liệu
+     * <p>Luồng mới dùng {@link ItemFactory#createFromDb} để giữ nguyên {@code item_id}
+     * và {@code created_at} trong DB. Nếu dùng factory tạo mới như trước, item sẽ nhận UUID mới
+     * và khi tạo auction sẽ không map được về khóa ngoại {@code items.item_id}.</p>
+     *
+     * @param rs ResultSet đang trỏ tới hàng item hiện tại
+     * @return item domain giữ đúng ID DB
+     * @throws SQLException nếu có lỗi khi đọc tên cột hoặc dữ liệu
      */
     private Item getItemByRow(ResultSet rs) throws SQLException {
 
         Map<String,String> mapAttributeItem = itemAttributeDAO.getAttributeMapByItemId(rs.getInt("item_id"));
-        return ItemFactory.create(ItemCategory.valueOf(rs.getString("category")),
+        return ItemFactory.createFromDb(ItemCategory.valueOf(rs.getString("category")),
+            String.valueOf(rs.getInt("item_id")),
+            rs.getTimestamp("created_at").toLocalDateTime(),
             String.valueOf(rs.getInt("seller_id")),
             rs.getString("name"),
             rs.getString("description"),
