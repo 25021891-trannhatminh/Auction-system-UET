@@ -18,13 +18,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
-import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
 import server.database.DBConnection;
@@ -46,7 +45,10 @@ public class ClientHandler implements Runnable {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+
     private final BidHandler bidHandler;
+    private final AuthHandler authHandler;
+    private final AdminHandler adminHandler;
 
     // Infor Account connect với Server
     private String username = "Guest"; // Tên hiển thị mặc định
@@ -60,7 +62,7 @@ public class ClientHandler implements Runnable {
     // Services
     private final ServerAuthService authService;
     private final ItemService itemService;
-    private final AuctionService auctionService;
+    private  AuctionService auctionService;
     private final PaymentService paymentService;
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
@@ -78,6 +80,8 @@ public class ClientHandler implements Runnable {
         this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
         this.bidHandler = new BidHandler(auctionService);
+        this.authHandler = new AuthHandler();
+        this.adminHandler = new AdminHandler(auctionService);
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -118,35 +122,25 @@ public class ClientHandler implements Runnable {
         if (msg == null || msg.trim().isEmpty()) return;
 
         // Dùng giới hạn split để tránh lỗi khi description hoặc name có khoảng trắng
-        String[] request = msg.split(" ", 6);
+        String[] request = msg.split(" ");
+        String cmd = request[0];// Lấy mã lệnh đầu tiên (LOGIN, REGISTER, BID,...)
 
         // Phản hồi kết nối với Client
-        if ("PING".equals(request[0])){
-            send("PONG");
+        if (ProtocolConstants.PING.equals(cmd)){
+            send(ResponseBuilder.pong());
             return;
         }
         System.out.println("MSG FROM CLIENT: " + msg);
 
         // Xử lý request
-        switch (request[0]) {
-            case "LOGIN":
-                // Format: LOGIN <indentifier> <password>
-                String identifier = request[1]; // Có thể là username hoặc email theo UserDAO
-                String password = request[2];
-                send(authService.login(request));
-
-                // User login -> đăng ký ClientHandler cho ClientManager support luồng của User này
-                User loginUser = authService.getUser(identifier,password);
-                if (loginUser != null) {
-                    this.userId = Integer.parseInt(loginUser.getId());
-                    this.username = loginUser.getUsername();
-                    ClientManager.add(this.userId, this);
-                }
+        switch (cmd) {
+            case ProtocolConstants.LOGIN:
+                String loginResult = authHandler.handleLogin(request, this);
+                send(loginResult);
                 break;
-
-            case "REGISTER":
-                // Format mong muốn: REGISTER <user> <pass> <email> <fullName> <phone>
-                send(authService.register(request));
+            case ProtocolConstants.REGISTER:
+                String registerResult = authHandler.handleRegister(request);
+                send(registerResult);
                 break;
 
             case "CONFIRM_PAYMENT": {
@@ -246,20 +240,15 @@ public class ClientHandler implements Runnable {
                 break;
 
             case "LIST":
-                //✅ Lấy từ DB thay vì RAM
                 List<Auction> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
                 for (Auction a : auctions){
                     send("ITEM "+ a.getId()+ " "+ a.getCurrentPrice());
                 }
                 break;
 
-            case "BID":
-                if (request.length < 3) {
-                    send("FAIL INVALID_BID_FORMAT");
-                    return;
-                }
-                String result = bidHandler.handleBid(request[1],request[2],this.userId,this.username);
-                send(result);
+            case ProtocolConstants.BID:
+                String bidReponse = bidHandler.handleBid(request,this.userId,this.username);
+                send(bidReponse);
                 break;
 
             case "MSG":
@@ -269,15 +258,9 @@ public class ClientHandler implements Runnable {
                 }
                 break;
 
-            case "ADMIN_BAN_USER":
-                // Format: ADMIN_BAN_USER <UserID> <Reason>
-                if (request.length > 2) {
-                    int targetUserId = Integer.parseInt(request[1]);
-                    // Tạo 1 Array từ request[2] đến hết + nối các element trong Array bởi " " => String reason
-                    String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
-                    boolean banUserSuccess = adminService.banUser(this.userId, targetUserId, reason);
-                    send(banUserSuccess ? "ADMIN_BAN_SUCCESS" : "ADMIN_BAN_FAIL");
-                }
+            case ProtocolConstants.ADMIN_BAN_USER:
+                String banResult = adminHandler.handleBanUser(request, this.userId);
+                send(banResult);
                 break;
 
             case "ADMIN_UNBAN_USER":
@@ -811,6 +794,18 @@ public class ClientHandler implements Runnable {
         private static CreateAuctionResult fail(String message) {
             return new CreateAuctionResult(false, 0, message == null ? "SAVE_ERROR" : message);
         }
+    }
+    public void setUserId(int userId){
+        this.userId = userId;
+    }
+    public void setUsername(String username){
+        this.username = username;
+    }
+    public int getUserId(){
+        return userId;
+    }
+    public String getUsername(){
+        return username;
     }
 
 }
