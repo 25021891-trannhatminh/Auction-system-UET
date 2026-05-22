@@ -136,7 +136,7 @@ public class UserDashboardController extends BaseDashboardController {
   private int sellerItemActiveSales;
   private int sellerItemSold;
 
-  private String currentSectionKey = "dashboard";
+  private String currentSectionKey = "auctions";
   private String activeFilter = "Overview";
   private int auctionPage = 1;
   private Timeline auctionDetailCountdownTimeline;
@@ -156,7 +156,7 @@ public class UserDashboardController extends BaseDashboardController {
         return;
       }
       if (msg.startsWith("PUSH_NOTIF|")) {
-        Platform.runLater(() -> new client.service.NotificationUIHandler().handle(msg));
+        Platform.runLater(() -> processPushNotification(msg));
         return;
       }
       if (isAuctionListMessage(msg)) {
@@ -414,7 +414,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   @Override
   protected String getDefaultSectionKey() {
-    return "dashboard";
+    return "auctions";
   }
 
   @Override

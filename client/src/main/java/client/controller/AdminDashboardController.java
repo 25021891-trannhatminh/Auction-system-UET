@@ -162,7 +162,7 @@ public class AdminDashboardController extends BaseDashboardController {
             }
 
             if (message.startsWith("PUSH_NOTIF|")) {
-                Platform.runLater(() -> notifUIHandler.handle(message));
+                Platform.runLater(() -> processPushNotification(message));
                 return;
             }
 

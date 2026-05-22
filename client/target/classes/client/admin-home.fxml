@@ -44,9 +44,20 @@
                             <children>
                                 <VBox spacing="11.0" styleClass="profile-card">
                                     <children>
-                                        <StackPane styleClass="avatar-circle">
+                                        <StackPane maxWidth="Infinity" styleClass="profile-top-row">
                                             <children>
-                                                <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AD" />
+                                                <StackPane styleClass="avatar-circle" StackPane.alignment="CENTER">
+                                                    <children>
+                                                        <Label fx:id="avatarInitialsLabel" styleClass="avatar-text" text="AD" />
+                                                    </children>
+                                                </StackPane>
+
+                                                <StackPane styleClass="notification-bell-wrap" StackPane.alignment="TOP_RIGHT">
+                                                    <children>
+                                                        <Button fx:id="notificationBellButton" mnemonicParsing="false" onAction="#handleNotificationBell" styleClass="notification-bell-btn" text="🔔" />
+                                                        <Label fx:id="notificationBadgeLabel" styleClass="notification-badge" text="0" StackPane.alignment="TOP_RIGHT" />
+                                                    </children>
+                                                </StackPane>
                                             </children>
                                         </StackPane>
 
