@@ -525,7 +525,6 @@ public class AuctionService {
 
       // Lấy ID người thắng cuộc một cách an toàn sau khi đã qua bước kiểm tra đối tượng tồn tại
       String buyerIdStr = auction.getCurrentLeader().getId();
-
       // ── FIX BUG-8 (Lỗi 2): Loại bỏ toán tử ==, sử dụng hàm so sánh giá trị chuỗi an toàn (.trim().isEmpty()) ──
       if (buyerIdStr == null || buyerIdStr.trim().isEmpty()) {
         logger.error("confirmPayment() — Critical: Current leader ID value is null or blank for auctionId={}", auctionId);
@@ -546,44 +545,29 @@ public class AuctionService {
       }
 
       // 4. Tiến hành cập nhật trạng thái hóa đơn xuống DB thành hoàn tất (completePayment)
-      boolean isUpdated = paymentDAO.completePayment(payment.getPaymentId());
-      if (isUpdated) {
-
         // ── SỬA ĐỒNG BỘ: Gọi phương thức đóng gói chuẩn để đồng bộ chuyển trạng thái của đối tượng trên RAM sang PAID ──
-        try {
-          auction.markPaid();
-        } catch (IllegalStateException e) {
-          logger.error("confirmPayment() — Lifecycle error when trying to mark auction ID {} as PAID on RAM", auctionId, e);
-          return false;
-        }
-
-        // Đồng bộ cập nhật cột trạng thái trong bảng đấu giá (auctions) dưới Database thành PAID
-        auctionDAO.updateStatus(auctionId, AuctionStatus.PAID);
-        List<PaymentDTO> pendingList = paymentDAO.getPendingPayments();
-        for (PaymentDTO p : pendingList) {
-          if (p.getAuctionId() == auctionId) {
-            paymentDAO.completePayment(p.getPaymentId()); // Chuyển từ PENDING -> COMPLETED
-            break;
-          }
-        }
-
-        int sellerId = Integer.parseInt(auction.getSellerId());
-        int buyerId = Integer.parseInt(buyerIdStr);
-        String itemName = "Auction #" + auctionId;
-        BigDecimal finalPrice = auction.getCurrentPrice();
-
-        logger.info("confirmPayment() — Payment SUCCESS. [Auction:{}, Buyer:{}, Seller:{}]. Status synchronized to PAID on both RAM and DB layers.",
-            auctionId, buyerId, sellerId);
-
-        // 5. Phát tán các thông báo Realtime cho các bên liên quan (Dữ liệu tiếng Anh sạch sẽ)
-        notifyPaymentReceived(sellerId, auctionId, itemName, finalPrice);
-        notifySystemNotification(buyerId, "Payment Successful",
-            String.format("You have successfully paid %s for item: %s", finalPrice.toString(), itemName));
-
-        return true;
+      try {
+        auction.markPaid();
+      } catch (IllegalStateException e) {
+        logger.error("confirmPayment() — Lifecycle error when trying to mark auction ID {} as PAID on RAM", auctionId, e);
+        return false;
       }
 
-      return false;
+        // Đồng bộ cập nhật cột trạng thái trong bảng đấu giá (auctions) dưới Database thành PAID
+      auctionDAO.updateStatus(auctionId, AuctionStatus.PAID);
+
+      int sellerId = Integer.parseInt(auction.getSellerId());
+      int buyerId = Integer.parseInt(buyerIdStr);
+      String itemName = "Auction #" + auctionId;
+      BigDecimal finalPrice = auction.getCurrentPrice();
+      logger.info("confirmPayment() — Payment SUCCESS. [Auction:{}, Buyer:{}, Seller:{}]. Status synchronized to PAID on both RAM and DB layers.",
+          auctionId, buyerId, sellerId);
+      // 5. Phát tán các thông báo Realtime cho các bên liên quan (Dữ liệu tiếng Anh sạch sẽ)
+      notifyPaymentReceived(sellerId, auctionId, itemName, finalPrice);
+      notifySystemNotification(buyerId, "Payment Successful",
+          String.format("You have successfully paid %s for item: %s", finalPrice.toString(), itemName));
+
+      return true;
     } catch (Exception e) {
       logger.error("confirmPayment() — Critical failure caught during payment confirmation workflow execution.", e);
       return false;

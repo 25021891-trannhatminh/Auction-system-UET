@@ -15,10 +15,7 @@ import server.common.model.WalletDTO;
 import server.common.model.WalletUpdateEvent;
 import server.database.DBConnection;
 import server.network.NotificationDispatcher;
-import server.repository.NotificationDAO;
-import server.repository.PaymentDAO;
-import server.repository.WalletDAO;
-import server.repository.WalletTransactionDAO;
+import server.repository.*;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -388,13 +385,21 @@ public class PaymentService {
   public boolean createPendingPayment(int auctionId, String itemName) {
     try {
       // Lấy thông tin auction để lấy winner và seller
+      AuctionDAO auctionDAO = new AuctionDAO();
       Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
-      if (auctionOpt.isEmpty()) {
-        logger.warn("createPendingPayment - Auction not found: {}", auctionId);
-        return false;
+      Auction auction ;
+      if (auctionOpt.isPresent()) {
+        auction = auctionOpt.get();
+      } else {
+        auction = auctionDAO.getById(auctionId);
+        if (auction == null) {
+          logger.warn("createPendingPayment - Auction not found: {}", auctionId);
+          return false;
+        }
+        AuctionManager.getInstance().loadAuction(auction);
       }
 
-      Auction auction = auctionOpt.get();
+
       if (auction.getCurrentLeader() == null) {
         logger.warn("createPendingPayment - No winner for auction {}", auctionId);
         return false;
@@ -407,7 +412,7 @@ public class PaymentService {
       boolean created = paymentDAO.createPayment(auctionId, buyerId, sellerId, amount);
 
       if (created) {
-        logger.info("✅ Created PENDING Payment for auctionId={}, buyerId={}, amount={}",
+        logger.info("Created PENDING Payment for auctionId={}, buyerId={}, amount={}",
             auctionId, buyerId, amount);
 
         // Notify cho buyer

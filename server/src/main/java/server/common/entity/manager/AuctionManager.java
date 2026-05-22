@@ -148,7 +148,7 @@ public class AuctionManager {
     //  Auction CRUD
 
     /**
-      Tạo mới phiên đấu giá và lên lịch tự động mở/đóng.
+      Tạo mới phiên đấu giá và lên lịch tự động mở/đóng trên RAM.
 
         Sau khi gọi method này, tầng Service phải:
           1. AuctionDAO.insert(auction) — lưu vào DB
