@@ -67,6 +67,12 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double USER_ACTION_GAP = 6;
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
+  private static final double AUCTION_DETAIL_MEDIA_WIDTH = 650;
+  private static final double AUCTION_DETAIL_INFO_WIDTH = 430;
+  private static final double AUCTION_DETAIL_GAP = 22;
+  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 330;
+  private static final double AUCTION_DETAIL_THUMB_WIDTH = 100;
+  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 74;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
   private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
   private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
@@ -1409,52 +1415,58 @@ public class UserDashboardController extends BaseDashboardController {
       userActionBar.getChildren().add(buildAuctionBreadcrumb(data));
     }
 
-    HBox detailShell = new HBox(22);
+    HBox detailShell = new HBox(AUCTION_DETAIL_GAP);
     detailShell.getStyleClass().add("auction-detail-shell");
-    detailShell.setMaxWidth(Double.MAX_VALUE);
+    detailShell.setAlignment(Pos.TOP_LEFT);
+    detailShell.setFillHeight(false);
+    lockRegionWidth(
+        detailShell,
+        AUCTION_DETAIL_MEDIA_WIDTH + AUCTION_DETAIL_GAP + AUCTION_DETAIL_INFO_WIDTH);
 
     VBox mediaColumn = new VBox(14);
     mediaColumn.getStyleClass().add("auction-detail-media-column");
-    mediaColumn.setMinWidth(0);
-    mediaColumn.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(mediaColumn, Priority.ALWAYS);
+    lockRegionWidth(mediaColumn, AUCTION_DETAIL_MEDIA_WIDTH);
+    HBox.setHgrow(mediaColumn, Priority.NEVER);
 
-    StackPane mainImage = createAuctionImageWrap(data.imagePath, 330);
+    StackPane mainImage = createAuctionImageWrap(data.imagePath, AUCTION_DETAIL_IMAGE_HEIGHT);
     mainImage.getStyleClass().add("auction-detail-main-image");
+    lockRegionWidth(mainImage, AUCTION_DETAIL_MEDIA_WIDTH);
 
     HBox thumbnails = new HBox(10);
     thumbnails.getStyleClass().add("auction-detail-thumbnails");
+    lockRegionWidth(thumbnails, AUCTION_DETAIL_MEDIA_WIDTH);
     List<String> imagePaths = imagePathsFromPayload(data.imagePayload);
     if (imagePaths.isEmpty()) {
       imagePaths.add(data.imagePath);
     }
     for (String path : imagePaths.subList(0, Math.min(4, imagePaths.size()))) {
-      StackPane thumb = createAuctionImageWrap(path, 74);
+      StackPane thumb = createAuctionImageWrap(path, AUCTION_DETAIL_THUMB_HEIGHT);
       thumb.getStyleClass().add("auction-detail-thumb");
-      thumb.setPrefWidth(100);
-      thumb.setMinWidth(100);
-      thumb.setMaxWidth(100);
-      thumb.setOnMouseClicked(event -> setAuctionImageContent(mainImage, path, 330));
+      lockRegionWidth(thumb, AUCTION_DETAIL_THUMB_WIDTH);
+      thumb.setOnMouseClicked(event ->
+          setAuctionImageContent(mainImage, path, AUCTION_DETAIL_IMAGE_HEIGHT));
       thumbnails.getChildren().add(thumb);
     }
 
-    Label descriptionLine = new Label(fallback(data.description, "No description stored for this item."));
+    Label descriptionLine = new Label(
+        fallback(data.description, "No description stored for this item."));
     descriptionLine.getStyleClass().add("auction-detail-description-line");
     descriptionLine.setWrapText(true);
-    descriptionLine.setMaxWidth(Double.MAX_VALUE);
+    descriptionLine.setMaxWidth(AUCTION_DETAIL_MEDIA_WIDTH);
 
     mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionLine);
 
     VBox infoColumn = new VBox(14);
     infoColumn.getStyleClass().add("auction-detail-info-column");
-    infoColumn.setMinWidth(320);
-    infoColumn.setPrefWidth(430);
-    infoColumn.setMaxWidth(470);
+    lockRegionWidth(infoColumn, AUCTION_DETAIL_INFO_WIDTH);
+    HBox.setHgrow(infoColumn, Priority.NEVER);
 
     HBox countdown = buildCountdown(data.secondsLeft);
+    lockRegionWidth(countdown, AUCTION_DETAIL_INFO_WIDTH - 44);
 
     VBox bidPanel = new VBox(14);
     bidPanel.getStyleClass().add("auction-detail-price-panel");
+    bidPanel.setMaxWidth(Double.MAX_VALUE);
 
     HBox metaRow = buildAuctionMetaRow(data);
 
@@ -1473,12 +1485,14 @@ public class UserDashboardController extends BaseDashboardController {
     bidInput.setPromptText(data.minimumIncrement);
     bidInput.setDisable(true);
     bidInput.getStyleClass().add("auction-detail-bid-input");
+    bidInput.setMinWidth(0);
     HBox.setHgrow(bidInput, Priority.ALWAYS);
 
     Button disabledBid = new Button("Place Bid");
     disabledBid.setMnemonicParsing(false);
     disabledBid.getStyleClass().add("auction-market-bid-btn");
     disabledBid.setDisable(true);
+    lockRegionWidth(disabledBid, 126);
 
     bidRow.getChildren().addAll(bidInput, disabledBid);
 
@@ -1491,6 +1505,13 @@ public class UserDashboardController extends BaseDashboardController {
     infoColumn.getChildren().addAll(countdown, bidPanel);
     detailShell.getChildren().addAll(mediaColumn, infoColumn);
     workspaceBox.getChildren().add(detailShell);
+  }
+
+
+  private void lockRegionWidth(Region region, double width) {
+    region.setMinWidth(width);
+    region.setPrefWidth(width);
+    region.setMaxWidth(width);
   }
 
   private HBox buildAuctionBreadcrumb(AuctionCardData data) {

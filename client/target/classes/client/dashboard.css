@@ -2420,3 +2420,46 @@
     -fx-border-radius: 32;
     -fx-padding: 22;
 }
+
+/* Flatten workspace content: remove the extra table card layer and repeated titles. */
+.workspace-body {
+    -fx-padding: 0;
+    -fx-fill-width: true;
+}
+
+.surface-card > .workspace-body {
+    -fx-max-width: Infinity;
+}
+
+.user-dashboard-root .surface-card {
+    -fx-padding: 22 24 24 24;
+}
+
+.user-dashboard-root .workspace-body {
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .browse-header {
+    -fx-padding: 0 0 4 0;
+}
+
+.user-dashboard-root .auction-grid {
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .pagination-bar {
+    -fx-padding: 6 0 0 0;
+}
+
+.user-dashboard-root .data-header,
+.user-dashboard-root .data-row {
+    -fx-max-width: Infinity;
+}
+
+.user-dashboard-root .data-row {
+    -fx-padding: 14 18 14 18;
+}
+
+.user-dashboard-root .data-header {
+    -fx-padding: 12 18 12 18;
+}

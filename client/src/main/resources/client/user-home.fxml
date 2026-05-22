@@ -144,18 +144,10 @@
                                     </children>
                                 </FlowPane>
 
-                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                <VBox spacing="12.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
-                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="User Auction Workspace" />
                                         <FlowPane fx:id="userActionBar" hgap="7.0" vgap="7.0" />
-
-                                        <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">
-                                            <children>
-                                                <Label fx:id="workspaceTitleLabel" styleClass="table-title" text="Action Needed" />
-                                                <VBox fx:id="workspaceBox" spacing="9.0" VBox.vgrow="ALWAYS" />
-                                            </children>
-                                        </VBox>
-
+                                        <VBox fx:id="workspaceBox" spacing="12.0" styleClass="workspace-body" VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
                             </children>

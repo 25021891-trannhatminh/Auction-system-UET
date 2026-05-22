@@ -141,20 +141,10 @@
                                     </children>
                                 </FlowPane>
 
-                                <VBox spacing="13.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
+                                <VBox spacing="12.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
-                                        <Label fx:id="surfaceTitleLabel" styleClass="surface-title" text="Control Center" />
-                                        <Label fx:id="surfaceDescriptionLabel" styleClass="surface-desc" text="Practical admin workspace for auction health, moderation queues, and operational data." wrapText="true" />
-
                                         <FlowPane fx:id="adminActionBar" hgap="7.0" vgap="7.0" />
-
-                                        <VBox spacing="9.0" styleClass="table-card" VBox.vgrow="ALWAYS">
-                                            <children>
-                                                <Label fx:id="tableTitleLabel" styleClass="table-title" text="Operational Queue" />
-                                                <VBox fx:id="dataRowsBox" spacing="7.0" VBox.vgrow="ALWAYS" />
-                                            </children>
-                                        </VBox>
-
+                                        <VBox fx:id="dataRowsBox" spacing="9.0" styleClass="workspace-body" VBox.vgrow="ALWAYS" />
                                     </children>
                                 </VBox>
                             </children>
