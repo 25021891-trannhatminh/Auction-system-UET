@@ -13,9 +13,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.sql.Types;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -26,17 +23,15 @@ import java.util.List;
 import java.util.Map;
 
 import server.common.entity.Auction;
-import server.common.entity.BidTransaction;
+import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
-import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import server.network.ClientManager;
 import server.repository.AuctionDAO;
-import server.repository.AccountDAO;
 import server.repository.BidTransactionDAO;
-import server.repository.WalletDAO;
+import server.repository.ItemDAO;
 import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
@@ -51,6 +46,7 @@ public class ClientHandler implements Runnable {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+    private final BidHandler bidHandler;
 
     // Infor Account connect với Server
     private String username = "Guest"; // Tên hiển thị mặc định
@@ -59,7 +55,7 @@ public class ClientHandler implements Runnable {
     // DAOs (Refactor sau không cho DAO vào Handler)
     private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
     private final AuctionDAO auctionDAO = new AuctionDAO();
-    private final WalletDAO walletDAO = new WalletDAO();
+    private final ItemDAO itemDAO = new ItemDAO();
 
     // Services
     private final ServerAuthService authService;
@@ -81,6 +77,7 @@ public class ClientHandler implements Runnable {
         this.adminService   = new AdminService(auctionService);
         this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
+        this.bidHandler = new BidHandler(auctionService);
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -261,21 +258,8 @@ public class ClientHandler implements Runnable {
                     send("FAIL INVALID_BID_FORMAT");
                     return;
                 }
-                try {
-                    int auctionId = Integer.parseInt(request[1]);
-                    BigDecimal amount = new BigDecimal(request[2]);
-
-                    // ✅ Gọi BidTransactionDAO.placeBid() — có Transaction + Row Locking sẵn!
-                    // Không cần synchronized nữa vì BidTransactionDAO đã xử lý bằng SELECT FOR UPDATE
-                    boolean ok = bidTransactionDAO.placeBid(auctionId, this.userId, amount, false);
-                    if (ok) {
-                        ClientManager.broadcast("NEW_BID " + this.username + " " + auctionId + " " + amount);
-                    } else {
-                        send("FAIL BID_TOO_LOW_OR_NOT_RUNNING");
-                    }
-                } catch (NumberFormatException e) {
-                    send("FAIL INVALID_FORMAT");
-                }
+                String result = bidHandler.handleBid(request[1],request[2],this.userId,this.username);
+                send(result);
                 break;
 
             case "MSG":
@@ -332,6 +316,14 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /**
+     * Xử lý command admin tạo auction từ client.
+     *
+     * <p>Handler chỉ parse, validate request và gọi service; phần persist DB, đổi trạng thái item
+     * và load AuctionManager được đẩy xuống AuctionService/AuctionDAO để tránh insert DB rời rạc.</p>
+     *
+     * @param payload chuỗi field đã được client gửi kèm command ADMIN_CREATE_AUCTION
+     */
     private void handleAdminCreateAuction(String payload) {
         List<String> fields = splitPayload(payload);
         if (fields.size() < 8) {
@@ -367,7 +359,7 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        CreateAuctionResult result = insertAuctionFromAvailableItem(
+        CreateAuctionResult result = createAuctionThroughService(
             itemId,
             sellerId,
             startTime,
@@ -387,6 +379,14 @@ public class ClientHandler implements Runnable {
         send("ADMIN_CREATE_AUCTION_FAIL " + fields(result.message));
     }
 
+    /**
+     * Validate dữ liệu tạo auction trước khi gọi service.
+     *
+     * <p>Method này chỉ kiểm tra format và constraint cơ bản từ request. Các kiểm tra cần lock DB
+     * như item tồn tại, đúng seller và còn AVAILABLE sẽ được xử lý tiếp trong service/DAO.</p>
+     *
+     * @return chuỗi rỗng nếu hợp lệ, ngược lại là message lỗi gửi về client
+     */
     private String validateCreateAuctionRequest(
         int itemId,
         int sellerId,
@@ -417,7 +417,15 @@ public class ClientHandler implements Runnable {
         return "";
     }
 
-    private CreateAuctionResult insertAuctionFromAvailableItem(
+    /**
+     * Tạo auction thông qua AuctionService thay vì insert trực tiếp trong ClientHandler.
+     *
+     * <p>Flow này giữ handler mỏng hơn và đảm bảo auction mới được ghi DB, đổi item sang
+     * {@code IN_AUCTION}, rồi load vào AuctionManager để scheduler tiếp tục quản lý.</p>
+     *
+     * @return kết quả tạo auction gồm trạng thái thành công, auction ID hoặc mã lỗi
+     */
+    private CreateAuctionResult createAuctionThroughService(
         int itemId,
         int sellerId,
         LocalDateTime startTime,
@@ -426,87 +434,32 @@ public class ClientHandler implements Runnable {
         BigDecimal reservePrice,
         int snipeWindowSeconds,
         int snipeExtensionSeconds) {
-        String selectSql = """
-            SELECT seller_id, starting_price, status
-            FROM items
-            WHERE item_id = ?
-            FOR UPDATE
-            """;
-        String insertSql = """
-            INSERT INTO auctions (
-                item_id, seller_id, start_time, end_time,
-                min_bid_increment, reserve_price,
-                snipe_window_seconds, snipe_extension_seconds,
-                current_price, current_winner_id, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'OPEN')
-            """;
-        String updateSql = "UPDATE items SET status = 'IN_AUCTION' WHERE item_id = ?";
-
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                BigDecimal startingPrice;
-                try (PreparedStatement selectPs = conn.prepareStatement(selectSql)) {
-                    selectPs.setInt(1, itemId);
-                    try (ResultSet rs = selectPs.executeQuery()) {
-                        if (!rs.next()) {
-                            conn.rollback();
-                            return CreateAuctionResult.fail("ITEM_NOT_FOUND");
-                        }
-                        int databaseSellerId = rs.getInt("seller_id");
-                        if (databaseSellerId != sellerId) {
-                            conn.rollback();
-                            return CreateAuctionResult.fail("SELLER_MISMATCH");
-                        }
-                        String itemStatus = rs.getString("status");
-                        if (!"AVAILABLE".equalsIgnoreCase(itemStatus)) {
-                            conn.rollback();
-                            return CreateAuctionResult.fail("ITEM_NOT_AVAILABLE");
-                        }
-                        startingPrice = rs.getBigDecimal("starting_price");
-                    }
-                }
-
-                int auctionId = 0;
-                try (PreparedStatement insertPs = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
-                    insertPs.setInt(1, itemId);
-                    insertPs.setInt(2, sellerId);
-                    insertPs.setTimestamp(3, Timestamp.valueOf(startTime));
-                    insertPs.setTimestamp(4, Timestamp.valueOf(endTime));
-                    insertPs.setBigDecimal(5, minimumBidIncrement);
-                    if (reservePrice == null) {
-                        insertPs.setNull(6, Types.DECIMAL);
-                    } else {
-                        insertPs.setBigDecimal(6, reservePrice);
-                    }
-                    insertPs.setShort(7, (short) snipeWindowSeconds);
-                    insertPs.setShort(8, (short) snipeExtensionSeconds);
-                    insertPs.setBigDecimal(9, startingPrice);
-                    insertPs.executeUpdate();
-
-                    try (ResultSet keys = insertPs.getGeneratedKeys()) {
-                        if (keys.next()) {
-                            auctionId = keys.getInt(1);
-                        }
-                    }
-                }
-
-                try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
-                    updatePs.setInt(1, itemId);
-                    updatePs.executeUpdate();
-                }
-
-                conn.commit();
-                return CreateAuctionResult.ok(auctionId);
-            } catch (SQLException e) {
-                conn.rollback();
-                return CreateAuctionResult.fail(e.getMessage());
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        } catch (SQLException e) {
-            return CreateAuctionResult.fail(e.getMessage());
+        Item item = itemDAO.getById(itemId);
+        if (item == null) {
+            return CreateAuctionResult.fail("ITEM_NOT_FOUND");
         }
+        if (parseIntOrDefault(item.getSellerId(), 0) != sellerId) {
+            return CreateAuctionResult.fail("SELLER_MISMATCH");
+        }
+        if (item.getStatus() != ItemStatus.AVAILABLE) {
+            return CreateAuctionResult.fail("ITEM_NOT_AVAILABLE");
+        }
+
+        Auction auction = auctionService.createAuction(
+            item,
+            String.valueOf(sellerId),
+            startTime,
+            endTime,
+            minimumBidIncrement,
+            reservePrice,
+            snipeWindowSeconds,
+            snipeExtensionSeconds
+        );
+
+        if (auction == null) {
+            return CreateAuctionResult.fail("SAVE_ERROR");
+        }
+        return CreateAuctionResult.ok(parseIntOrDefault(auction.getId(), 0));
     }
 
     private boolean isActiveAdmin(int userId) {

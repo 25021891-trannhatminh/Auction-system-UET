@@ -1,6 +1,7 @@
 package server.repository;
 
 import server.common.entity.Auction;
+import server.common.entity.Item;
 import server.common.enums.AuctionStatus;
 import server.database.DBConnection;
 import org.slf4j.Logger;
@@ -8,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,14 +38,26 @@ public class AuctionDAO {
     // SQL constants
     // ============================================================
 
+    private static final String SQL_NEXT_AUCTION_ID = "SELECT nextval(seq_auctions)";
+
     private static final String SQL_INSERT = """
       INSERT INTO auctions (
-          item_id, seller_id, start_time, end_time,
+          auction_id, item_id, seller_id, start_time, end_time,
           min_bid_increment, reserve_price,
           snipe_window_seconds, snipe_extension_seconds,
           current_price, current_winner_id, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """;
+
+    private static final String SQL_LOCK_ITEM_FOR_CREATE = """
+      SELECT seller_id, status, starting_price
+      FROM items
+      WHERE item_id = ?
+      FOR UPDATE
+      """;
+
+    private static final String SQL_UPDATE_ITEM_STATUS =
+        "UPDATE items SET status = ? WHERE item_id = ?";
 
     private static final String SQL_SELECT_BY_ID =
         "SELECT * FROM auctions WHERE auction_id = ?";
@@ -87,50 +101,180 @@ public class AuctionDAO {
 
     /**
      * Tạo một phiên đấu giá mới trong cơ sở dữ liệu.
-     * AuctionManager gọi hàm này khi tạo 1 Auction mới
+     *
+     * <p>Method này vẫn giữ signature cũ để các caller cũ không vỡ code, nhưng bên trong
+     * sẽ dùng flow mới: insert auction + chuyển item sang IN_AUCTION trong cùng transaction,
+     * rồi load lại auction có ID thật từ DB.</p>
      *
      * @param auction thông tin phiên đấu giá cần tạo; không được {@code null}
      * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
      */
     public boolean create(Auction auction) {
-        int itemId = Integer.parseInt(auction.getItem().getId());
+        return createAndLoad(auction) != null;
+    }
 
-        if (!isItemAvailable(itemId)) {
-            logger.warn("create() – itemId={} is not AVAILABLE", itemId);
-            return false;
+    /**
+     * Tạo auction và trả về entity đã được reload từ DB với {@code auction_id} thật.
+     *
+     * <p>Method này là cầu nối cho các caller cũ vẫn truyền vào {@link Auction} domain.
+     * Dữ liệu sẽ được bóc ra rồi chuyển sang {@link #createAuction(Item, String, LocalDateTime,
+     * LocalDateTime, BigDecimal, BigDecimal, int, int)} để đảm bảo chỉ có một flow persist chuẩn.</p>
+     *
+     * @param auction auction domain cần lưu
+     * @return auction đã reload từ DB, hoặc {@code null} nếu dữ liệu không hợp lệ/lưu thất bại
+     */
+    public Auction createAndLoad(Auction auction) {
+        if (auction == null || auction.getItem() == null) {
+            logger.warn("createAndLoad() – auction/item is null");
+            return null;
+        }
+        return createAuction(
+            auction.getItem(),
+            auction.getSellerId(),
+            auction.getStartTime(),
+            auction.getEndTime(),
+            auction.getMinBidIncrement(),
+            auction.getReservePrice(),
+            auction.getSnipeWindowSeconds(),
+            auction.getSnipeExtensionSeconds()
+        );
+    }
+
+    /**
+     * Tạo auction từ item {@code AVAILABLE} trong một transaction duy nhất.
+     *
+     * <p>Transaction sẽ khóa row item bằng {@code SELECT ... FOR UPDATE}, kiểm tra seller/status,
+     * tự sinh {@code auction_id}, insert auction và đổi item sang {@code IN_AUCTION}. Cách này tránh
+     * trạng thái nửa vời như DB đã có auction nhưng item chưa bị khóa, hoặc AuctionManager giữ UUID tạm
+     * khác với ID thật trong DB.</p>
+     *
+     * @param item item đã được duyệt và đang AVAILABLE
+     * @param sellerId ID người bán dưới dạng chuỗi số trong DB
+     * @param startTime thời điểm bắt đầu phiên
+     * @param endTime thời điểm kết thúc phiên
+     * @param minBidIncrement bước nhảy giá tối thiểu
+     * @param reservePrice giá sàn; {@code null} sẽ được lưu là {@code BigDecimal.ZERO}
+     * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
+     * @param snipeExtensionSeconds thời gian gia hạn nếu có bid trong snipe window
+     * @return auction đã reload từ DB với ID thật, hoặc {@code null} nếu tạo thất bại
+     */
+    public Auction createAuction(Item item, String sellerId,
+                                 LocalDateTime startTime, LocalDateTime endTime,
+                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
+                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
+        if (item == null || sellerId == null || startTime == null || endTime == null) {
+            logger.warn("createAuction() – invalid null input");
+            return null;
         }
 
-        logger.debug("create() – itemId={}, sellerId={}, status={}",
-            itemId, auction.getSellerId(), auction.getStatus());
+        int itemId;
+        int sellerIdInt;
+        try {
+            itemId = Integer.parseInt(item.getId());
+            sellerIdInt = Integer.parseInt(sellerId);
+        } catch (NumberFormatException e) {
+            logger.warn("createAuction() – itemId/sellerId must be database integer IDs. itemId={}, sellerId={}",
+                item.getId(), sellerId);
+            return null;
+        }
 
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+        LocalDateTime now = LocalDateTime.now();
+        if (!endTime.isAfter(startTime) || !endTime.isAfter(now)) {
+            logger.warn("createAuction() – invalid time range. start={}, end={}", startTime, endTime);
+            return null;
+        }
 
-            ps.setInt(1, itemId);
-            ps.setInt(2, Integer.parseInt(auction.getSellerId()));
-            ps.setTimestamp(3, Timestamp.valueOf(auction.getStartTime()));
-            ps.setTimestamp(4, Timestamp.valueOf(auction.getEndTime()));
-            ps.setBigDecimal(5, auction.getMinBidIncrement());
-            ps.setBigDecimal(6, auction.getReservePrice());
-            ps.setShort(7, (short) auction.getSnipeWindowSeconds());
-            ps.setShort(8, (short) auction.getSnipeExtensionSeconds());
-            ps.setBigDecimal(9, auction.getCurrentPrice());
-            setNullableInt(ps, 10, auction.getCurrentLeader() != null ?
-                                                Integer.parseInt(auction.getCurrentLeader().getId()) : null
-            );
-            ps.setString(11, auction.getStatus().name());
+        AuctionStatus initialStatus = startTime.isAfter(now) ? AuctionStatus.OPEN : AuctionStatus.RUNNING;
+        BigDecimal safeReservePrice = reservePrice == null ? BigDecimal.ZERO : reservePrice;
+        BigDecimal safeMinIncrement = minBidIncrement == null ? BigDecimal.ZERO : minBidIncrement;
 
-            boolean created = ps.executeUpdate() > 0;
-            if (created) {
-                logger.info("create() – Auction created successfully for itemId={}", auction.getId());
-            } else {
-                logger.warn("create() – No rows affected for itemId={}", auction.getId());
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                BigDecimal startingPrice;
+                try (PreparedStatement lockItemPs = conn.prepareStatement(SQL_LOCK_ITEM_FOR_CREATE)) {
+                    lockItemPs.setInt(1, itemId);
+                    try (ResultSet rs = lockItemPs.executeQuery()) {
+                        if (!rs.next()) {
+                            conn.rollback();
+                            logger.warn("createAuction() – itemId={} not found", itemId);
+                            return null;
+                        }
+                        int databaseSellerId = rs.getInt("seller_id");
+                        if (databaseSellerId != sellerIdInt) {
+                            conn.rollback();
+                            logger.warn("createAuction() – seller mismatch. itemId={}, requestSeller={}, dbSeller={}",
+                                itemId, sellerIdInt, databaseSellerId);
+                            return null;
+                        }
+                        String itemStatus = rs.getString("status");
+                        if (!"AVAILABLE".equalsIgnoreCase(itemStatus)) {
+                            conn.rollback();
+                            logger.warn("createAuction() – itemId={} is not AVAILABLE, currentStatus={}",
+                                itemId, itemStatus);
+                            return null;
+                        }
+                        startingPrice = rs.getBigDecimal("starting_price");
+                    }
+                }
+
+                int auctionId = nextAuctionId(conn);
+                try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
+                    ps.setInt(1, auctionId);
+                    ps.setInt(2, itemId);
+                    ps.setInt(3, sellerIdInt);
+                    ps.setTimestamp(4, Timestamp.valueOf(startTime));
+                    ps.setTimestamp(5, Timestamp.valueOf(endTime));
+                    ps.setBigDecimal(6, safeMinIncrement);
+                    ps.setBigDecimal(7, safeReservePrice);
+                    ps.setShort(8, (short) snipeWindowSeconds);
+                    ps.setShort(9, (short) snipeExtensionSeconds);
+                    ps.setBigDecimal(10, startingPrice);
+                    ps.setNull(11, Types.INTEGER);
+                    ps.setString(12, initialStatus.name());
+                    ps.executeUpdate();
+                }
+
+                try (PreparedStatement updateItemPs = conn.prepareStatement(SQL_UPDATE_ITEM_STATUS)) {
+                    updateItemPs.setString(1, "IN_AUCTION");
+                    updateItemPs.setInt(2, itemId);
+                    updateItemPs.executeUpdate();
+                }
+
+                conn.commit();
+                logger.info("createAuction() – auctionId={} created for itemId={} with status={}",
+                    auctionId, itemId, initialStatus);
+                return getById(auctionId);
+            } catch (SQLException e) {
+                conn.rollback();
+                logger.error("createAuction() – DB transaction failed for itemId={}", itemId, e);
+                return null;
+            } finally {
+                conn.setAutoCommit(true);
             }
-            return created;
-
         } catch (SQLException e) {
-            logger.error("create() – DB error for itemId={}", auction.getId(), e);
-            return false;
+            logger.error("createAuction() – DB connection error for itemId={}", itemId, e);
+            return null;
+        }
+    }
+
+    /**
+     * Lấy ID kế tiếp từ sequence {@code seq_auctions} ngay trong transaction hiện tại.
+     *
+     * <p>Project đang dùng sequence riêng thay vì generated keys tự động, nên cần lấy ID trước
+     * rồi truyền trực tiếp vào câu INSERT để entity reload ra có cùng ID với DB.</p>
+     *
+     * @param conn connection đang nằm trong transaction tạo auction
+     * @return auction_id kế tiếp
+     * @throws SQLException nếu sequence không trả về giá trị hợp lệ
+     */
+    private int nextAuctionId(Connection conn) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_NEXT_AUCTION_ID);
+             ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+                throw new SQLException("Cannot generate next auction id");
+            }
+            return rs.getInt(1);
         }
     }
 
@@ -429,8 +573,11 @@ public class AuctionDAO {
     /**
      * Map một hàng {@link ResultSet} thành {@link Auction}.
      *
+     * <p>Sau khi dựng auction, method này load lại bid history từ {@code bid_transactions}
+     * để AuctionManager/scheduler không mất ngữ cảnh người thắng và số lượng bid sau khi restart.</p>
+     *
      * @param rs result set đã được định vị tại hàng cần đọc
-     * @return {@link Auction} được điền đầy đủ
+     * @return {@link Auction} được điền đầy đủ dữ liệu chính và lịch sử bid
      * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
      */
     private Auction getAuctionByRow(ResultSet rs) throws SQLException {
@@ -439,8 +586,9 @@ public class AuctionDAO {
 
         Timestamp lastBidTs = rs.getTimestamp("last_bid_time");// last_bid_time là Null khi chưa có bid
 
-        return new Auction(
-            String.valueOf(rs.getInt("auction_id")),
+        int auctionId = rs.getInt("auction_id");
+        Auction auction = new Auction(
+            String.valueOf(auctionId),
             rs.getTimestamp("created_at").toLocalDateTime(),
             itemDAO.getById(rs.getInt("item_id")),
             String.valueOf(rs.getInt("seller_id")),
@@ -455,6 +603,8 @@ public class AuctionDAO {
             AuctionStatus.valueOf(rs.getString("status")),
             accountDAO.getUserById(rs.getInt("current_winner_id"))
         );
+        auction.restoreBidHistory(new BidTransactionDAO().getBidHistory(auctionId));
+        return auction;
     }
 
     /**
