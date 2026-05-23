@@ -26,14 +26,14 @@ import java.time.LocalDateTime;
  */
 public class AutoBidConfig implements Comparable<AutoBidConfig> {
 
-    private final String        auctionId;
-    private final String        bidderId;
+    private final int        auctionId;
+    private final int        bidderId;
     private BigDecimal          maxBid;
     private BigDecimal              increment;
     private AutoBidStatus status;
     private final LocalDateTime registeredAt;
 
-    public AutoBidConfig(String auctionId, String bidderId,
+    public AutoBidConfig(int auctionId, int bidderId,
                          BigDecimal maxBid, BigDecimal increment) {
         if (maxBid.compareTo(BigDecimal.ZERO) <= 0)      throw new IllegalArgumentException("maxBid must be positive");
         if (increment.compareTo(BigDecimal.ZERO) <= 0)   throw new IllegalArgumentException("increment must be positive");
@@ -48,7 +48,7 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
     }
 
     /* Load từ DB — registeredAt được truyền vào */
-    public AutoBidConfig(String auctionId, String bidderId,
+    public AutoBidConfig(int auctionId, int bidderId,
                          BigDecimal maxBid, BigDecimal increment,
                          AutoBidStatus status, LocalDateTime registeredAt) {
         this.auctionId    = auctionId;
@@ -99,8 +99,8 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
 
     // ── Getters / Setters ────────────────────────────────────────────────────
 
-    public String        getAuctionId()    { return auctionId; }
-    public String        getBidderId()     { return bidderId; }
+    public int        getAuctionId()    { return auctionId; }
+    public int        getBidderId()     { return bidderId; }
     public BigDecimal        getMaxBid()       { return maxBid; }
     public BigDecimal        getIncrement()    { return increment; }
     public AutoBidStatus getStatus()       { return status; }

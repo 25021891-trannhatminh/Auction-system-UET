@@ -17,15 +17,15 @@ import java.util.List;
  */
 public abstract class Item extends Entity {
 
-    private String   sellerId;       // FK → users.user_id
+    private final int   sellerId;       // FK → users.user_id
     private String   name;
     private String   description;
     private BigDecimal startingPrice;
     private final List<String> imageUrls;
     private ItemStatus status;
-    private ItemCategory category;
+    private final ItemCategory category;
 
-    protected Item(String sellerId, String name, String description, BigDecimal startingPrice, ItemStatus status, ItemCategory category) {
+    protected Item(int sellerId, String name, String description, BigDecimal startingPrice, ItemStatus status, ItemCategory category) {
         super();
         validateStartingPrice(startingPrice);
         this.sellerId      = sellerId;
@@ -38,8 +38,8 @@ public abstract class Item extends Entity {
     }
 
     /* Constructor load từ DB */
-    protected Item(String id, LocalDateTime createdAt,
-                   String sellerId, String name, String description,
+    protected Item(int id, LocalDateTime createdAt,
+                   int sellerId, String name, String description,
                    BigDecimal startingPrice, ItemStatus status, ItemCategory category) {
         super(id, createdAt);
         this.sellerId      = sellerId;
@@ -81,14 +81,14 @@ public abstract class Item extends Entity {
 
     /* Ảnh chính để hiển thị thumbnail */
     public String getPrimaryImageUrl() {
-        return imageUrls.isEmpty() ? null : imageUrls.get(0);
+        return imageUrls.isEmpty() ? null : imageUrls.getFirst();
     }
 
     public List<String> getImageUrls() { return Collections.unmodifiableList(imageUrls); }  // Return 1 tham chiếu (view) đến List (nhưng đã Override các phương thức để không thể sửa đổi)
 
     // ── Getters / Setters ──
 
-    public String getSellerId()     { return sellerId; }
+    public int getSellerId()     { return sellerId; }
     public String getName()         { return name; }
     public String getDescription()  { return description; }
     public BigDecimal getStartingPrice(){ return startingPrice; }

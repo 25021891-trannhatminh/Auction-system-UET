@@ -16,7 +16,7 @@ public class Art extends Item {
     private int    yearCreated;
     private String medium;
 
-    public Art(String sellerId, String name, String description,
+    public Art(int sellerId, String name, String description,
                BigDecimal startingPrice, ItemStatus status, String artist, int yearCreated, String medium) {
         super(sellerId, name, description, startingPrice, status, ItemCategory.ART);
         this.artist      = artist;
@@ -25,8 +25,8 @@ public class Art extends Item {
     }
 
     /** Load từ DB */
-    public Art(String id, LocalDateTime createdAt,
-               String sellerId, String name, String description,
+    public Art(int id, LocalDateTime createdAt,
+               int sellerId, String name, String description,
                BigDecimal startingPrice, ItemStatus status,
                String artist, int yearCreated, String medium) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.ART);

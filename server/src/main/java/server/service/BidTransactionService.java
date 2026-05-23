@@ -42,11 +42,11 @@ public class BidTransactionService {
     }
 
     Auction auction = AuctionManager.getInstance()
-        .getAuction(String.valueOf(auctionId))
+        .getAuction(auctionId)
         .orElse(null);
 
     User bidder = AuctionManager.getInstance()
-        .findUserById(String.valueOf(bidderId))
+        .findUserById(bidderId)
         .orElse(null);
 
     if (auction == null || bidder == null) {
@@ -73,7 +73,7 @@ public class BidTransactionService {
         // Check trạng thái đóng từ DB hạ tầng trước khi nạp cược
         if ("FINISHED".equals(dbStatus) || "ENDED".equals(dbStatus)) {
           conn.rollback();
-          throw new AuctionClosedException(String.valueOf(auctionId), AuctionStatus.FINISHED);
+          throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
         }
 
         // 1. Thực thi nghiệp vụ đặt giá chính thống trên Core RAM nhằm sinh Entity nguyên bản
@@ -150,9 +150,9 @@ public class BidTransactionService {
     }
 
     return new BidTransaction(
-        String.valueOf(dto.getBidId()),
-        String.valueOf(dto.getAuctionId()),
-        String.valueOf(dto.getBidderId()),
+        dto.getBidId(),
+        dto.getAuctionId(),
+        dto.getBidderId(),
         bidderName,
         dto.getAmount(),
         dto.getBidTime().toLocalDateTime(),
@@ -166,9 +166,9 @@ public class BidTransactionService {
    */
   private BidHistoryDTO toDTO(BidTransaction tx) {
     BidHistoryDTO dto = new BidHistoryDTO();
-    dto.setBidId(tx.getId() != null ? Integer.parseInt(tx.getId()) : 0);
-    dto.setAuctionId(Integer.parseInt(tx.getAuctionId()));
-    dto.setBidderId(Integer.parseInt(tx.getBidderId()));
+    dto.setBidId(tx.getId());
+    dto.setAuctionId(tx.getAuctionId());
+    dto.setBidderId(tx.getBidderId());
     dto.setAmount(tx.getAmount());
     dto.setAutoBid(tx.isAutoBid());
     dto.setStatus(tx.getStatus()); // Gán trực tiếp Enum BidStatus từ Entity sang DTO gốc của bạn

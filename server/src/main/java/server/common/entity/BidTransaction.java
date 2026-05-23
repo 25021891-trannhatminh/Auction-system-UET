@@ -27,18 +27,18 @@ import java.util.UUID;
  */
 public class BidTransaction {
 
-    private final String        id;
-    private final String        auctionId;
-    private final String        bidderId;
+    private final int        id;
+    private final int        auctionId;
+    private final int        bidderId;
     private final String        bidderName;  // cache để hiển thị UI mà không cần JOIN DB
     private final BigDecimal    amount;
     private final LocalDateTime bidTime;
     private final boolean       isAutoBid;
     private BidStatus status;
 
-    public BidTransaction(String auctionId, String bidderId, String bidderName,
+    public BidTransaction(int auctionId, int bidderId, String bidderName,
                           BigDecimal amount, boolean isAutoBid) {
-        this.id          = UUID.randomUUID().toString();
+        this.id          = 0;
         this.auctionId   = auctionId;
         this.bidderId    = bidderId;
         this.bidderName  = bidderName;
@@ -49,7 +49,7 @@ public class BidTransaction {
     }
 
     /** Load từ DB */
-    public BidTransaction(String id, String auctionId, String bidderId, String bidderName,
+    public BidTransaction(int id, int auctionId, int bidderId, String bidderName,
                           BigDecimal amount, LocalDateTime bidTime,
                           boolean isAutoBid, BidStatus status) {
         this.id          = id;
@@ -82,9 +82,9 @@ public class BidTransaction {
 
     // ── Getters ──
 
-    public String        getId()          { return id; }
-    public String        getAuctionId()   { return auctionId; }
-    public String        getBidderId()    { return bidderId; }
+    public int        getId()          { return id; }
+    public int        getAuctionId()   { return auctionId; }
+    public int        getBidderId()    { return bidderId; }
     public String        getBidderName()  { return bidderName; }
     public BigDecimal        getAmount()      { return amount; }
     public LocalDateTime getBidTime()     { return bidTime; }
@@ -94,7 +94,7 @@ public class BidTransaction {
     @Override
     public String toString() {
         return String.format("Bid[%s] by %s: %.2f at %s [%s]%s",
-            id.substring(0, 8), bidderName, amount, bidTime, status,
+            id, bidderName, amount, bidTime, status,
             isAutoBid ? " (AUTO)" : "");
     }
 }

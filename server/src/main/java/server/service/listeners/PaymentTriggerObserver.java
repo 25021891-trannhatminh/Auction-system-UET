@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
  * - Hiện thực hóa (implement) AuctionEventListener thay cho AuctionObserver cũ.
  * - Cô lập luồng tài chính qua worker riêng biệt.
  */
-public class PaymentTriggerObserver implements AuctionEventListener {
+public class PaymentTriggerObserver implements BusinessEventListener {
 
   private static final Logger logger = LoggerFactory.getLogger(PaymentTriggerObserver.class);
 

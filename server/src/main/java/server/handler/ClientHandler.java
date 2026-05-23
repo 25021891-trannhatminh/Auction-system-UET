@@ -21,12 +21,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import server.common.AuctionConstants;
 import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
+import server.common.enums.NotificationType;
 import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import server.network.ClientManager;
@@ -38,8 +40,9 @@ import server.service.AuctionService;
 import server.service.ItemService;
 import server.service.PaymentService;
 import server.service.ServerAuthService;
+import server.service.listeners.RealTimeObserver;
 
-public class ClientHandler implements Runnable {
+public class ClientHandler implements Runnable{
     private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -64,7 +67,7 @@ public class ClientHandler implements Runnable {
     // Services
     private final ServerAuthService authService;
     private final ItemService itemService;
-    private  AuctionService auctionService;
+    private final AuctionService auctionService;
     private final PaymentService paymentService;
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
@@ -125,17 +128,17 @@ public class ClientHandler implements Runnable {
 
         // Dùng giới hạn split để tránh lỗi khi description hoặc name có khoảng trắng
         String[] request = msg.split(" ");
-        String cmd = request[0];// Lấy mã lệnh đầu tiên (LOGIN, REGISTER, BID,...)
+        String contextRequest = request[0];// Lấy mã lệnh đầu tiên (LOGIN, REGISTER, BID,...)
 
         // Phản hồi kết nối với Client
-        if (ProtocolConstants.PING.equals(cmd)){
+        if (ProtocolConstants.PING.equals(contextRequest)){
             send(ResponseBuilder.pong());
             return;
         }
         System.out.println("MSG FROM CLIENT: " + msg);
 
         // Xử lý request
-        switch (cmd) {
+        switch (contextRequest) {
             case ProtocolConstants.LOGIN:
                 String loginResult = authHandler.handleLogin(request, this);
                 send(loginResult);
@@ -190,8 +193,8 @@ public class ClientHandler implements Runnable {
                         ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
                         : "Auction #" + auctionId;
 
-                    boolean ok = paymentService.processPayment(auctionId, itemName);
-                    if (ok) {
+                    boolean paymentSuccess = paymentService.processPayment(auctionId, itemName);
+                    if (paymentSuccess) {
                         send("PAYMENT_SUCCESS " + auctionId);
                     } else {
                         send("PAYMENT_FAIL " + auctionId);
@@ -214,8 +217,8 @@ public class ClientHandler implements Runnable {
                         ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
                         : "Auction #" + auctionId;
 
-                    boolean ok = paymentService.refundPayment(auctionId, itemName);
-                    send(ok ? "REFUND_SUCCESS " + auctionId : "REFUND_FAIL " + auctionId);
+                    boolean refundSuccess = paymentService.refundPayment(auctionId, itemName);
+                    send(refundSuccess ? "REFUND_SUCCESS " + auctionId : "REFUND_FAIL " + auctionId);
                 } catch (NumberFormatException e) {
                     send("REFUND_FAIL INVALID_FORMAT");
                 }
@@ -300,7 +303,7 @@ public class ClientHandler implements Runnable {
 
             case "ADMIN_FORCE_CLOSE":
                 if (request.length > 2) {
-                    String auctionId = request[1];
+                    int auctionId = Integer.parseInt(request[1]);
                     String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
                     boolean forceCloseSuccess = adminService.forceCloseAuction(this.userId, auctionId, reason);
                     send(forceCloseSuccess ? "ADMIN_CLOSE_SUCCESS" : "ADMIN_CLOSE_FAIL");
@@ -446,7 +449,7 @@ public class ClientHandler implements Runnable {
         if (item == null) {
             return CreateAuctionResult.fail("ITEM_NOT_FOUND");
         }
-        if (parseIntOrDefault(item.getSellerId(), 0) != sellerId) {
+        if (item.getSellerId() != sellerId) {
             return CreateAuctionResult.fail("SELLER_MISMATCH");
         }
         if (item.getStatus() != ItemStatus.AVAILABLE) {
@@ -455,7 +458,7 @@ public class ClientHandler implements Runnable {
 
         Auction auction = auctionService.createAuction(
             item,
-            String.valueOf(sellerId),
+            sellerId,
             startTime,
             endTime,
             minimumBidIncrement,
@@ -467,7 +470,7 @@ public class ClientHandler implements Runnable {
         if (auction == null) {
             return CreateAuctionResult.fail("SAVE_ERROR");
         }
-        return CreateAuctionResult.ok(parseIntOrDefault(auction.getId(), 0));
+        return CreateAuctionResult.ok(auction.getId());
     }
 
     private boolean isActiveAdmin(int userId) {
@@ -832,5 +835,22 @@ public class ClientHandler implements Runnable {
     public String getUsername(){
         return username;
     }
+
+    // ==================== REALTIME BID EVENTS ====================
+//    @Override
+//    public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.BID_PLACED, "Bid Successful", "You placed a bid of $" + amount + " on [" + itemName + "]."));
+//    }
+//
+//    @Override
+//    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
+//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.TIME_EXTENDED, "Auction Extended Time", "Auction [" + auctionId + "] has been extended by "
+//            + addedSeconds + " seconds."));
+//    }
+//
+//    @Override
+//    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
+//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.AUCTION_ENDED, "Auction Ended", "Auction for [" + itemName + "] has closed at $" + finalPrice + "."));
+//    }
 
 }

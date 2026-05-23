@@ -5,7 +5,7 @@ import server.common.enums.NotificationType;
 
 import java.math.BigDecimal;
 
-public class NotificationEventHandler implements AuctionEventListener {
+public class NotificationEventHandler implements BusinessEventListener {
   private final NotificationService notificationService;
 
   public NotificationEventHandler(NotificationService notificationService) {
@@ -86,7 +86,7 @@ public class NotificationEventHandler implements AuctionEventListener {
   @Override
   public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
     notificationService.push(-1, "Auction Extended Time",
-        "Auction [" + itemName + "] has been extended by "
+        "Auction [" + auctionId + "] has been extended by "
             + addedSeconds + " seconds.",
         NotificationType.TIME_EXTENDED, auctionId);
   }

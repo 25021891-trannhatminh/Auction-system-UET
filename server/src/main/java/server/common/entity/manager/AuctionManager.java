@@ -3,14 +3,10 @@ package server.common.entity.manager;
 import server.common.entity.AutoBidEngine;
 import server.common.entity.Auction;
 import server.common.entity.AutoBidConfig;
-import server.common.entity.BidTransaction;
 import server.common.entity.Item;
 import server.common.entity.User;
-import server.service.listeners.AuctionEventListener;
+import server.service.listeners.RealTimeObserver;
 import server.common.enums.AuctionStatus;
-import server.common.model.BidResultDTO;
-import server.repository.AuctionDAO;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -18,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import server.service.BidTransactionService;
 
 /*
     AuctionManager — Singleton điều phối toàn bộ Auction.
@@ -68,11 +63,11 @@ public class AuctionManager {
     // ── Data stores ───────────────────────────────────────────────────────────
 
     /** Registry <AuctionID, Auction> */
-    private final Map<String, Auction> auctionMap
+    private final Map<Integer, Auction> auctionMap
         = new ConcurrentHashMap<>();
 
     /** Registry <UserID, User> */
-    private final Map<String, User> userMap
+    private final Map<Integer, User> userMap
         = new ConcurrentHashMap<>();
 
     /** AutoBidEngine xử lý auto-bid */
@@ -99,10 +94,10 @@ public class AuctionManager {
       Ví dụ: NotificationService đăng ký ở đây để lưu notification vào DB.
 
       UI/Server:
-        ServerBroadcaster implements AuctionEventListener và đăng ký ở đây
+        ServerBroadcaster implements RealTimeObserver và đăng ký ở đây
         để push update đến toàn bộ client đang connect.
      */
-    private final List<AuctionEventListener> globalObservers
+    private final List<RealTimeObserver> globalObservers
         = new CopyOnWriteArrayList<>();
 
     /*
@@ -136,7 +131,7 @@ public class AuctionManager {
     }
 
     // Return User hoặc null
-    public Optional<User> findUserById(String userId) {
+    public Optional<User> findUserById(int userId) {
         return Optional.ofNullable(userMap.get(userId));
     }
 
@@ -162,7 +157,7 @@ public class AuctionManager {
 
       @return Auction vừa được tạo
      */
-    public Auction createAuction(Item item, String sellerId,
+    public Auction createAuction(Item item, int sellerId,
                                  LocalDateTime startTime, LocalDateTime endTime,
                                  BigDecimal minBidIncrement, BigDecimal reservePrice,
                                  int snipeWindowSeconds, int snipeExtensionSeconds) {
@@ -182,7 +177,7 @@ public class AuctionManager {
         scheduleClose(auction);
 
         System.out.printf("[AuctionManager] Created auction %s for '%s'. Start: %s, End: %s%n",
-            auction.getId().substring(0, 8), item.getName(), startTime, endTime);
+            auction.getId(), item.getName(), startTime, endTime);
 
         return auction;
     }
@@ -212,7 +207,7 @@ public class AuctionManager {
         }
     }
 
-    public Optional<Auction> getAuction(String auctionId) {
+    public Optional<Auction> getAuction(int auctionId) {
         return Optional.ofNullable(auctionMap.get(auctionId));
     }
 
@@ -246,10 +241,10 @@ public class AuctionManager {
      * Lấy các auction mà một bidder đang tham gia (đã bid ít nhất 1 lần).
      * ⚠️  Kết nối UI: dùng cho màn hình "My Bids" của Bidder.
      */
-    public List<Auction> getAuctionsForBidder(String bidderId) {
+    public List<Auction> getAuctionsForBidder(int bidderId) {
         return auctionMap.values().stream()
             .filter(a -> a.getBidHistory().stream()
-                .anyMatch(tx -> tx.getBidderId().equals(bidderId)))
+                .anyMatch(tx -> tx.getBidderId()== bidderId))
             .collect(Collectors.toList());
     }
 
@@ -257,9 +252,9 @@ public class AuctionManager {
      * Lấy các auction của một seller.
      * ⚠️  Kết nối UI: dùng cho màn hình "My Listings" của Seller.
      */
-    public List<Auction> getAuctionsForSeller(String sellerId) {
+    public List<Auction> getAuctionsForSeller(int sellerId) {
         return auctionMap.values().stream()
-            .filter(a -> a.getSellerId().equals(sellerId))
+            .filter(a -> a.getSellerId() == sellerId)
             .collect(Collectors.toList());
     }
 
@@ -330,7 +325,6 @@ public class AuctionManager {
      *   BidDAO.insert(autoBidTx) nếu autoBidTx != null
      *   AuctionDAO.updateState(auction) nếu có auto-bid
      *
-     * @return BidTransaction nếu engine thực hiện auto-bid ngay sau đăng ký, null nếu không
      */
     public void registerAutoBid(AutoBidConfig config, User bidder) {
         Auction auction = getAuctionByID(config.getAuctionId());
@@ -341,7 +335,7 @@ public class AuctionManager {
         }
         // Nếu config mới của winner maxBid < CurrentPrice hoặc < maxBid cũ thì không cho đăng ký
         AutoBidConfig currentWinnerConfig = autoBidEngine.peekWinner(auction.getId());
-        if (currentWinnerConfig != null && currentWinnerConfig.getBidderId().equals(bidder.getId())) {
+        if (currentWinnerConfig != null && currentWinnerConfig.getBidderId() == bidder.getId()) {
             // Bidder đang là winner trong queue → không cho hạ maxBid
             if (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
                 || config.getMaxBid().compareTo(currentWinnerConfig.getMaxBid()) < 0) {
@@ -359,7 +353,7 @@ public class AuctionManager {
         autoBidEngine.register(config, bidder);
 
         System.out.printf("[AuctionManager] AutoBid registered: %s on auction %s (max=%.0f, inc=%.0f)%n",
-            bidder.getUsername(), config.getAuctionId().substring(0, 8),
+            bidder.getUsername(), config.getAuctionId(),
             config.getMaxBid(), config.getIncrement());
     }
 
@@ -368,7 +362,7 @@ public class AuctionManager {
      *
      * ⚠️  Tầng DAO: AutoBidDAO.updateStatus(auctionId, bidderId, CANCELED)
      */
-    public void cancelAutoBid(String auctionId, User bidder) {
+    public void cancelAutoBid(int auctionId, User bidder) {
         Auction auction = getAuctionByID(auctionId);
         if (!auction.isRunning()){
             // Nếu Auction chưa running thì hủy không cần trigger
@@ -378,13 +372,13 @@ public class AuctionManager {
         }
         // Xét winner là autobid trong Engine + winner là người hủy
         boolean wasWinner = autoBidEngine.peekWinner(auctionId) != null
-            && autoBidEngine.peekWinner(auctionId).getBidderId().equals(bidder.getId());
+            && autoBidEngine.peekWinner(auctionId).getBidderId() == bidder.getId();
 
         bidder.cancelAutoBid(auctionId);
         autoBidEngine.unregister(auctionId, bidder.getId());
 
         System.out.printf("[AuctionManager] AutoBid canceled: %s on auction %s%n",
-            bidder.getUsername(), auctionId.substring(0, 8));
+            bidder.getUsername(), auctionId);
 
     }
 
@@ -393,7 +387,7 @@ public class AuctionManager {
      * Sau khi forceCancel(), fire onAuctionClosedCallback để Service xử lý DB và notify.
      * Caller (AdminService) KHÔNG cần gọi onAuctionClosed() thủ công nữa.
      */
-    public void forceCloseAuction(String auctionId, String reason) {
+    public void forceCloseAuction(int auctionId, String reason) {
         Auction auction = auctionMap.get(auctionId);
         if (auction == null)
             throw new IllegalArgumentException("Auction not found: " + auctionId);
@@ -428,7 +422,7 @@ public class AuctionManager {
                         onAuctionStartedCallback.accept(auction);
                     }
                     System.out.printf("[Scheduler] Auction %s OPENED%n",
-                        auction.getId().substring(0, 8));
+                        auction.getId());
                 }
             } catch (Exception e) {
                 System.err.println("[Scheduler] Error opening auction: " + e.getMessage());
@@ -475,7 +469,7 @@ public class AuctionManager {
                             onAuctionClosedCallback.accept(auction);
                         }
                         System.out.printf("[Scheduler] Auction %s CLOSED. Winner: %s, Price: %.2f%n",
-                            auction.getId().substring(0, 8),
+                            auction.getId(),
                             auction.getCurrentLeader() != null
                                 ? auction.getCurrentLeader().getUsername() : "none",
                             auction.getCurrentPrice());
@@ -493,9 +487,9 @@ public class AuctionManager {
 
     /**
      * Thêm global observer — nhận event từ TẤT CẢ phiên.
-     * ⚠️  Kết nối Server: ClientHandler/NotificationService gọi method này khi connect.
+     * Kết nối Server: chỉ ClientHandler/ServerBroadcaster được đăng ký ở đây, không phải NotificationService.
      */
-    public void addGlobalObserver(AuctionEventListener observer) {
+    public void addGlobalObserver(RealTimeObserver observer) {
         globalObservers.add(observer);
         // Đăng ký vào tất cả auction đang active
         auctionMap.values().stream()
@@ -504,7 +498,7 @@ public class AuctionManager {
             .forEach(a -> a.addObserver(observer));
     }
 
-    public void removeGlobalObserver(AuctionEventListener observer) {
+    public void removeGlobalObserver(RealTimeObserver observer) {
         globalObservers.remove(observer);
         auctionMap.values().forEach(a -> a.removeObserver(observer));
     }
@@ -513,12 +507,12 @@ public class AuctionManager {
      * Thêm observer cho một phiên cụ thể.
      * ⚠️  Kết nối UI: Bidder "vào xem" một phiên → addObserver cho phiên đó.
      */
-    public void addObserverToAuction(String auctionId, AuctionEventListener observer) {
+    public void addObserverToAuction(int auctionId, RealTimeObserver observer) {
         Auction auction = auctionMap.get(auctionId);
         if (auction != null) auction.addObserver(observer);
     }
 
-    public void removeObserverFromAuction(String auctionId, AuctionEventListener observer) {
+    public void removeObserverFromAuction(int auctionId, RealTimeObserver observer) {
         Auction auction = auctionMap.get(auctionId);
         if (auction != null) auction.removeObserver(observer);
     }
@@ -544,7 +538,7 @@ public class AuctionManager {
         }
     }
 
-    private Auction getAuctionByID(String auctionId) {
+    private Auction getAuctionByID(int auctionId) {
         Auction auction = auctionMap.get(auctionId);
         if (auction == null)
             throw new IllegalArgumentException("Auction not found: " + auctionId);

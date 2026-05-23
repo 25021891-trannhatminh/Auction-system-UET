@@ -38,7 +38,7 @@ public class Admin extends Account {
     }
 
     /** Constructor load từ DB */
-    public Admin(String id, LocalDateTime createdAt,
+    public Admin(int id, LocalDateTime createdAt,
                  String username, String email, String passwordHash,
                  String fullName, String phone, UserStatus status,
                  LocalDateTime lastLogin) {

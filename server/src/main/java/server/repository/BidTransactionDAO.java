@@ -204,9 +204,9 @@ public class BidTransactionDAO {
 
         // Tạo ra thực thể phụ trợ độc lập để wrap bên trong DTO kết quả
         BidTransaction tx = new BidTransaction(
-            String.valueOf(rs.getInt("bid_id")),
-            String.valueOf(rs.getInt("auction_id")),
-            String.valueOf(dbBidderId),
+            rs.getInt("bid_id"),
+            rs.getInt("auction_id"),
+            dbBidderId,
             bidderName,
             rs.getBigDecimal("amount"),
             rs.getTimestamp("bid_time").toLocalDateTime(),

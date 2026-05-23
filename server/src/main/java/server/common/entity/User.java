@@ -16,7 +16,7 @@ import java.util.*;
  */
 public class User extends Account {
     private BigDecimal balance;
-    private final Map<String, AutoBidConfig> autoBidMap;    // <AuctionID, AutoBidConfig>
+    private final Map<Integer, AutoBidConfig> autoBidMap;    // <AuctionID, AutoBidConfig>
     private double rating;            // 0.0 – 5.0
     private final List<String> itemIDs; // FK sang items.item_id
 
@@ -37,7 +37,7 @@ public class User extends Account {
         this.autoBidMap = new HashMap<>(other.autoBidMap);
     }
     /* Constructor dùng khi load từ DB */
-    public User(String id, LocalDateTime createdAt,
+    public User(int id, LocalDateTime createdAt,
                 String username, String email, String passwordHash,
                 String fullName, String phone, AccountRole role,
                 UserStatus status, LocalDateTime lastLogin) {
@@ -48,7 +48,7 @@ public class User extends Account {
         this.balance    = BigDecimal.ZERO;
         this.autoBidMap = new HashMap<>();
     }
-    public User(String id, LocalDateTime createdAt,
+    public User(int id, LocalDateTime createdAt,
                    String username, String email, String passwordHash,
                    String fullName, String phone, AccountRole role,
                    UserStatus status, LocalDateTime lastLogin,double rating, BigDecimal balance) {
@@ -110,7 +110,7 @@ public class User extends Account {
     }
 
     /* Hủy auto-bid cho một phiên cụ thể */
-    public void cancelAutoBid(String auctionId) {
+    public void cancelAutoBid(int auctionId) {
         AutoBidConfig config = autoBidMap.get(auctionId);
         if (config != null) {
             config.cancel();
@@ -119,11 +119,11 @@ public class User extends Account {
     }
 
     /* Lấy config auto-bid đang active trong 1 auction */
-    public AutoBidConfig getAutoBidConfig(String auctionId) {
+    public AutoBidConfig getAutoBidConfig(int auctionId) {
         return autoBidMap.getOrDefault(auctionId, null);
     }
 
-    public boolean hasAutoBid(String auctionId) {
+    public boolean hasAutoBid(int auctionId) {
         return autoBidMap.containsKey(auctionId);
     }
 

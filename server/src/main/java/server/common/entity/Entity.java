@@ -11,21 +11,21 @@ import java.util.UUID;
  */
 public abstract class Entity {
 
-    private final String id;
+    private final int id;
     private final LocalDateTime createdAt;
 
     protected Entity() {
-        this.id        = UUID.randomUUID().toString();
+        this.id = 0;
         this.createdAt = LocalDateTime.now();
     }
 
     /* Constructor dùng cho DB (id và createdAt đã có sẵn) */
-    protected Entity(String id, LocalDateTime createdAt) {
+    protected Entity(int id, LocalDateTime createdAt) {
         this.id        = id;
         this.createdAt = createdAt;
     }
 
-    public String        getId()        { return id; }
+    public int        getId()        { return id; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public abstract void printInfo();
@@ -35,10 +35,10 @@ public abstract class Entity {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Entity)) return false;
-        return id.equals(((Entity) o).id);
+        return id == (((Entity) o).id);
     }
 
     // HashCode Entity = HashCode ID của nó
     @Override
-    public int hashCode() { return id.hashCode(); }
+    public int hashCode() { return String.valueOf(id).hashCode(); }
 }

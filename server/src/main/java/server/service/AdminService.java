@@ -56,7 +56,7 @@ public class AdminService {
   }
 
   // ====================== QUẢN LÝ AUCTION ======================
-  public boolean forceCloseAuction(int adminId, String auctionId, String reason) {
+  public boolean forceCloseAuction(int adminId, int auctionId, String reason) {
     Admin admin = accountDAO.getAdminById(adminId);
     if (admin == null || !admin.hasPermission(AdminPermission.FORCE_CLOSE_AUCTION)) return false;
 
@@ -82,7 +82,7 @@ public class AdminService {
       // Lấy sellerId để notify
       Item item = itemDAO.getById(itemId);
       if (item != null) {
-        auctionService.approveItem(Integer.parseInt(item.getSellerId()), itemId, item.getName());
+        auctionService.approveItem(item.getSellerId(), itemId, item.getName());
       }
     }
     return approved;
@@ -96,7 +96,7 @@ public class AdminService {
     if (rejected) {
       server.common.entity.Item item = itemDAO.getById(itemId);
       if (item != null) {
-        auctionService.rejectItem(Integer.parseInt(item.getSellerId()), itemId, item.getName());
+        auctionService.rejectItem(item.getSellerId(), itemId, item.getName());
       }
     }
     return rejected;

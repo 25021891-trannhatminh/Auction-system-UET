@@ -621,9 +621,9 @@ public class ItemDAO {
 
         Map<String,String> mapAttributeItem = itemAttributeDAO.getAttributeMapByItemId(rs.getInt("item_id"));
         return ItemFactory.createFromDb(ItemCategory.valueOf(rs.getString("category")),
-            String.valueOf(rs.getInt("item_id")),
+            rs.getInt("item_id"),
             rs.getTimestamp("created_at").toLocalDateTime(),
-            String.valueOf(rs.getInt("seller_id")),
+            rs.getInt("seller_id"),
             rs.getString("name"),
             rs.getString("description"),
             rs.getBigDecimal("starting_price"),

@@ -52,7 +52,7 @@ public abstract class Account extends Entity {
     this.lastLogin    = other.lastLogin;
   }
   /* Constructor dùng khi load từ DB */
-  protected Account(String id, LocalDateTime createdAt,
+  protected Account(int id, LocalDateTime createdAt,
                  String username, String email, String passwordHash,
                  String fullName, String phone, AccountRole role,
                  UserStatus status, LocalDateTime lastLogin) {

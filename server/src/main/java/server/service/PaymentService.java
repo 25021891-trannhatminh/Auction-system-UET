@@ -44,7 +44,7 @@ public class PaymentService {
    * Idempotent: kiểm tra exists trước khi tạo.
    */
   public boolean createPendingPayment(int auctionId, String itemName) {
-    Optional<Auction> opt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
+    Optional<Auction> opt = AuctionManager.getInstance().getAuction(auctionId);
     if (opt.isEmpty()) {
       logger.warn("createPendingPayment() – Auction {} not found", auctionId);
       return false;
@@ -62,8 +62,8 @@ public class PaymentService {
     // 2. Parse buyerId và sellerId từ String sang int (an toàn)
     int buyerId, sellerId;
     try {
-      buyerId = Integer.parseInt(winner.getId());
-      sellerId = Integer.parseInt(auction.getSellerId());
+      buyerId = winner.getId();
+      sellerId = auction.getSellerId();
     } catch (NumberFormatException e) {
       logger.error("createPendingPayment() – Invalid ID format. WinnerId: {}, SellerId: {}",
           winner.getId(), auction.getSellerId());
@@ -291,7 +291,7 @@ public class PaymentService {
   /** Đồng bộ Auction → PAID (RAM + DB) */
   private void syncAuctionToPaid(int auctionId, String itemName) {
     try {
-      Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(String.valueOf(auctionId));
+      Optional<Auction> auctionOpt = AuctionManager.getInstance().getAuction(auctionId);
       if (auctionOpt.isPresent()) {
         Auction auction = auctionOpt.get();
         auction.markPaid();

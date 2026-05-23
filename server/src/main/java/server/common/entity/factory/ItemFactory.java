@@ -47,7 +47,7 @@ public class ItemFactory {
         @param attributes  Map thuộc tính riêng của từng loại
         @return Item đúng subclass
      */
-    public static Item create(ItemCategory category, String sellerId, String name,
+    public static Item create(ItemCategory category, int sellerId, String name,
                               String description, BigDecimal startingPrice, ItemStatus status,
                               Map<String, String> attributes) {
         if (category == null)
@@ -95,7 +95,7 @@ public class ItemFactory {
     /**
      * Tạo lại đúng subtype của {@link Item} từ dữ liệu đọc ra từ DB.
      *
-     * <p>Khác với {@link #create(ItemCategory, String, String, String, BigDecimal, ItemStatus, Map)},
+     * <p>Khác với {@link #create(ItemCategory, int, String, String, BigDecimal, ItemStatus, Map)},
      * method này giữ nguyên {@code item_id} và {@code created_at} thật trong DB. Việc này cần thiết
      * để AuctionService tạo auction bằng đúng item ID, tránh sinh UUID mới làm lệch khóa ngoại.</p>
      *
@@ -110,8 +110,8 @@ public class ItemFactory {
      * @param attributes map thuộc tính riêng theo từng category
      * @return item domain đã giữ nguyên ID DB
      */
-    public static Item createFromDb(ItemCategory category, String id, LocalDateTime createdAt,
-                                    String sellerId, String name, String description,
+    public static Item createFromDb(ItemCategory category, int id, LocalDateTime createdAt,
+                                    int sellerId, String name, String description,
                                     BigDecimal startingPrice, ItemStatus status,
                                     Map<String, String> attributes) {
         if (category == null)
@@ -164,7 +164,7 @@ public class ItemFactory {
     /*
     Overload tiện lợi — không cần attributes (dùng khi tạo từ UI form đơn giản)
      */
-    public static Item create(ItemCategory category, String sellerId,
+    public static Item create(ItemCategory category, int sellerId,
                                String name, String description, BigDecimal startingPrice,ItemStatus status) {
         return create(category, sellerId, name, description, startingPrice, status, Map.of());
     }

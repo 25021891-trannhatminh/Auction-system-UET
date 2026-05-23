@@ -6,6 +6,7 @@ import server.common.entity.exception.InvalidBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 import server.service.listeners.AuctionEventListener;
+import server.service.listeners.RealTimeObserver;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -48,7 +49,7 @@ public class Auction extends Entity {
 
     // ── Identity ─────────────────────────────────────────────────────────────
     private final Item          item;
-    private final String        sellerId;
+    private final int        sellerId;
 
     // ── Time config ───────────────────────────────────────────────────────────
     private final LocalDateTime startTime;
@@ -85,7 +86,7 @@ public class Auction extends Entity {
     private final List<BidTransaction> bidHistory;
 
     // ── Observer list ─────────────────────────────────────────────────────────
-    private final List<AuctionEventListener> observers;
+    private final List<RealTimeObserver> observers;
 
     // ── Concurrency lock ──────────────────────────────────────────────────────
     /**
@@ -117,7 +118,7 @@ public class Auction extends Entity {
      * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
      * @param snipeExtensionSeconds thời gian gia hạn khi có bid sát giờ
      */
-    public Auction(Item item, String sellerId,
+    public Auction(Item item, int sellerId,
         LocalDateTime startTime, LocalDateTime endTime,
         BigDecimal minBidIncrement, BigDecimal reservePrice,
         int snipeWindowSeconds, int snipeExtensionSeconds) {
@@ -164,8 +165,8 @@ public class Auction extends Entity {
      * @param status trạng thái auction đã lưu
      * @param currentLeader user đang thắng, có thể {@code null}
      */
-    public Auction(String id, LocalDateTime createdAt,
-        Item item, String sellerId,
+    public Auction(int id, LocalDateTime createdAt,
+        Item item, int sellerId,
         LocalDateTime startTime, LocalDateTime endTime,
         LocalDateTime lastBidTime,
         BigDecimal currentPrice,
@@ -223,7 +224,7 @@ public class Auction extends Entity {
         }
 
         // Không cho phép seller tự bid vào phiên của mình
-        if (bidder.getId().equals(sellerId)) {
+        if (bidder.getId() == sellerId) {
             throw new InvalidBidException("User cannot bid on their own auction", amount, currentPrice);
         }
 
@@ -410,7 +411,7 @@ public class Auction extends Entity {
     private void extendTime(int seconds) {
         this.endTime = this.endTime.plusSeconds(seconds);
         System.out.printf("[Anti-snipe] Auction %s extended by %ds. New endTime: %s%n",
-            getId().substring(0, 8), seconds, endTime);
+            getId(), seconds, endTime);
     }
 
     /** Tính số giây còn lại. Thread-safe (đọc LocalDateTime là atomic). */
@@ -435,21 +436,21 @@ public class Auction extends Entity {
     //  Observer management
     // ─────────────────────────────────────────────────────────────────────────
 
-    public void addObserver(AuctionEventListener observer) {
+    public void addObserver(RealTimeObserver observer) {
         synchronized (observers) { observers.add(observer); }
     }
 
-    public void removeObserver(AuctionEventListener observer) {
+    public void removeObserver(RealTimeObserver observer) {
         synchronized (observers) { observers.remove(observer); }
     }
 
     private void notifyBidUpdated(BidTransaction transaction) {
-        List<AuctionEventListener> snapshot;
+        List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
-                int bidderId = Integer.parseInt(transaction.getBidderId());
-                int auctionId = Integer.parseInt(this.getId());
+                int bidderId = transaction.getBidderId();
+                int auctionId = this.getId();
                 obs.onBidPlaced(bidderId,auctionId,this.item.getName(),transaction.getAmount());
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
 
@@ -457,12 +458,12 @@ public class Auction extends Entity {
     }
 
     private void notifyAuctionClosed() {
-        List<AuctionEventListener> snapshot;
+        List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
-                int winnerId = (this.getCurrentLeader() != null) ? Integer.parseInt(this.getCurrentLeader().getId()) : -1;
-                int auctionId = Integer.parseInt(this.getId());
+                int winnerId = (this.getCurrentLeader() != null) ? this.getCurrentLeader().getId() : -1;
+                int auctionId = this.getId();
                 obs.onAuctionEnded(winnerId,auctionId,this.item.getName(),this.getCurrentPrice());
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
 
@@ -470,11 +471,11 @@ public class Auction extends Entity {
     }
 
     private void notifyTimeExtended(int seconds) {
-        List<AuctionEventListener> snapshot;
+        List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
-                int auctionId = Integer.parseInt(this.getId());
+                int auctionId = this.getId();
                 obs.onTimeExtended(auctionId,this.getItem().getName(), seconds);
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
 
@@ -517,8 +518,8 @@ public class Auction extends Entity {
     }
 
     /** Kiểm tra một bidder có đang dẫn đầu không */
-    public boolean isLeading(String bidderId) {
-        return currentLeader != null && currentLeader.getId().equals(bidderId);
+    public boolean isLeading(int bidderId) {
+        return currentLeader != null && (currentLeader.getId() == bidderId);
     }
 
     public boolean hasStarted()  { return status != AuctionStatus.OPEN; }
@@ -534,7 +535,7 @@ public class Auction extends Entity {
     // ─────────────────────────────────────────────────────────────────────────
 
     public Item             getItem()               { return item; }
-    public String          getSellerId()             { return sellerId; }
+    public int          getSellerId()             { return sellerId; }
     public LocalDateTime    getStartTime()           { return startTime; }
     public LocalDateTime    getEndTime()             { return endTime; }
     public BigDecimal           getStartingPrice()       { return startingPrice; }
@@ -603,7 +604,7 @@ public class Auction extends Entity {
             if (previousLeader != null) {
                 for (int i = bidHistory.size() - 1; i >= 0; i--) {
                     BidTransaction prev = bidHistory.get(i);
-                    if (prev.getBidderId().equals(previousLeader.getId())) {
+                    if (prev.getBidderId() == previousLeader.getId()) {
                         prev.restoreWinning(); // hoàn tác OUTBID → WINNING
                         break;
                     }
@@ -631,7 +632,7 @@ public class Auction extends Entity {
     @Override
     public String toString() {
         return String.format("Auction[%s] %s | Price: %.2f | Status: %s | Bids: %d",
-            getId().substring(0, 8), item.getName(), currentPrice, status, bidHistory.size());
+            getId(), item.getName(), currentPrice, status, bidHistory.size());
     }
     @Override
     public void printInfo(){

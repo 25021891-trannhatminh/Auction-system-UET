@@ -51,7 +51,7 @@ public class AutoBidEngine {
      Mỗi phiên có một PriorityQueue riêng lưu tất cả config auto-bid đang ACTIVE.
      ConcurrentHashMap để nhiều thread có thể register/trigger đồng thời.
      */
-    private final Map<String, PriorityQueue<AutoBidConfig>> AutoBidManager
+    private final Map<Integer, PriorityQueue<AutoBidConfig>> AutoBidManager
         = new ConcurrentHashMap<>();        // Quản lý AutoBid cho tất cả Auction
 
     /*
@@ -62,7 +62,7 @@ public class AutoBidEngine {
      DB: khi load auction từ DB, tầng DAO phải
           gọi registerUser() cho mỗi bidder có auto-bid trong phiên.
      */
-    private final Map<String, Map<String, User>> AutoBidBidderManager
+    private final Map<Integer, Map<Integer, User>> AutoBidBidderManager
         = new ConcurrentHashMap<>();
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -76,8 +76,8 @@ public class AutoBidEngine {
      (Đảm bảo UNIQUE per (auction, bidder) — DB constraint)
      */
     public synchronized void register(AutoBidConfig config, User bidder) {
-        String auctionId = config.getAuctionId();
-        String bidderId  = config.getBidderId();
+        int auctionId = config.getAuctionId();
+        int bidderId  = config.getBidderId();
 
         // Tạo PriorityQueue nếu chưa có cho Auction
         AutoBidManager.computeIfAbsent(auctionId, pq -> new PriorityQueue<>());
@@ -85,28 +85,28 @@ public class AutoBidEngine {
 
         // Xóa config cũ nếu bidder đã đăng ký trước đó
         PriorityQueue<AutoBidConfig> auctionAutoBidQueue = AutoBidManager.get(auctionId);
-        auctionAutoBidQueue.removeIf(currentConfig -> currentConfig.getBidderId().equals(bidderId));
+        auctionAutoBidQueue.removeIf(currentConfig -> currentConfig.getBidderId() == bidderId);
 
         // Thêm config mới
         auctionAutoBidQueue.add(config);
         AutoBidBidderManager.get(auctionId).put(bidderId, bidder);
 
         System.out.printf("[AutoBidEngine] Registered: bidder=%s, auction=%s, max=%.2f, inc=%.2f%n",
-            bidder.getUsername(), auctionId.substring(0, 8),
+            bidder.getUsername(), auctionId,
             config.getMaxBid(), config.getIncrement());
     }
 
     /*
      Hủy đăng ký auto-bid khi bidder cancel hoặc phiên kết thúc.
      */
-    public synchronized void unregister(String auctionId, String bidderId) {
+    public synchronized void unregister(int auctionId, int bidderId) {
         // Remove config nếu config là của Bidder
         PriorityQueue<AutoBidConfig> auctionAutoBidQueue = AutoBidManager.get(auctionId);
         if (auctionAutoBidQueue != null) {
-            auctionAutoBidQueue.removeIf(currentConfig -> currentConfig.getBidderId().equals(bidderId));
+            auctionAutoBidQueue.removeIf(currentConfig -> currentConfig.getBidderId() == bidderId);
         }
         // Remove Bidder ra khỏi BidderManager
-        Map<String, User> bidderMap = AutoBidBidderManager.get(auctionId);
+        Map<Integer, User> bidderMap = AutoBidBidderManager.get(auctionId);
         if (bidderMap != null) {
             bidderMap.remove(bidderId);
         }
@@ -116,7 +116,7 @@ public class AutoBidEngine {
      Dọn dẹp toàn bộ data của một phiên khi phiên kết thúc.
      Gọi bởi AuctionManager sau khi closeSession().
      */
-    public synchronized void cleanupAutoBids(String auctionId) {
+    public synchronized void cleanupAutoBids(int auctionId) {
         AutoBidManager.remove(auctionId);
         AutoBidBidderManager.remove(auctionId);
     }
@@ -203,7 +203,7 @@ public class AutoBidEngine {
      *
      */
     public BidTransaction trigger(Auction auction, User triggeringBidder) {
-        String auctionId = auction.getId();
+        int auctionId = auction.getId();
         // Xác định winner
         AutoBidConfig winner;
         AutoBidConfig secondWinner;
@@ -219,7 +219,7 @@ public class AutoBidEngine {
         }
 
         // Nếu triggerBidder != null -> Check winner có phải Bidder vừa đặt Bid không?
-        if (triggeringBidder != null && winner.getBidderId().equals(triggeringBidder.getId())) {
+        if (triggeringBidder != null && winner.getBidderId() == triggeringBidder.getId()) {
           return null;
         }
 
@@ -231,8 +231,8 @@ public class AutoBidEngine {
     //  Helpers
 
     // Lấy User Object thông qua AuctionID, UserID
-    private User getUser(String auctionId, String bidderId) {
-        Map<String, User> bidderMap = AutoBidBidderManager.get(auctionId);
+    private User getUser(int auctionId, int bidderId) {
+        Map<Integer, User> bidderMap = AutoBidBidderManager.get(auctionId);
         return bidderMap != null ? bidderMap.get(bidderId) : null;
     }
 
@@ -240,16 +240,16 @@ public class AutoBidEngine {
      * Lấy winner hiện tại mà không trigger bid.
      * Kiểm tra winner trong auto-bid.
      */
-    public synchronized AutoBidConfig peekWinner(String auctionId) {
+    public synchronized AutoBidConfig peekWinner(int auctionId) {
         PriorityQueue<AutoBidConfig> queue = AutoBidManager.get(auctionId);
         return queue == null ? null : queue.peek();
     }
 
-    public synchronized String getWinnerId(String auctionId){
+    public synchronized int getWinnerId(int auctionId){
         return peekWinner(auctionId).getBidderId();
     }
     /** Số lượng AutoBid đăng ký trong 1 Auction */
-    public int getRegisteredCount(String auctionId) {
+    public int getRegisteredCount(int auctionId) {
         PriorityQueue<AutoBidConfig> queue = AutoBidManager.get(auctionId);
         return queue == null ? 0 : queue.size();
     }

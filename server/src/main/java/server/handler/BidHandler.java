@@ -62,7 +62,7 @@ public class BidHandler {
             }
 
             // 4. Kiểm tra user tồn tại trong RAM cache
-            User bidder = auctionService.findUserById(String.valueOf(userId));
+            User bidder = auctionService.findUserById(userId);
             if (bidder == null) {
                 return ResponseBuilder.bidFail("USER_NOT_FOUND");
             }

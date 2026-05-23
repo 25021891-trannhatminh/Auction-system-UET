@@ -875,8 +875,8 @@ public class AutoBidConfigDAO {
    * Tách logic insert ra helper để tái sử dụng giữa 2 overload {@code create()}.
    */
   private boolean executeCreate(PreparedStatement ps, AutoBidConfig autoBidConfig) throws SQLException {
-    ps.setInt(1, Integer.parseInt(autoBidConfig.getAuctionId()));
-    ps.setInt(2, Integer.parseInt(autoBidConfig.getBidderId()));
+    ps.setInt(1, autoBidConfig.getAuctionId());
+    ps.setInt(2, autoBidConfig.getBidderId());
     ps.setBigDecimal(3, autoBidConfig.getMaxBid());
     ps.setBigDecimal(4, autoBidConfig.getIncrement());
     ps.setString(5, AutoBidStatus.ACTIVE.name());
@@ -926,8 +926,8 @@ public class AutoBidConfigDAO {
    */
   private AutoBidConfig getAutoBidConfigByRow(ResultSet rs) throws SQLException {
     return new AutoBidConfig(
-        String.valueOf(rs.getInt("auction_id")),
-        String.valueOf(rs.getInt("bidder_id")),
+        rs.getInt("auction_id"),
+        rs.getInt("bidder_id"),
         rs.getBigDecimal("max_bid"),
         rs.getBigDecimal("increment"),
         AutoBidStatus.valueOf(rs.getString("status")),

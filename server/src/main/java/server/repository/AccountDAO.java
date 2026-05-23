@@ -312,7 +312,7 @@ public class AccountDAO {
         Timestamp lastLoginTs = rs.getTimestamp("last_login");
 
         return new User(
-            String.valueOf(rs.getInt("user_id")),
+            rs.getInt("user_id"),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getString("username"),
             rs.getString("email"),
@@ -332,7 +332,7 @@ public class AccountDAO {
         Timestamp lastLoginTs = rs.getTimestamp("last_login");
         AccountRole role = AccountRole.valueOf(rs.getString("role"));
         if (role == AccountRole.ADMIN) {
-            return new Admin(String.valueOf(rs.getInt("user_id")),
+            return new Admin(rs.getInt("user_id"),
                 rs.getTimestamp("created_at").toLocalDateTime(),
                 rs.getString("username"),
                 rs.getString("email"),

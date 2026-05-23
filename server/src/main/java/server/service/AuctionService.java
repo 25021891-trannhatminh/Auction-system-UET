@@ -23,6 +23,9 @@ import server.common.model.PaymentDTO;
 import server.database.DBConnection;
 import server.repository.*;
 import server.service.listeners.AuctionEventListener;
+import server.service.listeners.BusinessEventListener;
+import server.service.listeners.NotificationEventHandler;
+import server.service.listeners.PaymentTriggerObserver;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -69,10 +72,10 @@ public class AuctionService {
         : null;
 
     Auction auction = new Auction(
-        String.valueOf(dto.getAuctionId()),
+        dto.getAuctionId(),
         dto.getCreatedAt().toLocalDateTime(),
         item,
-        String.valueOf(dto.getSellerId()),
+        dto.getSellerId(),
         dto.getStartTime().toLocalDateTime(),
         dto.getEndTime().toLocalDateTime(),
         lastBidTime,
@@ -124,10 +127,10 @@ public class AuctionService {
   }
 
   private void loadAutoBidsForAuction(Auction auction) {
-    int auctionId = Integer.parseInt(auction.getId());
+    int auctionId = auction.getId();
     List<AutoBidConfig> configs = autoBidConfigDAO.getByAuction(auctionId);
     for (AutoBidConfig config : configs) {
-      User bidder = accountDAO.getUserById(Integer.parseInt(config.getBidderId()));
+      User bidder = accountDAO.getUserById(config.getBidderId());
       if (bidder == null) {
         logger.warn("Bidder {} not found, skipping auto‑bid config.", config.getBidderId());
         continue;
@@ -138,12 +141,12 @@ public class AuctionService {
 
   // ==================== TẠO AUCTION ====================
 
-  public Auction createAuction(Item item, String sellerId,
+  public Auction createAuction(Item item, int sellerId,
       LocalDateTime startTime, LocalDateTime endTime,
       BigDecimal minBidIncrement, BigDecimal reservePrice,
       int snipeWindowSeconds, int snipeExtensionSeconds) {
     // 1. Validate nghiệp vụ (service layer)
-    if (item == null || sellerId == null || startTime == null || endTime == null) {
+    if (item == null || startTime == null || endTime == null) {
       logger.error("createAuction() – invalid null parameters");
       return null;
     }
@@ -151,7 +154,7 @@ public class AuctionService {
       logger.error("createAuction() – item {} is not AVAILABLE", item.getId());
       return null;
     }
-    if (!item.getSellerId().equals(sellerId)) {
+    if (! (item.getSellerId() == sellerId)) {
       logger.error("createAuction() – seller mismatch for item {}", item.getId());
       return null;
     }
@@ -165,15 +168,13 @@ public class AuctionService {
       return null;
     }
 
-    int itemIdInt = Integer.parseInt(item.getId());
-    int sellerIdInt = Integer.parseInt(sellerId);
 
     // 2. Tính toán initial status
     AuctionStatus initialStatus = startTime.isAfter(now) ? AuctionStatus.OPEN : AuctionStatus.RUNNING;
 
     // 3. Gọi DAO thuần (không có business rule)
     AuctionDTO dto = auctionDAO.createAuction(
-        itemIdInt, sellerIdInt,
+        item.getId(), sellerId,
         startTime, endTime,
         minBidIncrement, reservePrice,
         snipeWindowSeconds, snipeExtensionSeconds,
@@ -213,8 +214,8 @@ public class AuctionService {
    * trả reason cụ thể cho client thay vì BID_FAILED chung chung.
    */
   public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) throws AuctionClosedException, InvalidBidException {
-    Auction auction = findAuctionById(String.valueOf(auctionId));
-    User bidder = findUserById(String.valueOf(userId));
+    Auction auction = findAuctionById(auctionId);
+    User bidder = findUserById(userId);
 
     if (auction == null || bidder == null) {
       return false;
@@ -274,8 +275,8 @@ public class AuctionService {
   // ==================== AUTO BID ====================
 
   public void registerAutoBid(AutoBidConfig config, User bidder) {
-    int auctionId = Integer.parseInt(config.getAuctionId());
-    int bidderId  = Integer.parseInt(config.getBidderId());
+    int auctionId = config.getAuctionId();
+    int bidderId  = config.getBidderId();
 
     // Persist config
     if (autoBidConfigDAO.hasActiveBid(auctionId, bidderId)) {
@@ -291,16 +292,12 @@ public class AuctionService {
     logger.info("Auto‑bid registered for auction {} by user {}", auctionId, bidderId);
   }
 
-  public void cancelAutoBid(String auctionId, User bidder) {
+  public void cancelAutoBid(int auctionId, User bidder) {
     // Trigger lại để tìm winner mới
     Auction auction = findAuctionById(auctionId);
     triggerAutoBids(auction, bidder);
     auctionManager.cancelAutoBid(auctionId, bidder);
-    int auctionInt = Integer.parseInt(auctionId);
-    int bidderInt  = Integer.parseInt(bidder.getId());
-    autoBidConfigDAO.cancelByAuctionAndBidder(auctionInt, bidderInt);
-
-
+    autoBidConfigDAO.cancelByAuctionAndBidder(auctionId, bidder.getId());
   }
 
   // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================
@@ -313,43 +310,42 @@ public class AuctionService {
     return auctionManager.registerOrGetUser(user);
   }
 
-  public User findUserById(String userId) {
+  public User findUserById(int userId) {
     return auctionManager.findUserById(userId).orElse(null);
   }
 
-  public Auction findAuctionById(String auctionId) {
+  public Auction findAuctionById(int auctionId) {
     return auctionManager.getAuction(auctionId).orElse(null);
   }
 
   // ==================== VÒNG ĐỜI AUCTION (CALLBACK TỪ MANAGER) ====================
 
   public void onAuctionStarted(Auction auction) {
-    int auctionId = Integer.parseInt(auction.getId());
+    int auctionId = auction.getId();
     auctionDAO.updateStatus(auctionId, AuctionStatus.RUNNING);
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown";
-    notifyAuctionStarted(Integer.parseInt(auction.getSellerId()), auctionId, itemName);
+    notifyAuctionStarted(auction.getSellerId(), auctionId, itemName);
     triggerAutoBids(auction, null);   // Trigger khi auction bắt đầu
     logger.info("Auction {} started – item: {}", auctionId, itemName);
   }
 
   public void onAuctionClosed(Auction auction) {
-    int auctionId = Integer.parseInt(auction.getId());
+    int auctionId = auction.getId();
     AuctionStatus status = auction.getStatus();
 
     // 1. Persist trạng thái auction và item
     if (status == AuctionStatus.FINISHED) {
-      Integer winnerId = auction.getCurrentLeader() != null ?
-          Integer.parseInt(auction.getCurrentLeader().getId()) : null;
+      Integer winnerId = auction.getCurrentLeader().getId();
       auctionDAO.finishAuction(auctionId, winnerId);
       if (auction.getItem() != null) {
         auction.getItem().setStatus(ItemStatus.SOLD);
-        itemDAO.updateStatus(Integer.parseInt(auction.getItem().getId()), ItemStatus.SOLD);
+        itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.SOLD);
       }
     } else { // CANCELED
       auctionDAO.updateStatus(auctionId, AuctionStatus.CANCELED);
       if (auction.getItem() != null) {
         auction.getItem().setStatus(ItemStatus.AVAILABLE);
-        itemDAO.updateStatus(Integer.parseInt(auction.getItem().getId()), ItemStatus.AVAILABLE);
+        itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.AVAILABLE);
       }
     }
 
@@ -360,7 +356,7 @@ public class AuctionService {
     // 3. Gửi thông báo phân nhánh
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown";
     BigDecimal finalPrice = auction.getCurrentPrice();
-    int sellerId = Integer.parseInt(auction.getSellerId());
+    int sellerId = auction.getSellerId();
 
     if (status == AuctionStatus.FINISHED) {
       dispatchFinishedNotifications(auction, auctionId, sellerId, itemName, finalPrice);
@@ -371,7 +367,7 @@ public class AuctionService {
 
   // ==================== ADMIN / CƯỠNG CHẾ ====================
 
-  public void forceCloseAuction(String auctionId, String reason) {
+  public void forceCloseAuction(int auctionId, String reason) {
     auctionManager.forceCloseAuction(auctionId, reason);
   }
 
@@ -393,7 +389,7 @@ public class AuctionService {
    * @return true nếu trạng thái auction là PAID
    */
   public boolean isPaymentConfirmed(int auctionId) {
-    Optional<Auction> auctionOpt = auctionManager.getAuction(String.valueOf(auctionId));
+    Optional<Auction> auctionOpt = auctionManager.getAuction(auctionId);
     return auctionOpt.map(a -> a.getStatus() == AuctionStatus.PAID).orElse(false);
   }
 
@@ -405,14 +401,14 @@ public class AuctionService {
 
   // ==================== OBSERVER PATTERN – NOTIFY METHODS ====================
 
-  public void addListener(AuctionEventListener listener) {
+  public void addListener(BusinessEventListener listener) {
     if (listener != null && !listeners.contains(listener)) {
       listeners.add(listener);
       logger.info("Listener registered: {}", listener.getClass().getSimpleName());
     }
   }
 
-  public void removeListener(AuctionEventListener listener) {
+  public void removeListener(BusinessEventListener listener) {
     if (listeners.remove(listener)) {
       logger.info("Listener unregistered: {}", listener.getClass().getSimpleName());
     }
@@ -427,7 +423,7 @@ public class AuctionService {
       return;
     }
 
-    int winnerId = Integer.parseInt(auction.getCurrentLeader().getId());
+    int winnerId = auction.getCurrentLeader().getId();
     // Notify winner
     try {
       notifyAuctionWon(winnerId, auctionId, itemName, finalPrice);
@@ -490,9 +486,9 @@ public class AuctionService {
     try (Connection conn = DBConnection.getConnection()) {
       conn.setAutoCommit(false);
       try {
-        int autoBidderId = Integer.parseInt(autoBidTx.getBidderId());
+        int autoBidderId = autoBidTx.getBidderId();
         bidTransactionDAO.updateAuctionState(conn,
-            Integer.parseInt(auction.getId()),
+            auction.getId(),
             autoBidderId,
             autoBidTx.getAmount(),
             auction.getEndTime());
@@ -522,9 +518,9 @@ public class AuctionService {
         if (user != null) bidderName = user.getFullName();
       } catch (Exception ignored) {}
       transactions.add(new BidTransaction(
-          String.valueOf(dto.getBidId()),
-          String.valueOf(dto.getAuctionId()),
-          String.valueOf(dto.getBidderId()),
+          dto.getBidId(),
+          dto.getAuctionId(),
+          dto.getBidderId(),
           bidderName,
           dto.getAmount(),
           dto.getBidTime().toLocalDateTime(),
@@ -537,9 +533,9 @@ public class AuctionService {
 
   private BidHistoryDTO toBidHistoryDTO(BidTransaction tx) {
     BidHistoryDTO dto = new BidHistoryDTO();
-    dto.setBidId(tx.getId() != null ? Integer.parseInt(tx.getId()) : 0);
-    dto.setAuctionId(Integer.parseInt(tx.getAuctionId()));
-    dto.setBidderId(Integer.parseInt(tx.getBidderId()));
+    dto.setBidId(tx.getId());
+    dto.setAuctionId(tx.getAuctionId());
+    dto.setBidderId(tx.getBidderId());
     dto.setAmount(tx.getAmount());
     dto.setAutoBid(tx.isAutoBid());
     dto.setStatus(tx.getStatus());

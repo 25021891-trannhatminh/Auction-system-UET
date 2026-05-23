@@ -17,7 +17,7 @@ public class Vehicle extends Item {
     private int    yearManufactured;
     private int    mileageKm;
 
-    public Vehicle(String sellerId, String name, String description,
+    public Vehicle(int sellerId, String name, String description,
                    BigDecimal startingPrice, ItemStatus status, String brand, String model,
                    int yearManufactured, int mileageKm) {
         super(sellerId, name, description, startingPrice,status, ItemCategory.VEHICLE);
@@ -28,8 +28,8 @@ public class Vehicle extends Item {
     }
 
     /** Load từ DB */
-    public Vehicle(String id, LocalDateTime createdAt,
-                   String sellerId, String name, String description,
+    public Vehicle(int id, LocalDateTime createdAt,
+                   int sellerId, String name, String description,
                    BigDecimal startingPrice, ItemStatus status,
                    String brand, String model, int yearManufactured, int mileageKm) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.VEHICLE);

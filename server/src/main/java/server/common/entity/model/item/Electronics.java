@@ -15,7 +15,7 @@ public class Electronics extends Item {
     private String brand;
     private int    warrantyMonths;
 
-    public Electronics(String sellerId, String name, String description,
+    public Electronics(int sellerId, String name, String description,
                        BigDecimal startingPrice, ItemStatus status,
                        String brand, int warrantyMonths) {
         super(sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);
@@ -24,8 +24,8 @@ public class Electronics extends Item {
     }
 
     /** Load từ DB */
-    public Electronics(String id, LocalDateTime createdAt,
-                       String sellerId, String name, String description,
+    public Electronics(int id, LocalDateTime createdAt,
+                       int sellerId, String name, String description,
                        BigDecimal startingPrice,
                        String brand, int warrantyMonths, ItemStatus status) {
         super(id, createdAt, sellerId, name, description, startingPrice, status, ItemCategory.ELECTRONIC);

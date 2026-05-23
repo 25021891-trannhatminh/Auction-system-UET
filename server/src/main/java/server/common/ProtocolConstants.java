@@ -19,7 +19,12 @@ public final class ProtocolConstants {
     public static final String REGISTER = "REGISTER";
     public static final String REGISTER_SUCCESS = "REGISTER_SUCCESS";
     public static final String REGISTER_FAIL = "REGISTER_FAIL";
-    
+
+    // ========== JOIN_AUCTION ==========
+    public static final String JOIN_AUCTION =  "JOIN_AUCTION";
+    public static final String JOIN_AUCTION_SUCCESS =  "JOIN_AUCTION_SUCCESS";
+    public static final String JOIN_AUCTION_FAIL = "JOIN_AUCTION_FAIL";
+
     // ========== BID ==========
     public static final String BID = "BID";
     public static final String BID_SUCCESS = "BID_SUCCESS";

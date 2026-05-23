@@ -7,6 +7,9 @@ package server.common;
 public final class AuctionConstants {
     
     private AuctionConstants() {} // Không cho khởi tạo
+
+    /** Tham gia phòng đấu giá */
+    public static final String JOIN_AUCTION = "JOIN_AUCTION";
     
     // ========== THÀNH CÔNG ==========
     /** Đặt giá thành công - Format: BID_SUCCESS auctionId amount */
