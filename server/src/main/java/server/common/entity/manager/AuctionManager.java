@@ -265,6 +265,29 @@ public class AuctionManager {
             .collect(Collectors.toList());
     }
 
+    //  Bid operations
+    //
+    //  QUAN TRỌNG: AuctionManager KHÔNG còn là entrypoint cho bid.
+    //  Flow duy nhất:
+    //    BidHandler → AuctionService.placeBid()
+    //              → BidTransactionService.executePlaceBidFlow()
+    //              → auction.placeBid()   ← gọi tại đây, trong DB lock
+    //
+    //  AuctionManager chỉ expose:
+    //    - getAutoBidEngine()   : để AuctionService trigger auto-bid cascade
+    //    - rescheduleClose()    : để AuctionService cập nhật lịch khi endTime thay đổi
+    //    - registerAutoBid()    : đăng ký auto-bid config
+    //    - cancelAutoBid()      : huỷ auto-bid
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Cập nhật lại lịch đóng phiên khi endTime bị gia hạn (anti-snipe).
+     * Gọi bởi AuctionService sau khi auction.checkAndResetExtensionFlag() trả true.
+     */
+    public void rescheduleClose(Auction auction) {
+        scheduleClose(auction);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Bid operations
 
@@ -295,75 +318,6 @@ public class AuctionManager {
             this.scheduleClose(auction);
         }
         return manualTransaction;
-    }
-
-    /**
-     * DTO Trả về BidResult đầy đủ.
-     *
-     * Dùng cho Server layer để serialize toàn bộ thông tin vào response JSON:
-     *   - manualTx: bid của người dùng
-     *   - autoBidTx: auto-bid của engine (null nếu không có)
-     *   - finalPrice: giá cuối sau tất cả
-     *   - finalLeader: ai đang dẫn đầu
-     *
-     *      Kết nối Server:
-     *   ClientHandler gọi method này thay vì placeBid() đơn giản.
-     *   Dùng BidResult.wasOutbidByAutoBid() để hiển thị cảnh báo cho client:
-     *   "Bid thành công nhưng bạn đang bị vượt qua bởi auto-bid."
-     */
-    /**
-     * Executes integrated bid transaction via BidTransactionService.
-     */
-    /**
-     * Executes integrated bid transaction via BidTransactionService.
-     */
-    public BidResultDTO placeBidFull(String auctionId, String bidderId, BigDecimal amount, boolean isAutoBid) {
-        int aId = Integer.parseInt(auctionId);
-        int bId = Integer.parseInt(bidderId);
-
-        // 1. Lấy thực thể đối tượng từ RAM Cache
-        Auction auction = getAuctionByID(auctionId);
-        User triggeringBidder = findUserById(bidderId).orElse(null);
-
-        if (triggeringBidder == null) {
-            System.err.printf("[AuctionManager] User not found: %s%n", bidderId);
-            return null;
-        }
-
-        // 2. GỌI CORE TRÊN RAM (Chỉ gọi đúng 1 lần duy nhất tại đây)
-        // Thực hiện Java Lock nội bộ của thực thể Auction, validate giá, tăng giá trên RAM,
-        // thêm vào bidHistory trên RAM và trả về đối tượng BidTransaction hoàn chỉnh.
-
-        // 3. ĐỒNG BỘ XUỐNG DATABASE (Gọi txService với đầy đủ 4 tham số như thiết kế của bạn)
-        BidTransactionService txService = new BidTransactionService();
-        BidTransaction manualTx = txService.executePlaceBidFlow(aId, bId, amount, isAutoBid);
-
-        if (manualTx == null) {
-            // Biện pháp phòng thủ (Reconciliation): Nếu ghi DB thất bại (ví dụ lỗi kết nối),
-            // cần rollback trạng thái RAM hoặc ném Exception để đảm bảo tính nhất quán.
-            System.err.printf("[AuctionManager] DB Persistence failed for Auction=%s, rolling back RAM status...%n", auctionId);
-            // (Tùy thuộc code của Auction, bạn có thể viết hàm xóa bid cuối hoặc ném lỗi văng ra ngoài)
-            return null;
-        }
-
-        // 4. KÍCH HOẠT AUTOBID ENGINE (Lúc này giá trên RAM đã khớp với giá amount mới)
-        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, triggeringBidder);
-
-        // 5. Đóng gói dữ liệu kết quả trực tiếp từ các biến đã xử lý để trả về UI nhanh chóng
-        String leaderName = auction.getCurrentLeader() != null ? auction.getCurrentLeader().getUsername() : "unknown";
-
-        BidResultDTO result = new BidResultDTO(
-            manualTx,
-            autoBidTransaction, // Lấy trực tiếp từ kết quả trả về của engine thay vì loop history
-            auction.getCurrentPrice(),
-            leaderName
-        );
-
-        System.out.println("[AuctionManager] Integrated Bid success: " + result);
-        if (auction.checkAndResetExtensionFlag()) {
-            this.scheduleClose(auction); // Gọi lại hàm đóng để cập nhật mốc thời gian mới
-        }
-        return result;
     }
 
     /**

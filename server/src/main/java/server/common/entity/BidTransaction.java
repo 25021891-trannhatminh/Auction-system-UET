@@ -73,6 +73,13 @@ public class BidTransaction {
     /* Gọi khi phiên kết thúc và bid này không phải cao nhất */
     public void markLost()   { this.status = BidStatus.LOST; }
 
+    /**
+     * Hoàn tác OUTBID → WINNING.
+     * CHỈ gọi bởi Auction.rollbackLastBid() khi DB commit thất bại
+     * và bid này cần được khôi phục làm leader.
+     */
+    public void restoreWinning() { this.status = BidStatus.WINNING; }
+
     // ── Getters ──
 
     public String        getId()          { return id; }

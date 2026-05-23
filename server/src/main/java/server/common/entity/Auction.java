@@ -461,7 +461,7 @@ public class Auction extends Entity {
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
-                int winnerId = Integer.parseInt(this.getCurrentLeader().getId());
+                int winnerId = (this.getCurrentLeader() != null) ? Integer.parseInt(this.getCurrentLeader().getId()) : -1;
                 int auctionId = Integer.parseInt(this.getId());
                 obs.onAuctionEnded(winnerId,auctionId,this.item.getName(),this.getCurrentPrice());
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
@@ -563,6 +563,51 @@ public class Auction extends Entity {
             bidHistory.clear();
             if (transactions != null) {
                 bidHistory.addAll(transactions);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Rollback RAM state sau khi DB commit thất bại.
+     *
+     * Gọi bởi BidTransactionService trong khối catch khi ghi DB lỗi,
+     * sau khi auction.placeBid() đã thay đổi RAM (currentPrice, currentLeader, bidHistory).
+     *
+     * Cơ chế:
+     *   - Xoá tx vừa thêm khỏi bidHistory
+     *   - Khôi phục currentPrice và currentLeader về giá trị snapshot trước khi placeBid() chạy
+     *
+     * @param failedTx        BidTransaction vừa được tạo bởi placeBid() nhưng chưa commit DB
+     * @param previousPrice   currentPrice trước khi placeBid() chạy
+     * @param previousLeader  currentLeader trước khi placeBid() chạy — có thể null
+     */
+    public void rollbackLastBid(BidTransaction failedTx, BigDecimal previousPrice, User previousLeader) {
+        lock.lock();
+        try {
+            // Xoá tx thất bại khỏi bidHistory
+            // failedTx có thể null nếu caller không giữ được tham chiếu → xoá phần tử cuối
+            if (failedTx != null) {
+                bidHistory.remove(failedTx);
+            } else if (!bidHistory.isEmpty()) {
+                bidHistory.remove(bidHistory.size() - 1);
+            }
+
+            // Khôi phục currentPrice và currentLeader về snapshot trước bid
+            this.currentPrice  = previousPrice;
+            this.currentLeader = previousLeader;
+
+            // Bid trước đó đã bị markOutbid() bên trong placeBid() — cần hoàn tác:
+            // Tìm bid cuối cùng của previousLeader và đánh dấu lại là WINNING
+            if (previousLeader != null) {
+                for (int i = bidHistory.size() - 1; i >= 0; i--) {
+                    BidTransaction prev = bidHistory.get(i);
+                    if (prev.getBidderId().equals(previousLeader.getId())) {
+                        prev.restoreWinning(); // hoàn tác OUTBID → WINNING
+                        break;
+                    }
+                }
             }
         } finally {
             lock.unlock();

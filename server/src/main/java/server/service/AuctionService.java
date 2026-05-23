@@ -114,16 +114,63 @@ public class AuctionService {
   }
 
   // ==================== ĐẶT GIÁ ====================
-
-  public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) {
-    try {
-      BidTransactionService txService = new BidTransactionService();
-      BidTransaction tx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
-      return tx != null;
-    } catch (Exception e) {
-      logger.error("placeBid() – Unexpected error for auction {} by user {}", auctionId, userId, e);
+  /**
+   * Entry point duy nhất cho đặt giá từ BidHandler.
+   *
+   * Flow cố định:
+   *   1. BidTransactionService.executePlaceBidFlow()
+   *        → DB lock (SELECT FOR UPDATE)
+   *        → auction.placeBid() — core RAM logic
+   *        → UPDATE auctions + INSERT bid_transactions
+   *        → commit / rollback
+   *   2. AutoBidEngine.trigger() — cascade auto-bid ngoài DB lock
+   *   3. Persist auto-bid transaction xuống DB nếu engine vừa đặt
+   *   4. Notify listener onBidPlaced
+   *
+   * Throws AuctionClosedException / InvalidBidException để BidHandler
+   * trả reason cụ thể cho client thay vì BID_FAILED chung chung.
+   */
+  public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) throws AuctionClosedException, InvalidBidException {
+    // ── Bước 1: DB lock + RAM core + DB sync ─────────────────────────────────
+    BidTransactionService txService = new BidTransactionService();
+    BidTransaction tx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
+    if (tx == null) {
+      // null chỉ xảy ra khi DB fail hoặc lock thất bại — không phải lỗi nghiệp vụ
+      logger.error("placeBid() – DB persistence failed for auction {} by user {}", auctionId,
+          userId);
       return false;
     }
+    // ── Bước 2: Cascade AutoBid sau khi manual bid thành công ─────────────────
+    Auction auction = findAuctionById(String.valueOf(auctionId));
+    if (auction != null) {
+      User triggeringBidder = findUserById(String.valueOf(userId));
+      BidTransaction autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, triggeringBidder);
+
+      // ── Bước 3: Persist auto-bid transaction nếu engine đặt bid ──────────────
+      if (autoBidTx != null) {
+        try (Connection conn = server.database.DBConnection.getConnection()) {
+          int autoBidderId = Integer.parseInt(autoBidTx.getBidderId());
+          bidTransactionDAO.updateAuctionState(conn, auctionId, autoBidderId,
+              autoBidTx.getAmount(), auction.getEndTime());
+          bidTransactionDAO.insertBidTransaction(conn, auctionId, autoBidderId, autoBidTx);
+          conn.commit();
+          logger.info("placeBid() – Auto-bid persisted: auction={}, bidder={}, amount={}",
+              auctionId, autoBidderId, autoBidTx.getAmount());
+        } catch (java.sql.SQLException e) {
+          logger.error("placeBid() – Failed to persist auto-bid for auction {}: {}", auctionId, e.getMessage());
+        }
+      }
+
+      // Reschedule đóng nếu anti-snipe đã gia hạn endTime trong lúc bid
+      if (auction.checkAndResetExtensionFlag()) {
+        auctionManager.rescheduleClose(auction);
+      }
+    }
+
+    // ── Bước 4: Notify listener ───────────────────────────────────────────────
+    String itemName = (auction != null && auction.getItem() != null) ? auction.getItem().getName() : "Unknown";
+    notifyBidPlaced(userId, auctionId, itemName, amount);
+    return true;
   }
 
   // ==================== AUTO BID ====================

@@ -4,6 +4,8 @@ import server.common.entity.Auction;
 import server.common.entity.AutoBidEngine;
 import server.common.entity.BidTransaction;
 import server.common.entity.User;
+import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.database.DBConnection;
 import server.repository.BidTransactionDAO;
@@ -28,7 +30,8 @@ public class BidTransactionService {
    * CHỈ GỌI CORE RAM 1 LẦN DUY NHẤT TRONG VÙNG TRANSACTIONS.
    * * @return BidTransaction đối tượng transaction vừa tạo, hoặc null nếu thất bại
    */
-  public BidTransaction executePlaceBidFlow(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid) {
+  public BidTransaction executePlaceBidFlow(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid)
+      throws AuctionClosedException, InvalidBidException {
     if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
       return null;
     }
@@ -51,6 +54,10 @@ public class BidTransactionService {
         return null;
       }
 
+      // Chụp snapshot RAM TRƯỚC khi vào try — catch cần đọc được khi DB fail
+      BigDecimal previousPrice  = auction.getCurrentPrice();
+      User       previousLeader = auction.getCurrentLeader();
+
       try {
         // 2. [QUAN TRỌNG] Đã an toàn -> Gọi CORE LOGIC trên RAM tại đây (Duy nhất 1 lần)
         BidTransaction tx = auction.placeBid(bidder, amount, isAutoBid);
@@ -69,9 +76,17 @@ public class BidTransactionService {
 
         return tx; // Trả transaction ra ngoài cho Manager dùng
 
-      } catch (Exception e) {
-        logger.error("executePlaceBidFlow() - Lỗi nghiệp vụ logic đấu giá, tiến hành rollback DB: {}", e.getMessage());
+      } catch (AuctionClosedException | InvalidBidException e) {
+        // Lỗi nghiệp vụ xảy ra BÊN TRONG placeBid() — RAM chưa thay đổi, chỉ cần rollback DB
+        logger.warn("executePlaceBidFlow() - Lỗi nghiệp vụ: {}", e.getMessage());
         conn.rollback();
+        throw e; // KHÔNG nuốt — re-throw để BidHandler nhận được reason thật
+      } catch (Exception e) {
+        // Lỗi DB hoặc hệ thống xảy ra SAU placeBid() — RAM đã thay đổi, phải rollback cả RAM
+        logger.error("executePlaceBidFlow() - Lỗi DB sau khi RAM đã thay đổi, rollback cả RAM: {}", e.getMessage());
+        try { conn.rollback(); } catch (SQLException ignored) {}
+        // Rollback RAM về snapshot trước khi placeBid() chạy
+        auction.rollbackLastBid(null, previousPrice, previousLeader);
         return null;
       }
     } catch (SQLException e) {

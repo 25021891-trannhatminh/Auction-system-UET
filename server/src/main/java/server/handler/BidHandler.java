@@ -74,7 +74,7 @@ public class BidHandler {
             if (success) {
                 return ResponseBuilder.bidSuccess(auctionId, amount);
             }
-            return ResponseBuilder.bidFail("BID_FAILED");
+            return ResponseBuilder.bidFail("DB_PERSIST_FAILED");
 
         } catch (NumberFormatException e) {
             return ResponseBuilder.bidFail(ProtocolConstants.FAIL_INVALID_FORMAT);
