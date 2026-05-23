@@ -33,11 +33,7 @@ public class BidTransactionService {
    * Quy trình xử lý luồng đặt giá.
    * Đồng bộ hóa và thao tác dữ liệu qua lại sử dụng trực tiếp thực thể gốc BidHistoryDTO.
    */
-  public BidTransaction executePlaceBidFlow(
-      int auctionId,
-      int bidderId,
-      BigDecimal amount,
-      boolean isAutoBid
+  public BidTransaction executePlaceBidFlow(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid
   ) throws AuctionClosedException, InvalidBidException {
 
     // SỬA LỖI: Cập nhật chuẩn xác 3 tham số cho InvalidBidException theo đúng file Exception gốc

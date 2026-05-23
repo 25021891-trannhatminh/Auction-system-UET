@@ -46,6 +46,8 @@ public class BidTransactionDAO {
     private static final String SELECT_DISTINCT_BIDDERS =
         "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
 
+    private static final String SQL_DELETE_LASTBID =
+        "DELETE FROM bid_transactions WHERE bid_id = ( SELECT bid_id FROM bid_transactions WHERE auction_id = ? ORDER BY bid_id DESC LIMIT 1 )";
     /**
      * Thực hiện khóa hàng vật lý bằng câu lệnh SELECT ... FOR UPDATE.
      * Trả về thông tin trạng thái (status) thô hiện tại dưới DB để tầng Service ra quyết định.
@@ -168,6 +170,16 @@ public class BidTransactionDAO {
         return bidderIds;
     }
 
+    /**
+     * Xóa bid transaction mới nhất của auction (dùng để rollback manual bid khi auto-bid fail)
+     */
+    public boolean rollbackLastBid(Connection conn, int auctionId) throws SQLException{
+        try (PreparedStatement ps = conn.prepareStatement(SQL_DELETE_LASTBID)) {
+            ps.setInt(1, auctionId);
+            logger.info("rollbackLastBid() - Deleted {} manual bid for auction {}", ps.executeUpdate(), auctionId);
+            return ps.executeUpdate() > 0;
+        }
+    }
     private void executeStatement(Connection conn, String sql, Object... params) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {

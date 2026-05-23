@@ -113,7 +113,7 @@ public class AuctionService {
 
     List<Auction> auctions = runningDTOs.stream()
         .map(this::toAuctionEntity)
-        .collect(Collectors.toList());
+        .toList();
 
     for (Auction auction : auctions) {
       loadAutoBidsForAuction(auction);
@@ -213,6 +213,17 @@ public class AuctionService {
    * trả reason cụ thể cho client thay vì BID_FAILED chung chung.
    */
   public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) throws AuctionClosedException, InvalidBidException {
+    Auction auction = findAuctionById(String.valueOf(auctionId));
+    User bidder = findUserById(String.valueOf(userId));
+
+    if (auction == null || bidder == null) {
+      return false;
+    }
+
+    // ── Lưu snapshot trước khi bid (dùng để rollback) ─────────────────────
+    BigDecimal previousPrice = auction.getCurrentPrice();
+    User previousLeader = auction.getCurrentLeader();
+
     // ── Bước 1: DB lock + RAM core + DB sync ─────────────────────────────────
     BidTransactionService txService = new BidTransactionService();
     BidTransaction tx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
@@ -222,42 +233,60 @@ public class AuctionService {
           userId);
       return false;
     }
-    // ── Bước 2: Cascade AutoBid sau khi manual bid thành công ─────────────────
-    Auction auction = findAuctionById(String.valueOf(auctionId));
-    if (auction != null) {
-      User triggeringBidder = findUserById(String.valueOf(userId));
-      BidTransaction autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, triggeringBidder);
+    // ── Bước 2: Cascade AutoBid sau khi manual bid thành công ─────────────────;
+    BidTransaction autoBidTx = null;
+    boolean autoBidPersisted = false;
 
-      // ── Bước 3: Persist auto-bid transaction nếu engine đặt bid ──────────────
+    try {
+      // Trigger
+      autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, previousLeader);
       if (autoBidTx != null) {
-        try (Connection conn = server.database.DBConnection.getConnection()) {
-          int autoBidderId = Integer.parseInt(autoBidTx.getBidderId());
-          bidTransactionDAO.updateAuctionState(conn, auctionId, autoBidderId,
-              autoBidTx.getAmount(), auction.getEndTime());
-          bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(autoBidTx));
-          conn.commit();
-          logger.info("placeBid() – Auto-bid persisted: auction={}, bidder={}, amount={}",
-              auctionId, autoBidderId, autoBidTx.getAmount());
-        } catch (java.sql.SQLException e) {
-          logger.error("placeBid() – Failed to persist auto-bid for auction {}: {}", auctionId, e.getMessage());
-        }
+        // Persist auto-bid
+        autoBidPersisted = persistAutoBidTransaction(auction, autoBidTx);
+      } else {
+        autoBidPersisted = true; // Không có auto-bid nào cần thực hiện => không cần persist
       }
+
+    } catch (Exception e) {
+      logger.error("Auto-bid trigger failed for auction {}", auctionId, e);
+    }
+
+    // ── 3. Rollback Manual Bid nếu Auto-bid fail ─────────────────────────
+    if (!autoBidPersisted && autoBidTx != null) {
+      logger.warn("Auto-bid failed after manual bid succeeded → Rolling back manual bid for auction {}", auctionId);
+
+      // Rollback RAM
+      auction.rollbackLastBid(tx, previousPrice, previousLeader);
+
+      // Rollback DB (xóa transaction manual bid vừa tạo)
+      try (Connection conn = DBConnection.getConnection()) {
+        conn.setAutoCommit(false);
+        try {
+          bidTransactionDAO.rollbackLastBid(conn, auctionId); // Method cần thêm
+          conn.commit();
+        } catch (SQLException sql) {
+          conn.rollback();
+          logger.error("Failed to rollback manual bid in database", sql);
+        }
+      } catch (SQLException sql){
+        logger.error("Failed to rollback manual bid in database", sql);
+      }
+    }
 
       // Reschedule đóng nếu anti-snipe đã gia hạn endTime trong lúc bid
       if (auction.checkAndResetExtensionFlag()) {
         auctionManager.rescheduleClose(auction);
       }
-    }
 
     // ── Bước 4: Notify listener ───────────────────────────────────────────────
-    String itemName = (auction != null && auction.getItem() != null) ? auction.getItem().getName() : "Unknown";
+    String itemName = (auction.getItem() != null) ? auction.getItem().getName() : "Unknown";
     notifyBidPlaced(userId, auctionId, itemName, amount);
     return true;
   }
 
   // ==================== AUTO BID ====================
 
-  public Optional<BidTransaction> registerAutoBid(AutoBidConfig config, User bidder) {
+  public void registerAutoBid(AutoBidConfig config, User bidder) {
     int auctionId = Integer.parseInt(config.getAuctionId());
     int bidderId  = Integer.parseInt(config.getBidderId());
 
@@ -269,25 +298,10 @@ public class AuctionService {
     }
 
     // Register in engine (may trigger immediate bid)
-    Optional<BidTransaction> autoBidTx = auctionManager.registerAutoBid(config, bidder);
-
-    // Nếu engine đã đặt bid, ghi log vào DB
-    autoBidTx.ifPresent(tx -> {
-      try (Connection conn = DBConnection.getConnection()) {
-        LocalDateTime endTime = auctionManager.getAuction(tx.getAuctionId())
-            .map(Auction::getEndTime).orElse(LocalDateTime.now());
-        bidTransactionDAO.updateAuctionState(conn,
-            Integer.parseInt(tx.getAuctionId()),
-            Integer.parseInt(tx.getBidderId()),
-            tx.getAmount(), endTime);
-        bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(tx));
-      } catch (SQLException e) {
-        logger.error("Failed to persist auto‑bid transaction for auction {}", tx.getAuctionId(), e);
-      }
-    });
-
+    Auction auction = findAuctionById(config.getAuctionId());
+    auctionManager.registerAutoBid(config, bidder);
+    triggerAutoBids(auction, null);
     logger.info("Auto‑bid registered for auction {} by user {}", auctionId, bidderId);
-    return autoBidTx;
   }
 
   public void cancelAutoBid(String auctionId, User bidder) {
@@ -295,6 +309,10 @@ public class AuctionService {
     int auctionInt = Integer.parseInt(auctionId);
     int bidderInt  = Integer.parseInt(bidder.getId());
     autoBidConfigDAO.cancelByAuctionAndBidder(auctionInt, bidderInt);
+
+    // Trigger lại để tìm winner mới
+    Auction auction = findAuctionById(auctionId);
+    triggerAutoBids(auction, null);
   }
 
   // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================
@@ -322,6 +340,7 @@ public class AuctionService {
     auctionDAO.updateStatus(auctionId, AuctionStatus.RUNNING);
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown";
     notifyAuctionStarted(Integer.parseInt(auction.getSellerId()), auctionId, itemName);
+    triggerAutoBids(auction, null);   // Trigger khi auction bắt đầu
     logger.info("Auction {} started – item: {}", auctionId, itemName);
   }
 
@@ -455,6 +474,53 @@ public class AuctionService {
       notifyAuctionEnded(sellerId, auctionId, itemName, finalPrice);
     } catch (Exception e) {
       logger.error("Failed to notify seller {} about cancellation", sellerId, e);
+    }
+  }
+
+  // Helper
+  /**
+   * Method trung tâm gọi AutoBidEngine.trigger() + persist DB
+   */
+  private void triggerAutoBids(Auction auction, User previousWinner) {
+    if (auction == null || auction.getStatus() != AuctionStatus.RUNNING) {
+      return;
+    }
+
+    try {
+      BidTransaction autoBidTx = auctionManager.getAutoBidEngine()
+          .trigger(auction, previousWinner);
+
+      if (autoBidTx != null) {
+        persistAutoBidTransaction(auction, autoBidTx);
+      }
+    } catch (Exception e) {
+      logger.error("Auto-bid trigger failed for auction {}", auction.getId(), e);
+    }
+  }
+
+  private boolean persistAutoBidTransaction(Auction auction, BidTransaction autoBidTx) {
+    try (Connection conn = DBConnection.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        int autoBidderId = Integer.parseInt(autoBidTx.getBidderId());
+        bidTransactionDAO.updateAuctionState(conn,
+            Integer.parseInt(auction.getId()),
+            autoBidderId,
+            autoBidTx.getAmount(),
+            auction.getEndTime());
+
+        bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(autoBidTx));
+        conn.commit();
+        logger.info("Auto-bid persisted for auction {}", auction.getId());
+        return true;
+      } catch (Exception e) {
+        conn.rollback();
+        logger.error("Failed to persist auto-bid", e);
+        return false;
+      }
+    } catch (SQLException e) {
+      logger.error("DB connection error when persisting auto-bid", e);
+      return false;
     }
   }
 

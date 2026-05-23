@@ -47,7 +47,6 @@ import server.service.BidTransactionService;
 public class AuctionManager {
 
     private static volatile AuctionManager instance;
-    private static AuctionDAO auctionDAO;
     /** Quản lý các Token tác vụ đóng phiên đấu giá thời gian thực để hỗ trợ hủy/lập lịch lại */
     private final Map<String, ScheduledFuture<?>> endAuctionTasks = new ConcurrentHashMap<>();
     /*
@@ -60,7 +59,6 @@ public class AuctionManager {
             synchronized (AuctionManager.class) {
                 if (instance == null) {
                     instance = new AuctionManager();
-                    auctionDAO = new AuctionDAO();
                 }
             }
         }
@@ -305,20 +303,20 @@ public class AuctionManager {
       @return BidTransaction của bid thủ công vừa thực hiện
               (các auto-bid sẽ được notify qua Observer)
      */
-    public BidTransaction placeBid(String auctionId, User bidder, BigDecimal amount) {
-        Auction auction = getAuctionByID(auctionId);
-
-        // Đặt giá thủ công
-        BidTransaction manualTransaction = auction.placeBid(bidder, amount, false);
-
-        // Trigger auto-bid cascade (chạy sau khi lock đã release)
-        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, bidder);
-
-        if (auction.checkAndResetExtensionFlag()) {
-            this.scheduleClose(auction);
-        }
-        return manualTransaction;
-    }
+//    public BidTransaction placeBid(String auctionId, User bidder, BigDecimal amount) {
+//        Auction auction = getAuctionByID(auctionId);
+//
+//        // Đặt giá thủ công
+//        BidTransaction manualTransaction = auction.placeBid(bidder, amount, false);
+//
+//        // Trigger auto-bid cascade (chạy sau khi lock đã release)
+//        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, bidder);
+//
+//        if (auction.checkAndResetExtensionFlag()) {
+//            this.scheduleClose(auction);
+//        }
+//        return manualTransaction;
+//    }
 
     /**
      * Đăng ký auto-bid cho một bidder trong một phiên.
@@ -334,7 +332,7 @@ public class AuctionManager {
      *
      * @return BidTransaction nếu engine thực hiện auto-bid ngay sau đăng ký, null nếu không
      */
-    public Optional<BidTransaction> registerAutoBid(AutoBidConfig config, User bidder) {
+    public void registerAutoBid(AutoBidConfig config, User bidder) {
         Auction auction = getAuctionByID(config.getAuctionId());
 
         if (!auction.isRunning()) {
@@ -347,33 +345,22 @@ public class AuctionManager {
             // Bidder đang là winner trong queue → không cho hạ maxBid
             if (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
                 || config.getMaxBid().compareTo(currentWinnerConfig.getMaxBid()) < 0) {
-                return Optional.empty();
+                return ;
             }
             // Cho phép nâng maxBid → cập nhật config, không cần trigger
             // (winner vẫn là winner, chỉ mở rộng giới hạn)
             bidder.setAutoBid(config);
             autoBidEngine.register(config, bidder);
-            return Optional.empty(); // không cần bid ngay vì đang dẫn đầu
+            return ;
         }
 
-        // Bidder không phải winner hiện tại → đăng ký và trigger bình thường
+        // Bidder không phải winner hiện tại → đăng ký bình thường
         bidder.setAutoBid(config);
         autoBidEngine.register(config, bidder);
 
         System.out.printf("[AuctionManager] AutoBid registered: %s on auction %s (max=%.0f, inc=%.0f)%n",
             bidder.getUsername(), config.getAuctionId().substring(0, 8),
             config.getMaxBid(), config.getIncrement());
-
-        // Trigger ngay sau đăng ký
-        User currentLeader = auction.getCurrentLeader();
-        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, currentLeader);
-
-        if (autoBidTransaction != null) {
-            System.out.printf("[AuctionManager] Immediate auto-bid after registration: %.0f by %s%n",
-                autoBidTransaction.getAmount(), autoBidTransaction.getBidderName());
-        }
-
-        return Optional.ofNullable(autoBidTransaction);
     }
 
     /**
@@ -399,15 +386,6 @@ public class AuctionManager {
         System.out.printf("[AuctionManager] AutoBid canceled: %s on auction %s%n",
             bidder.getUsername(), auctionId.substring(0, 8));
 
-        // Nếu người bị cancel là winner cũ → trigger để có winner mới
-        if (wasWinner) {
-            // Truyền bidder đã cancel làm triggeringBidder để engine không xét người này
-            BidTransaction autoBidTx = autoBidEngine.trigger(auction, bidder);
-            if (autoBidTx != null) {
-                System.out.printf("[AuctionManager] New leader after cancel: %.2f by %s%n",
-                    autoBidTx.getAmount(), autoBidTx.getBidderName());
-            }
-        }
     }
 
     /**

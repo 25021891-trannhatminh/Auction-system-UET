@@ -169,25 +169,23 @@ public class AutoBidEngine {
             winner.complete();
             return null;
         }
+        // Lấy User object để đặt giá
         User winnerBidder = getUser(auction.getId(), winner.getBidderId());
         if (winnerBidder == null) {
-            System.err.printf("[AutoBidEngine] Winner bidder object not found for id=%s%n", winner.getBidderId());
+            System.err.printf("[AutoBidEngine] Winner bidder object not found for id=%s%n",
+                winner.getBidderId());
             return null;
         }
+        try {
+            BidTransaction transaction = auction.placeBid(winnerBidder, amountBidWinner, true);
+            // Nếu winner đã dùng hết maxBid → đánh dấu COMPLETED
+            if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) winner.complete();
 
-        // CHUYỂN ĐỔI: Ủy quyền cho Service điều phối giao dịch gom chung DB Lock và RAM Lock
-        int auctionId = Integer.parseInt(auction.getId());
-        int bidderId = Integer.parseInt(winner.getBidderId());
-        BidTransactionService txService = new server.service.BidTransactionService();
+            return transaction;
 
-        BidTransaction autoTx = txService.executePlaceBidFlow(auctionId, bidderId, amountBidWinner, true);
-        if (autoTx != null) {
-            if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) { winner.complete(); }
-            // Lấy ra bản ghi transaction mới nhất vừa được thêm vào lịch sử của Auction trong RAM để trả về
-            List<BidTransaction> history = auction.getBidHistory();
-            return history.isEmpty() ? null : history.get(0);
-        } else {
-            System.err.printf("[AutoBidEngine] Auto-bid failed for %s tại mức giá %s%n", winnerBidder.getUsername(), amountBidWinner);
+        } catch (InvalidBidException e) {
+            System.err.printf("[AutoBidEngine] Auto-bid failed for %s: %s%n",
+                winnerBidder.getUsername(), e.getMessage());
             return null;
         }
     }
