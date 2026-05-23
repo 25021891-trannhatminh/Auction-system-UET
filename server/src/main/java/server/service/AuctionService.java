@@ -1,5 +1,8 @@
 package server.service;
 
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,6 +16,8 @@ import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
+import server.common.model.AuctionDTO;
+import server.common.model.BidHistoryDTO;
 import server.common.model.BidResultDTO;
 import server.common.model.PaymentDTO;
 import server.database.DBConnection;
@@ -49,6 +54,40 @@ public class AuctionService {
 
   // Domain manager (singleton)
   private final AuctionManager auctionManager = AuctionManager.getInstance();
+  /**
+   * Chuyển đổi AuctionDTO (từ DB) thành Auction domain entity.
+   * Yêu cầu ItemDAO và AccountDAO đã có sẵn.
+   */
+  private Auction toAuctionEntity(AuctionDTO dto) {
+    Item item = itemDAO.getById(dto.getItemId());
+    User winner = (dto.getCurrentWinnerId() != null)
+        ? accountDAO.getUserById(dto.getCurrentWinnerId())
+        : null;
+
+    LocalDateTime lastBidTime = (dto.getLastBidTime() != null)
+        ? dto.getLastBidTime().toLocalDateTime()
+        : null;
+
+    Auction auction = new Auction(
+        String.valueOf(dto.getAuctionId()),
+        dto.getCreatedAt().toLocalDateTime(),
+        item,
+        String.valueOf(dto.getSellerId()),
+        dto.getStartTime().toLocalDateTime(),
+        dto.getEndTime().toLocalDateTime(),
+        lastBidTime,
+        dto.getCurrentPrice(),
+        dto.getMinBidIncrement(),
+        dto.getReservePrice(),
+        dto.getSnipeWindowSeconds(),
+        dto.getSnipeExtensionSeconds(),
+        dto.getStatus(),
+        winner
+    );
+    // Khôi phục lịch sử bid từ DB (nếu cần)
+    auction.restoreBidHistory(toBidTransactionList(bidTransactionDAO.getBidHistory(dto.getAuctionId())));
+    return auction;
+  }
 
   /**
    * Khởi tạo service, gắn callback vòng đời auction vào AuctionManager.
@@ -68,16 +107,20 @@ public class AuctionService {
    */
   public void loadAllFromDatabase() {
     logger.info("Loading active auctions from database...");
-    List<Auction> running = auctionDAO.getByStatus(AuctionStatus.RUNNING);
-    List<Auction> open    = auctionDAO.getByStatus(AuctionStatus.OPEN);
-    running.addAll(open);
+    List<AuctionDTO> runningDTOs = auctionDAO.getByStatus(AuctionStatus.RUNNING);
+    List<AuctionDTO> openDTOs    = auctionDAO.getByStatus(AuctionStatus.OPEN);
+    runningDTOs.addAll(openDTOs);
 
-    for (Auction auction : running) {
+    List<Auction> auctions = runningDTOs.stream()
+        .map(this::toAuctionEntity)
+        .collect(Collectors.toList());
+
+    for (Auction auction : auctions) {
       loadAutoBidsForAuction(auction);
       auctionManager.loadAuction(auction);
       logger.info("Loaded auction {} with status {}", auction.getId(), auction.getStatus());
     }
-    logger.info("Finished loading {} auction(s) into memory.", running.size());
+    logger.info("Finished loading {} auction(s) into memory.", auctions.size());
   }
 
   private void loadAutoBidsForAuction(Auction auction) {
@@ -99,12 +142,51 @@ public class AuctionService {
       LocalDateTime startTime, LocalDateTime endTime,
       BigDecimal minBidIncrement, BigDecimal reservePrice,
       int snipeWindowSeconds, int snipeExtensionSeconds) {
-    Auction saved = auctionDAO.createAuction(item, sellerId, startTime, endTime,
-        minBidIncrement, reservePrice, snipeWindowSeconds, snipeExtensionSeconds);
-    if (saved == null) {
-      logger.error("createAuction() – DB persistence failed for item {}", item != null ? item.getId() : "null");
+    // 1. Validate nghiệp vụ (service layer)
+    if (item == null || sellerId == null || startTime == null || endTime == null) {
+      logger.error("createAuction() – invalid null parameters");
       return null;
     }
+    if (item.getStatus() != ItemStatus.AVAILABLE) {
+      logger.error("createAuction() – item {} is not AVAILABLE", item.getId());
+      return null;
+    }
+    if (!item.getSellerId().equals(sellerId)) {
+      logger.error("createAuction() – seller mismatch for item {}", item.getId());
+      return null;
+    }
+    LocalDateTime now = LocalDateTime.now();
+    if (!endTime.isAfter(startTime)) {
+      logger.error("createAuction() – endTime must be after startTime");
+      return null;
+    }
+    if (!endTime.isAfter(now)) {
+      logger.error("createAuction() – endTime must be in the future");
+      return null;
+    }
+
+    int itemIdInt = Integer.parseInt(item.getId());
+    int sellerIdInt = Integer.parseInt(sellerId);
+
+    // 2. Tính toán initial status
+    AuctionStatus initialStatus = startTime.isAfter(now) ? AuctionStatus.OPEN : AuctionStatus.RUNNING;
+
+    // 3. Gọi DAO thuần (không có business rule)
+    AuctionDTO dto = auctionDAO.createAuction(
+        itemIdInt, sellerIdInt,
+        startTime, endTime,
+        minBidIncrement, reservePrice,
+        snipeWindowSeconds, snipeExtensionSeconds,
+        initialStatus
+    );
+
+    if (dto == null) {
+      logger.error("createAuction() – DB persistence failed for item {}", item.getId());
+      return null;
+    }
+
+    // 4. Chuyển DTO thành entity và nạp vào RAM
+    Auction saved = toAuctionEntity(dto);
     if (saved.getItem() != null) {
       saved.getItem().setStatus(ItemStatus.IN_AUCTION);
     }
@@ -152,7 +234,7 @@ public class AuctionService {
           int autoBidderId = Integer.parseInt(autoBidTx.getBidderId());
           bidTransactionDAO.updateAuctionState(conn, auctionId, autoBidderId,
               autoBidTx.getAmount(), auction.getEndTime());
-          bidTransactionDAO.insertBidTransaction(conn, auctionId, autoBidderId, autoBidTx);
+          bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(autoBidTx));
           conn.commit();
           logger.info("placeBid() – Auto-bid persisted: auction={}, bidder={}, amount={}",
               auctionId, autoBidderId, autoBidTx.getAmount());
@@ -198,9 +280,7 @@ public class AuctionService {
             Integer.parseInt(tx.getAuctionId()),
             Integer.parseInt(tx.getBidderId()),
             tx.getAmount(), endTime);
-        bidTransactionDAO.insertBidTransaction(conn,
-            Integer.parseInt(tx.getAuctionId()),
-            Integer.parseInt(tx.getBidderId()), tx);
+        bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(tx));
       } catch (SQLException e) {
         logger.error("Failed to persist auto‑bid transaction for auction {}", tx.getAuctionId(), e);
       }
@@ -376,6 +456,41 @@ public class AuctionService {
     } catch (Exception e) {
       logger.error("Failed to notify seller {} about cancellation", sellerId, e);
     }
+  }
+
+  private List<BidTransaction> toBidTransactionList(List<BidHistoryDTO> dtos) {
+    List<BidTransaction> transactions = new ArrayList<>();
+    for (BidHistoryDTO dto : dtos) {
+      // Reuse the mapping logic from BidTransactionService (or replicate here)
+      String bidderName = "Unknown";
+      try {
+        User user = accountDAO.getUserById(dto.getBidderId());
+        if (user != null) bidderName = user.getFullName();
+      } catch (Exception ignored) {}
+      transactions.add(new BidTransaction(
+          String.valueOf(dto.getBidId()),
+          String.valueOf(dto.getAuctionId()),
+          String.valueOf(dto.getBidderId()),
+          bidderName,
+          dto.getAmount(),
+          dto.getBidTime().toLocalDateTime(),
+          dto.isAutoBid(),
+          dto.getStatus()
+      ));
+    }
+    return transactions;
+  }
+
+  private BidHistoryDTO toBidHistoryDTO(BidTransaction tx) {
+    BidHistoryDTO dto = new BidHistoryDTO();
+    dto.setBidId(tx.getId() != null ? Integer.parseInt(tx.getId()) : 0);
+    dto.setAuctionId(Integer.parseInt(tx.getAuctionId()));
+    dto.setBidderId(Integer.parseInt(tx.getBidderId()));
+    dto.setAmount(tx.getAmount());
+    dto.setAutoBid(tx.isAutoBid());
+    dto.setStatus(tx.getStatus());
+    dto.setBidTime(Timestamp.valueOf(tx.getBidTime()));
+    return dto;
   }
 
   // Các hàm notify cụ thể – gọi listener tương ứng

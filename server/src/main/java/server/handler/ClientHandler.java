@@ -27,6 +27,7 @@ import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
+import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import server.network.ClientManager;
 import server.repository.AuctionDAO;
@@ -264,9 +265,9 @@ public class ClientHandler implements Runnable {
                 break;
 
             case "LIST":
-                List<Auction> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
-                for (Auction a : auctions){
-                    send("ITEM "+ a.getId()+ " "+ a.getCurrentPrice());
+                List<AuctionDTO> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
+                for (AuctionDTO a : auctions){
+                    send("ITEM "+ a.getAuctionId()+ " "+ a.getCurrentPrice());
                 }
                 break;
 

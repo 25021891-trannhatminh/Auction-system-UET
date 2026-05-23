@@ -2,6 +2,8 @@ package server.repository;
 
 import server.common.entity.BidTransaction;
 import server.common.enums.BidStatus;
+import server.common.model.BidHistoryDTO;
+import server.common.model.BidResultDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,8 +26,9 @@ public class BidTransactionDAO {
     private static final String SQL_LOCK_AUCTION =
         "SELECT current_price, status, start_time, end_time FROM auctions WHERE auction_id = ? FOR UPDATE";
 
-    private static final String SQL_MARK_RUNNING =
-        "UPDATE auctions SET status = 'RUNNING' WHERE auction_id = ? AND status = 'OPEN'";
+    // Hàm cập nhật trạng thái tường minh do Service Layer trực tiếp ra lệnh điều phối
+    private static final String SQL_UPDATE_AUCTION_STATUS =
+        "UPDATE auctions SET status = ? WHERE auction_id = ?";
 
     private static final String SQL_UPDATE_AUCTION =
         "UPDATE auctions SET current_price = ?, current_winner_id = ?, end_time = ?, last_bid_time = NOW() WHERE auction_id = ?";
@@ -44,34 +47,37 @@ public class BidTransactionDAO {
         "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
 
     /**
-     * Kích hoạt khóa hàng vật lý bằng SELECT ... FOR UPDATE.
-     * Nếu trạng thái là OPEN và đã đến giờ, tự động chuyển trạng thái sang RUNNING.
+     * Thực hiện khóa hàng vật lý bằng câu lệnh SELECT ... FOR UPDATE.
+     * Trả về thông tin trạng thái (status) thô hiện tại dưới DB để tầng Service ra quyết định.
+     *
+     * @param conn Connection đang tham gia Transaction điều phối
+     * @param auctionId ID phiên đấu giá cần khóa
+     * @return Chuỗi trạng thái status hiện tại dưới DB, hoặc null nếu không tồn tại bản ghi
+     * @throws SQLException khi có lỗi kết nối hoặc thực thi truy vấn
      */
-    public boolean lockAuctionRow(Connection conn, int auctionId) throws SQLException {
+    public String lockAuctionRowAndGetStatus(Connection conn, int auctionId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(SQL_LOCK_AUCTION)) {
             ps.setInt(1, auctionId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    logger.warn("lockAuctionRow() - Auction {} không tồn tại trong DB", auctionId);
-                    return false;
+                    logger.warn("lockAuctionRowAndGetStatus() - Auction {} không tồn tại trong DB", auctionId);
+                    return null;
                 }
-
-                String status = rs.getString("status");
-                Timestamp startTs = rs.getTimestamp("start_time");
-                LocalDateTime startTime = startTs != null ? startTs.toLocalDateTime() : null;
-                LocalDateTime now = LocalDateTime.now();
-
-                if ("OPEN".equals(status) && startTime != null && !now.isBefore(startTime)) {
-                    try (PreparedStatement up = conn.prepareStatement(SQL_MARK_RUNNING)) {
-                        up.setInt(1, auctionId);
-                        int updated = up.executeUpdate();
-                        if (updated > 0) {
-                            logger.info("lockAuctionRow() - Tự động chuyển trạng thái Auction {} sang RUNNING", auctionId);
-                        }
-                    }
-                }
-                return true;
+                // Trả về dữ liệu thô, không can thiệp logic so sánh thời gian tại đây
+                return rs.getString("status");
             }
+        }
+    }
+
+    /**
+     * Thực hiện cập nhật trạng thái phiên đấu giá theo yêu cầu tường minh từ Service.
+     */
+    public void updateAuctionStatus(Connection conn, int auctionId, String status) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_UPDATE_AUCTION_STATUS)) {
+            ps.setString(1, status);
+            ps.setInt(2, auctionId);
+            ps.executeUpdate();
+            logger.info("updateAuctionStatus() - Đã cập nhật trạng thái Auction {} thành {} dưới DB.", auctionId, status);
         }
     }
 
@@ -102,41 +108,45 @@ public class BidTransactionDAO {
      * Ghi vết lịch sử đặt giá vào DB tham gia chung vào Connection Transaction từ Service.
      * Thực hiện ép kiểu từ String sang Integer một cách an toàn để ghi xuống các cột khóa ngoại dạng INT.
      */
-    public void insertBidTransaction(Connection conn, int auctionId, int bidderId, BidTransaction tx) throws SQLException {
-        String statusStr = (tx.getStatus() != null) ? tx.getStatus().name() : BidStatus.WINNING.name();
-        LocalDateTime bidTime = (tx.getBidTime() != null) ? tx.getBidTime() : LocalDateTime.now();
-
+    public void insertBidTransaction(Connection conn, BidHistoryDTO dto) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT_BID)) {
-            // Chấp nhận tham số đầu vào tường minh từ Service, hoặc parse từ tx nếu cần
-            ps.setInt(1, auctionId);
-            ps.setInt(2, bidderId);
-            ps.setBigDecimal(3, tx.getAmount());
-            ps.setBoolean(4, tx.isAutoBid());
-            ps.setString(5, statusStr);
-            ps.setTimestamp(6, Timestamp.valueOf(bidTime));
-
+            ps.setInt(1, dto.getAuctionId());
+            ps.setInt(2, dto.getBidderId());
+            ps.setBigDecimal(3, dto.getAmount());
+            ps.setBoolean(4, dto.isAutoBid());
+            ps.setString(5, dto.getStatus().name()); // Lấy name() từ Enum của DTO gốc
+            ps.setTimestamp(6, dto.getBidTime());
             ps.executeUpdate();
-            logger.debug("insertBidTransaction() - Đã lưu vết Bid thành công vào DB.");
         }
     }
 
     /**
      * Lấy lịch sử đặt giá của một phiên đấu giá.
      */
-    public List<BidTransaction> getBidHistory(int auctionId) {
-        List<BidTransaction> results = new ArrayList<>();
+    public List<BidHistoryDTO> getBidHistory(int auctionId) {
+        List<BidHistoryDTO> historyList = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_HISTORY)) {
             ps.setInt(1, auctionId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    results.add(getBidTransactionByRow(rs));
+                    // Ánh xạ trực tiếp sử dụng BidHistoryDTO và BidStatus gốc của bạn
+                    BidHistoryDTO dto = new BidHistoryDTO(
+                        rs.getInt("bid_id"),
+                        rs.getInt("auction_id"),
+                        rs.getInt("bidder_id"),
+                        rs.getBigDecimal("amount"),
+                        rs.getBoolean("is_auto_bid"),
+                        BidStatus.valueOf(rs.getString("status")),
+                        rs.getTimestamp("bid_time")
+                    );
+                    historyList.add(dto);
                 }
             }
         } catch (SQLException e) {
-            logger.error("getBidHistory() - Error: {}", e.getMessage());
+            logger.error("getBidHistory() - Lỗi truy vấn DB: {}", e.getMessage());
         }
-        return results;
+        return historyList;
     }
 
     /**
@@ -172,21 +182,28 @@ public class BidTransactionDAO {
      * Giải quyết điểm bất đối xứng bằng cách sử dụng String.valueOf() để chuyển int từ DB
      * khớp hoàn toàn với constructor đầy đủ 8 tham số dạng String của file BidTransaction cũ.
      */
-    private BidTransaction getBidTransactionByRow(ResultSet rs) throws SQLException {
+    private BidResultDTO getBidResultDTOByRow(ResultSet rs) throws SQLException {
+        // Tùy thuộc vào cấu trúc Constructor hiện tại của BidResultDTO của bạn.
+        // Nếu file BidResultDTO của bạn hỗ trợ Setter hoặc có Constructor tương ứng, ta nạp dữ liệu vào như sau:
+
         AccountDAO accountDAO = new AccountDAO();
         int dbBidderId = rs.getInt("bidder_id");
         String bidderName = accountDAO.getUserById(dbBidderId).getFullName();
 
-        // Thực hiện mapping an toàn: Ép kiểu int từ DB thành String để đẩy vào Constructor của BidTransaction
-        return new BidTransaction(
-            String.valueOf(rs.getInt("bid_id")),      // id (String)
-            String.valueOf(rs.getInt("auction_id")), // auctionId (String)
-            String.valueOf(dbBidderId),              // bidderId (String)
-            bidderName,                              // bidderName (String)
-            rs.getBigDecimal("amount"),              // amount (BigDecimal)
-            rs.getTimestamp("bid_time").toLocalDateTime(), // bidTime (LocalDateTime)
-            rs.getBoolean("is_auto_bid"),            // isAutoBid (boolean)
-            BidStatus.valueOf(rs.getString("status")) // status (BidStatus)
+        // Tạo ra thực thể phụ trợ độc lập để wrap bên trong DTO kết quả
+        BidTransaction tx = new BidTransaction(
+            String.valueOf(rs.getInt("bid_id")),
+            String.valueOf(rs.getInt("auction_id")),
+            String.valueOf(dbBidderId),
+            bidderName,
+            rs.getBigDecimal("amount"),
+            rs.getTimestamp("bid_time").toLocalDateTime(),
+            rs.getBoolean("is_auto_bid"),
+            BidStatus.valueOf(rs.getString("status"))
         );
+
+        // Trả về DTO tổng hợp (ở đây bọc thủ công hoặc tự động tùy cấu trúc DTO,
+        // mặc định nạp tx vào phần manualTransaction để bảo toàn dữ liệu lịch sử)
+        return new BidResultDTO(tx, null, rs.getBigDecimal("amount"), bidderName);
     }
 }

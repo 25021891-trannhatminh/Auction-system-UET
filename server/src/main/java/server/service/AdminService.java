@@ -6,6 +6,7 @@ import server.common.entity.*;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AdminPermission;
 import server.common.enums.UserStatus;
+import server.common.model.AuctionDTO;
 import server.repository.AccountDAO;
 import server.repository.AuctionDAO;
 import server.repository.ItemDAO;
@@ -110,7 +111,7 @@ public class AdminService {
     return itemDAO.getAllItem();
   }
 
-  public List<Auction> getAllAuctions() {
+  public List<AuctionDTO> getAllAuctions() {
     return auctionDAO.getAllAuction();
   }
 

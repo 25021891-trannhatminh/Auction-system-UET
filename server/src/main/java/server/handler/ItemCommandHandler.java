@@ -86,7 +86,7 @@ public class ItemCommandHandler {
         String imagePayload = hasArtFields ? safeField(fields, 13) : safeField(fields, 11);
 
         if (category == null || name.isBlank()
-                || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
             client.send("CREATE_ITEM_FAIL INVALID_DATA");
             return;
         }
@@ -167,7 +167,7 @@ public class ItemCommandHandler {
             return;
         }
         if (category == null || name.isBlank()
-                || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            || startingPrice == null || startingPrice.compareTo(BigDecimal.ZERO) <= 0) {
             client.send("USER_UPDATE_DRAFT_FAIL " + fields("INVALID_DATA"));
             return;
         }
@@ -251,7 +251,7 @@ public class ItemCommandHandler {
             try (PreparedStatement ps = conn.prepareStatement(insertAttrSql)) {
                 for (Map.Entry<String, String> entry : attributes.entrySet()) {
                     if (entry.getKey() == null || entry.getKey().isBlank()
-                            || entry.getValue() == null || entry.getValue().isBlank()) {
+                        || entry.getValue() == null || entry.getValue().isBlank()) {
                         continue;
                     }
                     ps.setInt(1, itemId);
@@ -290,7 +290,7 @@ public class ItemCommandHandler {
             """;
 
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+            PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, sellerId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -353,7 +353,7 @@ public class ItemCommandHandler {
 
         client.send("USER_ITEMS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+            PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, sellerId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -418,8 +418,8 @@ public class ItemCommandHandler {
 
         client.send("ADMIN_ITEMS_BEGIN");
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 client.send("ADMIN_ITEM " + fields(
                     rs.getInt("item_id"),

@@ -1,8 +1,7 @@
 package server.repository;
 
-import server.common.entity.Auction;
-import server.common.entity.Item;
 import server.common.enums.AuctionStatus;
+import server.common.model.AuctionDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,9 +22,9 @@ import java.util.List;
  * <p>Ví dụ sử dụng:
  * <pre>{@code
  * AuctionDAO dao = new AuctionDAO();
- * Auction auction = dao.getById(42);
+ * AuctionDTO auction = dao.getById(42);
  * if (auction != null) {
- *     dao.updateStatus(42, AuctionStatus.FINISHED);
+ * dao.updateStatus(42, AuctionStatus.FINISHED);
  * }
  * }</pre>
  * </p>
@@ -102,42 +101,34 @@ public class AuctionDAO {
     /**
      * Tạo một phiên đấu giá mới trong cơ sở dữ liệu.
      *
-     * <p>Method này vẫn giữ signature cũ để các caller cũ không vỡ code, nhưng bên trong
-     * sẽ dùng flow mới: insert auction + chuyển item sang IN_AUCTION trong cùng transaction,
-     * rồi load lại auction có ID thật từ DB.</p>
+     * <p>Method này nhận dữ liệu thô hoàn chỉnh từ Service Layer truyền xuống qua DTO,
+     * thực hiện bóc tách trường thông tin và chuyển tiếp xuống transaction lưu trữ.
+     * Toàn bộ việc kiểm tra tính hợp lệ của thời gian hoặc trạng thái ban đầu đều do Service xử lý.</p>
      *
-     * @param auction thông tin phiên đấu giá cần tạo; không được {@code null}
+     * @param auction thông tin phiên đấu giá dưới dạng DTO cần tạo; không được {@code null}
      * @return {@code true} nếu insert thành công, {@code false} nếu thất bại
      */
-    public boolean create(Auction auction) {
-        return createAndLoad(auction) != null;
-    }
-
-    /**
-     * Tạo auction và trả về entity đã được reload từ DB với {@code auction_id} thật.
-     *
-     * <p>Method này là cầu nối cho các caller cũ vẫn truyền vào {@link Auction} domain.
-     * Dữ liệu sẽ được bóc ra rồi chuyển sang {@link #createAuction(Item, String, LocalDateTime,
-     * LocalDateTime, BigDecimal, BigDecimal, int, int)} để đảm bảo chỉ có một flow persist chuẩn.</p>
-     *
-     * @param auction auction domain cần lưu
-     * @return auction đã reload từ DB, hoặc {@code null} nếu dữ liệu không hợp lệ/lưu thất bại
-     */
-    public Auction createAndLoad(Auction auction) {
-        if (auction == null || auction.getItem() == null) {
-            logger.warn("createAndLoad() – auction/item is null");
-            return null;
+    public boolean create(AuctionDTO auction) {
+        if (auction == null) {
+            return false;
         }
-        return createAuction(
-            auction.getItem(),
+
+        // Tầng DAO chấp nhận hoàn toàn giá trị trạng thái do Service Layer chỉ định truyền vào DTO,
+        // nếu không truyền thì để mặc định an toàn cho DB chứ không tự so sánh thời gian hệ thống.
+        AuctionStatus initialStatus = auction.getStatus() != null ? auction.getStatus() : AuctionStatus.OPEN;
+
+        AuctionDTO created = createAuction(
+            auction.getItemId(),
             auction.getSellerId(),
-            auction.getStartTime(),
-            auction.getEndTime(),
+            auction.getStartTime() != null ? auction.getStartTime().toLocalDateTime() : null,
+            auction.getEndTime() != null ? auction.getEndTime().toLocalDateTime() : null,
             auction.getMinBidIncrement(),
             auction.getReservePrice(),
             auction.getSnipeWindowSeconds(),
-            auction.getSnipeExtensionSeconds()
+            auction.getSnipeExtensionSeconds(),
+            initialStatus
         );
+        return created != null;
     }
 
     /**
@@ -148,70 +139,37 @@ public class AuctionDAO {
      * trạng thái nửa vời như DB đã có auction nhưng item chưa bị khóa, hoặc AuctionManager giữ UUID tạm
      * khác với ID thật trong DB.</p>
      *
-     * @param item item đã được duyệt và đang AVAILABLE
-     * @param sellerId ID người bán dưới dạng chuỗi số trong DB
+     * @param itemId ID của sản phẩm đấu giá
+     * @param sellerId ID người bán dưới dạng số nguyên
      * @param startTime thời điểm bắt đầu phiên
      * @param endTime thời điểm kết thúc phiên
      * @param minBidIncrement bước nhảy giá tối thiểu
      * @param reservePrice giá sàn; {@code null} sẽ được lưu là {@code BigDecimal.ZERO}
      * @param snipeWindowSeconds khoảng thời gian chống đặt giá sát giờ
      * @param snipeExtensionSeconds thời gian gia hạn nếu có bid trong snipe window
-     * @return auction đã reload từ DB với ID thật, hoặc {@code null} nếu tạo thất bại
+     * @return AuctionDTO đã reload từ DB với ID thật, hoặc {@code null} nếu tạo thất bại
      */
-    public Auction createAuction(Item item, String sellerId,
-                                 LocalDateTime startTime, LocalDateTime endTime,
-                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
-                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
-        if (item == null || sellerId == null || startTime == null || endTime == null) {
-            logger.warn("createAuction() – invalid null input");
-            return null;
-        }
+    public AuctionDTO createAuction(int itemId, int sellerId,
+        LocalDateTime startTime, LocalDateTime endTime,
+        BigDecimal minBidIncrement, BigDecimal reservePrice,
+        int snipeWindowSeconds, int snipeExtensionSeconds,
+        AuctionStatus initialStatus) {
+        // Không còn validate thời gian hay tự suy luận trạng thái.
 
-        int itemId;
-        int sellerIdInt;
-        try {
-            itemId = Integer.parseInt(item.getId());
-            sellerIdInt = Integer.parseInt(sellerId);
-        } catch (NumberFormatException e) {
-            logger.warn("createAuction() – itemId/sellerId must be database integer IDs. itemId={}, sellerId={}",
-                item.getId(), sellerId);
-            return null;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        if (!endTime.isAfter(startTime) || !endTime.isAfter(now)) {
-            logger.warn("createAuction() – invalid time range. start={}, end={}", startTime, endTime);
-            return null;
-        }
-
-        AuctionStatus initialStatus = startTime.isAfter(now) ? AuctionStatus.OPEN : AuctionStatus.RUNNING;
-        BigDecimal safeReservePrice = reservePrice == null ? BigDecimal.ZERO : reservePrice;
-        BigDecimal safeMinIncrement = minBidIncrement == null ? BigDecimal.ZERO : minBidIncrement;
+        BigDecimal safeReserve = reservePrice != null ? reservePrice : BigDecimal.ZERO;
+        BigDecimal safeMinIncr = minBidIncrement != null ? minBidIncrement : BigDecimal.ZERO;
 
         try (Connection conn = DBConnection.getConnection()) {
             conn.setAutoCommit(false);
             try {
+                // Lock item chỉ để lấy starting_price, không kiểm tra seller/status
                 BigDecimal startingPrice;
-                try (PreparedStatement lockItemPs = conn.prepareStatement(SQL_LOCK_ITEM_FOR_CREATE)) {
-                    lockItemPs.setInt(1, itemId);
-                    try (ResultSet rs = lockItemPs.executeQuery()) {
+                try (PreparedStatement lockPs = conn.prepareStatement(SQL_LOCK_ITEM_FOR_CREATE)) {
+                    lockPs.setInt(1, itemId);
+                    try (ResultSet rs = lockPs.executeQuery()) {
                         if (!rs.next()) {
                             conn.rollback();
                             logger.warn("createAuction() – itemId={} not found", itemId);
-                            return null;
-                        }
-                        int databaseSellerId = rs.getInt("seller_id");
-                        if (databaseSellerId != sellerIdInt) {
-                            conn.rollback();
-                            logger.warn("createAuction() – seller mismatch. itemId={}, requestSeller={}, dbSeller={}",
-                                itemId, sellerIdInt, databaseSellerId);
-                            return null;
-                        }
-                        String itemStatus = rs.getString("status");
-                        if (!"AVAILABLE".equalsIgnoreCase(itemStatus)) {
-                            conn.rollback();
-                            logger.warn("createAuction() – itemId={} is not AVAILABLE, currentStatus={}",
-                                itemId, itemStatus);
                             return null;
                         }
                         startingPrice = rs.getBigDecimal("starting_price");
@@ -222,23 +180,23 @@ public class AuctionDAO {
                 try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
                     ps.setInt(1, auctionId);
                     ps.setInt(2, itemId);
-                    ps.setInt(3, sellerIdInt);
+                    ps.setInt(3, sellerId);
                     ps.setTimestamp(4, Timestamp.valueOf(startTime));
                     ps.setTimestamp(5, Timestamp.valueOf(endTime));
-                    ps.setBigDecimal(6, safeMinIncrement);
-                    ps.setBigDecimal(7, safeReservePrice);
+                    ps.setBigDecimal(6, safeMinIncr);
+                    ps.setBigDecimal(7, safeReserve);
                     ps.setShort(8, (short) snipeWindowSeconds);
                     ps.setShort(9, (short) snipeExtensionSeconds);
                     ps.setBigDecimal(10, startingPrice);
                     ps.setNull(11, Types.INTEGER);
-                    ps.setString(12, initialStatus.name());
+                    ps.setString(12, initialStatus.name()); // nhận từ Service
                     ps.executeUpdate();
                 }
 
-                try (PreparedStatement updateItemPs = conn.prepareStatement(SQL_UPDATE_ITEM_STATUS)) {
-                    updateItemPs.setString(1, "IN_AUCTION");
-                    updateItemPs.setInt(2, itemId);
-                    updateItemPs.executeUpdate();
+                try (PreparedStatement updatePs = conn.prepareStatement(SQL_UPDATE_ITEM_STATUS)) {
+                    updatePs.setString(1, "IN_AUCTION");
+                    updatePs.setInt(2, itemId);
+                    updatePs.executeUpdate();
                 }
 
                 conn.commit();
@@ -247,13 +205,13 @@ public class AuctionDAO {
                 return getById(auctionId);
             } catch (SQLException e) {
                 conn.rollback();
-                logger.error("createAuction() – DB transaction failed for itemId={}", itemId, e);
+                logger.error("createAuction() – transaction failed for itemId={}", itemId, e);
                 return null;
             } finally {
                 conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
-            logger.error("createAuction() – DB connection error for itemId={}", itemId, e);
+            logger.error("createAuction() – connection error for itemId={}", itemId, e);
             return null;
         }
     }
@@ -270,7 +228,7 @@ public class AuctionDAO {
      */
     private int nextAuctionId(Connection conn) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(SQL_NEXT_AUCTION_ID);
-             ResultSet rs = ps.executeQuery()) {
+            ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
                 throw new SQLException("Cannot generate next auction id");
             }
@@ -301,13 +259,14 @@ public class AuctionDAO {
             return false;
         }
     }
+
     /**
      * Lấy thông tin phiên đấu giá theo ID.
      *
      * @param auctionId khóa chính của phiên đấu giá
-     * @return {@link Auction} tương ứng, hoặc {@code null} nếu không tìm thấy
+     * @return {@link AuctionDTO} tương ứng, hoặc {@code null} nếu không tìm thấy
      */
-    public Auction getById(int auctionId) {
+    public AuctionDTO getById(int auctionId) {
         logger.debug("getById() – auctionId={}", auctionId);
 
         try (Connection conn = DBConnection.getConnection();
@@ -317,7 +276,7 @@ public class AuctionDAO {
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Auction auction = getAuctionByRow(rs);
+                    AuctionDTO auction = getAuctionByRow(rs);
                     logger.debug("getById() – Found auction auctionId={}", auctionId);
                     return auction;
                 }
@@ -335,11 +294,11 @@ public class AuctionDAO {
     /**
      * Lấy toàn bộ danh sách phiên đấu giá, sắp xếp mới nhất trước.
      *
-     * @return danh sách {@link Auction}; trả về list rỗng nếu có lỗi
+     * @return danh sách {@link AuctionDTO}; trả về list rỗng nếu có lỗi
      */
-    public List<Auction> getAllAuction() {
+    public List<AuctionDTO> getAllAuction() {
         logger.debug("getAll() – Fetching all auctions");
-        List<Auction> results = new ArrayList<>();
+        List<AuctionDTO> results = new ArrayList<>();
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ALL);
@@ -362,11 +321,11 @@ public class AuctionDAO {
      * Lấy danh sách phiên đấu giá theo trạng thái.
      *
      * @param status trạng thái cần lọc; không được {@code null}
-     * @return danh sách {@link Auction} khớp trạng thái; list rỗng nếu có lỗi
+     * @return danh sách {@link AuctionDTO} khớp trạng thái; list rỗng nếu có lỗi
      */
-    public List<Auction> getByStatus(AuctionStatus status) {
+    public List<AuctionDTO> getByStatus(AuctionStatus status) {
         logger.debug("getByStatus() – status={}", status);
-        List<Auction> results = new ArrayList<>();
+        List<AuctionDTO> results = new ArrayList<>();
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BY_STATUS)) {
@@ -490,7 +449,7 @@ public class AuctionDAO {
      * xóa và trả về {@code false} để bảo toàn lịch sử.</p>
      *
      * @param auctionId id phiên đấu giá cần xóa
-     * @return {@code true} nếu xóa thành công; {@code false} nếu đã có bid hoặc lỗi
+     * @return {@code true} if deleted successfully; {@code false} if bids already exist or on error
      */
     public boolean delete(int auctionId) {
         logger.debug("delete() – auctionId={}", auctionId);
@@ -545,10 +504,10 @@ public class AuctionDAO {
      * Lấy thông tin phiên đấu giá theo ID của sản phẩm.
      *
      * @param itemId ID của sản phẩm
-     * @return {@link Auction} tương ứng, hoặc {@code null}
+     * @return {@link AuctionDTO} tương ứng, hoặc {@code null}
      * nếu không tìm thấy
      */
-    public Auction getByItemId(int itemId) {
+    public AuctionDTO getByItemId(int itemId) {
         logger.debug("getByItemId() – itemId={}", itemId);
 
         try (Connection conn = DBConnection.getConnection();
@@ -557,7 +516,7 @@ public class AuctionDAO {
             ps.setInt(1, itemId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Auction auction = getAuctionByRow(rs);
+                    AuctionDTO auction = getAuctionByRow(rs);
                     logger.debug("getByItemId() – Found auction for itemId={}", itemId);
                     return auction;
                 }
@@ -571,40 +530,34 @@ public class AuctionDAO {
     }
 
     /**
-     * Map một hàng {@link ResultSet} thành {@link Auction}.
-     *
-     * <p>Sau khi dựng auction, method này load lại bid history từ {@code bid_transactions}
-     * để AuctionManager/scheduler không mất ngữ cảnh người thắng và số lượng bid sau khi restart.</p>
+     * Map một hàng {@link ResultSet} thành {@link AuctionDTO}.
      *
      * @param rs result set đã được định vị tại hàng cần đọc
-     * @return {@link Auction} được điền đầy đủ dữ liệu chính và lịch sử bid
+     * @return {@link AuctionDTO} được điền đầy đủ dữ liệu chính sạch từ DB
      * @throws SQLException nếu tên cột không tồn tại hoặc lỗi đọc dữ liệu
      */
-    private Auction getAuctionByRow(ResultSet rs) throws SQLException {
-        ItemDAO itemDAO = new ItemDAO();
-        AccountDAO accountDAO = new AccountDAO();
+    private AuctionDTO getAuctionByRow(ResultSet rs) throws SQLException {
+        Integer winnerId = rs.getInt("current_winner_id");
+        if (rs.wasNull()) {
+            winnerId = null;
+        }
 
-        Timestamp lastBidTs = rs.getTimestamp("last_bid_time");// last_bid_time là Null khi chưa có bid
-
-        int auctionId = rs.getInt("auction_id");
-        Auction auction = new Auction(
-            String.valueOf(auctionId),
-            rs.getTimestamp("created_at").toLocalDateTime(),
-            itemDAO.getById(rs.getInt("item_id")),
-            String.valueOf(rs.getInt("seller_id")),
-            rs.getTimestamp("start_time").toLocalDateTime(),
-            rs.getTimestamp("end_time").toLocalDateTime(),
-            lastBidTs != null ? lastBidTs.toLocalDateTime() : null,
-            rs.getBigDecimal("current_price"),
+        return new AuctionDTO(
+            rs.getInt("auction_id"),
+            rs.getInt("item_id"),
+            rs.getInt("seller_id"),
+            rs.getTimestamp("start_time"),
+            rs.getTimestamp("end_time"),
+            rs.getTimestamp("last_bid_time"),
             rs.getBigDecimal("min_bid_increment"),
             rs.getBigDecimal("reserve_price"),
-            (int)rs.getShort("snipe_window_seconds"),
-            (int)rs.getShort("snipe_extension_seconds"),
+            rs.getShort("snipe_window_seconds"),
+            rs.getShort("snipe_extension_seconds"),
+            rs.getBigDecimal("current_price"),
+            winnerId,
             AuctionStatus.valueOf(rs.getString("status")),
-            accountDAO.getUserById(rs.getInt("current_winner_id"))
+            rs.getTimestamp("created_at")
         );
-        auction.restoreBidHistory(new BidTransactionDAO().getBidHistory(auctionId));
-        return auction;
     }
 
     /**
