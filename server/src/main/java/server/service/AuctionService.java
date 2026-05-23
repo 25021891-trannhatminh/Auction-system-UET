@@ -220,56 +220,43 @@ public class AuctionService {
       return false;
     }
 
-    // ── Lưu snapshot trước khi bid (dùng để rollback) ─────────────────────
-    BigDecimal previousPrice = auction.getCurrentPrice();
-    User previousLeader = auction.getCurrentLeader();
-
-    // ── Bước 1: DB lock + RAM core + DB sync ─────────────────────────────────
+    // ── Bước 1: DB lock + RAM core + DB sync ────────────────────────────────
+    // executePlaceBidFlow tự quản lý snapshot + rollback RAM bên trong nếu DB fail.
+    // Nếu ném exception nghiệp vụ → re-throw thẳng lên BidHandler.
+    // Nếu trả null → lỗi hạ tầng (DB/lock), không rollback thêm gì ở đây.
     BidTransactionService txService = new BidTransactionService();
-    BidTransaction tx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
-    if (tx == null) {
-      // null chỉ xảy ra khi DB fail hoặc lock thất bại — không phải lỗi nghiệp vụ
-      logger.error("placeBid() – DB persistence failed for auction {} by user {}", auctionId,
-          userId);
+    BidTransaction manualTx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
+    if (manualTx == null) {
+      logger.error("placeBid() – infrastructure failure for auction {} by user {}", auctionId, userId);
       return false;
     }
-    // ── Bước 2: Cascade AutoBid sau khi manual bid thành công ─────────────────;
+
+    // ── Bước 2: Cascade AutoBid sau khi manual bid đã committed xuống DB ────
+    // Snapshot trạng thái AUTO-BID trước trigger — dùng để rollback RAM auto-bid nếu persist fail.
+    // Lưu ý: KHÔNG snapshot cho manual bid vì nó đã committed, không rollback.
+
+    BigDecimal priceAfterManual = auction.getCurrentPrice();
+    User leaderAfterManual = auction.getCurrentLeader();
+
     BidTransaction autoBidTx = null;
-    boolean autoBidPersisted = false;
-
     try {
-      // Trigger
-      autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, previousLeader);
-      if (autoBidTx != null) {
-        // Persist auto-bid
-        autoBidPersisted = persistAutoBidTransaction(auction, autoBidTx);
-      } else {
-        autoBidPersisted = true; // Không có auto-bid nào cần thực hiện => không cần persist
-      }
-
-    } catch (Exception e) {
-      logger.error("Auto-bid trigger failed for auction {}", auctionId, e);
+      autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, bidder);
+    } catch (InvalidBidException e) {
+      logger.error("placeBid() – AutoBidEngine.trigger() threw exception for auction {}", auctionId, e);
+      // trigger fail or autoBidTx = null → không persist, không rollback manual bid
     }
 
-    // ── 3. Rollback Manual Bid nếu Auto-bid fail ─────────────────────────
-    if (!autoBidPersisted && autoBidTx != null) {
-      logger.warn("Auto-bid failed after manual bid succeeded → Rolling back manual bid for auction {}", auctionId);
+    // ── Bước 3: Persist auto-bid nếu engine vừa đặt ─────────────────────────
+    if (autoBidTx != null) {
+      boolean persisted = persistAutoBidTransaction(auction, autoBidTx);
 
-      // Rollback RAM
-      auction.rollbackLastBid(tx, previousPrice, previousLeader);
-
-      // Rollback DB (xóa transaction manual bid vừa tạo)
-      try (Connection conn = DBConnection.getConnection()) {
-        conn.setAutoCommit(false);
-        try {
-          bidTransactionDAO.rollbackLastBid(conn, auctionId); // Method cần thêm
-          conn.commit();
-        } catch (SQLException sql) {
-          conn.rollback();
-          logger.error("Failed to rollback manual bid in database", sql);
-        }
-      } catch (SQLException sql){
-        logger.error("Failed to rollback manual bid in database", sql);
+      if (!persisted) {
+        // DB fail khi ghi auto-bid → RAM đã bị engine thay đổi, cần rollback RAM về sau manual bid.
+        // Manual bid KHÔNG bị rollback vì đã committed DB ở Bước 1.
+        logger.warn("placeBid() – auto-bid persist failed, rolling back RAM to post-manual state " +
+            "for auction {}", auctionId);
+        auction.rollbackLastBid(autoBidTx, priceAfterManual, leaderAfterManual);
+        // Không return false — manual bid vẫn thành công, chỉ auto-bid bị bỏ qua lần này.
       }
     }
 
@@ -300,19 +287,20 @@ public class AuctionService {
     // Register in engine (may trigger immediate bid)
     Auction auction = findAuctionById(config.getAuctionId());
     auctionManager.registerAutoBid(config, bidder);
-    triggerAutoBids(auction, null);
+    triggerAutoBids(auction, auction.getCurrentLeader());
     logger.info("Auto‑bid registered for auction {} by user {}", auctionId, bidderId);
   }
 
   public void cancelAutoBid(String auctionId, User bidder) {
+    // Trigger lại để tìm winner mới
+    Auction auction = findAuctionById(auctionId);
+    triggerAutoBids(auction, bidder);
     auctionManager.cancelAutoBid(auctionId, bidder);
     int auctionInt = Integer.parseInt(auctionId);
     int bidderInt  = Integer.parseInt(bidder.getId());
     autoBidConfigDAO.cancelByAuctionAndBidder(auctionInt, bidderInt);
 
-    // Trigger lại để tìm winner mới
-    Auction auction = findAuctionById(auctionId);
-    triggerAutoBids(auction, null);
+
   }
 
   // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================

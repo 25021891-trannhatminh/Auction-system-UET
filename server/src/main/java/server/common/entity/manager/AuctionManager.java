@@ -412,8 +412,6 @@ public class AuctionManager {
     /**
      * Lên lịch tự động mở phiên khi đến startTime.
      * Sau khi OPEN → RUNNING, fire onAuctionStartedCallback để Service persist DB và notify.
-     * AutoBidEngine.trigger() được gọi sau startRunning() — đảm bảo auction đã RUNNING
-     * trước khi engine thử đặt bid.
      */
     private void scheduleOpen(Auction auction) {
         long delaySeconds = ChronoUnit.SECONDS.between(
@@ -429,8 +427,6 @@ public class AuctionManager {
                     if (onAuctionStartedCallback != null) {
                         onAuctionStartedCallback.accept(auction);
                     }
-                    // Gọi Trigger để các AutoBid đăng ký trước đó bắt đầu bid
-                    autoBidEngine.trigger(auction,null);
                     System.out.printf("[Scheduler] Auction %s OPENED%n",
                         auction.getId().substring(0, 8));
                 }
