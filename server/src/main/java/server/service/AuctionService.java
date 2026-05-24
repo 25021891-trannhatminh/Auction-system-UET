@@ -46,7 +46,7 @@ public class AuctionService {
   private static final Logger logger = LoggerFactory.getLogger(AuctionService.class);
 
   // Observer listeners (thread‑safe)
-  private final List<AuctionEventListener> listeners = new CopyOnWriteArrayList<>();
+  private final List<BusinessEventListener> listeners = new CopyOnWriteArrayList<>();
 
   // DAOs
   private final AuctionDAO         auctionDAO         = new AuctionDAO();
@@ -329,37 +329,93 @@ public class AuctionService {
 
   public void onAuctionClosed(Auction auction) {
     int auctionId = auction.getId();
-    AuctionStatus status = auction.getStatus();
-
-    // 1. Persist trạng thái auction và item
-    if (status == AuctionStatus.FINISHED) {
-      Integer winnerId = auction.getCurrentLeader().getId();
-      auctionDAO.finishAuction(auctionId, winnerId);
-      if (auction.getItem() != null) {
-        auction.getItem().setStatus(ItemStatus.SOLD);
-        itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.SOLD);
-      }
-    } else { // CANCELED
-      auctionDAO.updateStatus(auctionId, AuctionStatus.CANCELED);
-      if (auction.getItem() != null) {
-        auction.getItem().setStatus(ItemStatus.AVAILABLE);
-        itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.AVAILABLE);
-      }
-    }
-
-    // 2. Huỷ auto‑bid trong DB
-    int cancelled = autoBidConfigDAO.cancelAllByAuction(auctionId);
-    logger.info("Auction {} closed ({}), cancelled {} auto‑bids.", auctionId, status, cancelled);
-
-    // 3. Gửi thông báo phân nhánh
+    AuctionStatus targetStatus = auction.getStatus(); // Trạng thái FINISHED/CANCELED đã được đổi tạm thời trên RAM
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown";
     BigDecimal finalPrice = auction.getCurrentPrice();
     int sellerId = auction.getSellerId();
 
-    if (status == AuctionStatus.FINISHED) {
-      dispatchFinishedNotifications(auction, auctionId, sellerId, itemName, finalPrice);
+    // ── BƯỚC 1 + 2: DB PERSIST (ỦY THÁC HOÀN TOÀN CHO CÁC PHƯƠNG THỨC DAO SẴN CÓ) ───
+    try {
+      if (targetStatus == AuctionStatus.FINISHED) {
+        // 1. Ghi nhận trạng thái kết thúc phiên và lưu Winner ID xuống DB (Sử dụng hàm gốc của bạn)
+        Integer winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : null;
+        auctionDAO.finishAuction(auctionId, winnerId);
+
+        // 2. Cập nhật trạng thái Vật phẩm sang SOLD (Đã bán)
+        if (auction.getItem() != null) {
+          auction.getItem().setStatus(ItemStatus.SOLD);
+          itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.SOLD);
+        }
+      } else { // Trạng thái CANCELED (Hủy phiên)
+        auctionDAO.updateStatus(auctionId, AuctionStatus.CANCELED);
+
+        // Trả vật phẩm về trạng thái AVAILABLE để có thể tạo phiên đấu giá khác
+        if (auction.getItem() != null) {
+          auction.getItem().setStatus(ItemStatus.AVAILABLE);
+          itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.AVAILABLE);
+        }
+      }
+
+      // 3. Hủy/Xóa toàn bộ các cấu hình Auto‑bid liên quan đến phiên này dưới DB (Dùng hàm gốc của bạn)
+      int cancelled = autoBidConfigDAO.cancelAllByAuction(auctionId);
+      logger.info("DB: Đóng phiên {} thành công ({}), đã hủy {} auto-bids.", auctionId, targetStatus, cancelled);
+
+    } catch (Exception e) {
+      logger.error("DB: Lỗi nghiêm trọng khi thực thi đóng phiên {}. Tiến hành HOÀN TÁC RAM về RUNNING.", auctionId, e);
+
+      // 🛠️ CƠ CHẾ CỨU NGUY RAM: Nếu DB fail do nghẽn mạng/rớt kết nối, bắt buộc phải trả trạng thái RAM
+      // từ FINISHED/CANCELED ngược về RUNNING để Scheduler quét lại ở chu kỳ sau, tránh kẹt bộ nhớ.
+      try {
+        java.lang.reflect.Field statusField = Auction.class.getDeclaredField("status");
+        statusField.setAccessible(true);
+        statusField.set(auction, AuctionStatus.RUNNING);
+      } catch (Exception ex) {
+        logger.error("Không thể hoàn tác trạng thái RAM qua Reflection", ex);
+      }
+      return; // NGẮT LUỒNG TUYỆT ĐỐI, không phát bất kỳ sự kiện hay thông báo sai lệch nào ra ngoài!
+    }
+
+    // ── BƯỚC 3: GỬI LỆNH REALTIME CHO UI BIẾT ĐỂ CẬP NHẬT (SOCKET) ─────────────────
+    int winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : -1;
+    auction.notifyRealTimeAuctionClosed(winnerId, itemName, finalPrice);
+    logger.info("Realtime: Đã phát tín hiệu kết thúc phiên lên Socket mạng.");
+
+    // ── BƯỚC 4: KÍCH HOẠT TẠO PENDING PAYMENT (PaymentTriggerObserver) ───────────
+    // Lọc đích danh duy nhất lớp xử lý tài chính chạy trước để sinh hóa đơn công nợ
+    listeners.stream()
+        .filter(l -> l instanceof PaymentTriggerObserver)
+        .forEach(l -> {
+          try {
+            l.onAuctionSessionClosed(auctionId, itemName, finalPrice, targetStatus);
+            logger.info("Payment: Đã kích hoạt sinh hóa đơn chờ thanh toán cho Winner ID: {}", winnerId);
+          } catch (Exception e) {
+            logger.error("Lỗi xử lý tạo công nợ tại PaymentTriggerObserver", e);
+          }
+        });
+
+    // ── BƯỚC 5: ĐẨY PUSH NOTIFICATION RA APP (NotificationEventHandler) ──────────
+    // Đảm bảo thông báo chỉ bắn đi khi Hóa đơn ở Bước 4 đã an toàn nằm trong Queue xử lý công nợ
+    listeners.stream()
+        .filter(l -> l instanceof NotificationEventHandler)
+        .forEach(l -> {
+          try {
+            l.onAuctionSessionClosed(auctionId, itemName, finalPrice, targetStatus);
+          } catch (Exception e) {
+            logger.error("Lỗi xử lý thông báo tổng quan tại NotificationEventHandler", e);
+          }
+        });
+
+    // Phân nhánh đẩy thông báo chi tiết độc lập sang duy nhất NotificationEventHandler
+    if (targetStatus == AuctionStatus.FINISHED) {
+      dispatchBusinessNotificationsAfterClosed(auction, auctionId, sellerId, itemName, finalPrice, winnerId);
     } else {
-      dispatchCanceledNotifications(auctionId, sellerId, itemName, finalPrice);
+      try {
+        listeners.stream()
+            .filter(l -> l instanceof NotificationEventHandler)
+            .forEach(l -> l.onAuctionEnded(sellerId, auctionId, itemName, finalPrice));
+      } catch (Exception e) {
+        logger.error("Lỗi gửi thông báo hủy phiên cho seller {}", sellerId, e);
+      }
     }
   }
 
@@ -460,6 +516,50 @@ public class AuctionService {
   }
 
   // Helper
+
+  /**
+   * Helper điều phối thông báo chi tiết độc lập sang duy nhất NotificationEventHandler
+   */
+  private void dispatchBusinessNotificationsAfterClosed(Auction auction, int auctionId,
+      int sellerId, String itemName, BigDecimal finalPrice, int winnerId) {
+
+    // 1. Gửi thông báo đến Winner (Mở app lên là hóa đơn từ bước 4 đã sẵn sàng)
+    if (winnerId != -1) {
+      try {
+        listeners.stream()
+            .filter(l -> l instanceof NotificationEventHandler)
+            .forEach(l -> {
+              l.onAuctionWon(winnerId, auctionId, itemName, finalPrice);
+              l.onPaymentDue(winnerId, auctionId, itemName, finalPrice);
+            });
+      } catch (Exception e) {
+        logger.error("Lỗi gửi thông báo trúng giải cho user {}", winnerId, e);
+      }
+    }
+
+    // 2. Gửi thông báo trượt giải cho những người cùng phòng cược
+    List<Integer> allBidders = bidTransactionDAO.getBiddersByAuctionId(auctionId);
+    for (int bidderId : allBidders) {
+      if (bidderId != winnerId) {
+        try {
+          listeners.stream()
+              .filter(l -> l instanceof NotificationEventHandler)
+              .forEach(l -> l.onAuctionLost(bidderId, auctionId, itemName));
+        } catch (Exception e) {
+          logger.error("Lỗi gửi thông báo trượt giải cho user {}", bidderId, e);
+        }
+      }
+    }
+
+    // 3. Gửi thông báo hoàn tất phiên cho Chủ tài sản (Seller)
+    try {
+      listeners.stream()
+          .filter(l -> l instanceof NotificationEventHandler)
+          .forEach(l -> l.onAuctionEnded(sellerId, auctionId, itemName, finalPrice));
+    } catch (Exception e) {
+      logger.error("Lỗi gửi thông báo kết thúc đến seller {}", sellerId, e);
+    }
+  }
   /**
    * Method trung tâm gọi AutoBidEngine.trigger() + persist DB
    */
@@ -553,8 +653,12 @@ public class AuctionService {
     listeners.forEach(l -> l.onAuctionStarted(userId, auctionId, itemName));
   }
 
-  public void notifyAuctionEnded(int userId, int auctionId, String itemName, BigDecimal finalPrice) {
-    listeners.forEach(l -> l.onAuctionEnded(userId, auctionId, itemName, finalPrice));
+  public void notifyAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
+    listeners.forEach(l -> {
+      l.onAuctionEnded(winnerId, auctionId, itemName, finalPrice);
+      // Phải gọi thêm hàm này để báo đóng phiên nghiệp vụ:
+      l.onAuctionSessionClosed(auctionId, itemName, finalPrice, AuctionStatus.FINISHED);
+    });
   }
 
   public void notifyAuctionWon(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {

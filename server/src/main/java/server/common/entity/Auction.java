@@ -1,10 +1,12 @@
 package server.common.entity;
 
 
+import java.util.concurrent.CopyOnWriteArrayList;
 import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
+import server.service.AuctionService;
 import server.service.listeners.AuctionEventListener;
 import server.service.listeners.RealTimeObserver;
 
@@ -140,7 +142,7 @@ public class Auction extends Entity {
         this.currentLeader         = null;
         this.lastBidTime           = null;
         this.bidHistory            = new ArrayList<>();
-        this.observers             = new ArrayList<>();
+        this.observers             = new CopyOnWriteArrayList<>();
     }
 
     /**
@@ -346,6 +348,24 @@ public class Auction extends Entity {
         }
     }
 
+    /**
+     * Notify toàn bộ RealTimeObserver (ClientHandler) rằng phiên đã đóng.
+     * Chỉ được gọi từ AuctionService.onAuctionClosed() — sau khi DB persist xong —
+     * đảm bảo client query lại luôn thấy dữ liệu nhất quán.
+     * KHÔNG gọi từ closeSession() hay forceCancel().
+     */
+    public void notifyRealTimeAuctionClosed(int winnerId, String itemName, BigDecimal finalPrice) {
+        List<RealTimeObserver> snapshot;
+        synchronized (observers) { snapshot = new ArrayList<>(observers); }
+        snapshot.forEach(obs -> {
+            try {
+                obs.onAuctionEnded(winnerId, getId(), itemName, finalPrice);
+            } catch (Exception e) {
+                System.err.println("[Auction] RealTimeObserver error: " + e.getMessage());
+            }
+        });
+    }
+
      /**
      * Validate bid amount.
      * @return Exception
@@ -425,9 +445,6 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
-
-        // Notify ngoài lock
-        notifyAuctionClosed();
     }
 
     /**
@@ -445,7 +462,6 @@ public class Auction extends Entity {
             lock.unlock();
         }
         System.out.println("[Auction " + getId() + "] Force canceled. Reason: " + reason);
-        notifyAuctionClosed();
     }
 
     /**

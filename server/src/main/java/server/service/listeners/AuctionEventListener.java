@@ -1,6 +1,7 @@
 package server.service.listeners;
 
 import java.math.BigDecimal;
+import server.common.enums.AuctionStatus;
 
 public interface AuctionEventListener {
   void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice);
@@ -26,4 +27,5 @@ public interface AuctionEventListener {
   void onTimeExtended(int auctionId, String itemName, int addedSeconds);
 
   void onSystemNotification(int userId, String title, String message);
+
 }

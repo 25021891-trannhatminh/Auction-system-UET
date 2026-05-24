@@ -2,6 +2,7 @@ package server.service.listeners;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.common.enums.AuctionStatus;
 import server.common.enums.NotificationType;
 import server.service.PaymentService;
 
@@ -39,36 +40,32 @@ public class PaymentTriggerObserver implements BusinessEventListener {
     this.paymentService = Objects.requireNonNull(paymentService, "paymentService must not be null");
   }
 
+  @Override
+  public void onAuctionSessionClosed(int auctionId, String itemName,
+      BigDecimal finalPrice, AuctionStatus finalStatus) {
+    // Chỉ tạo payment khi có winner thực sự
+    if (finalStatus != AuctionStatus.FINISHED) return;
+
+    paymentExecutor.submit(() -> {
+      try {
+        if (paymentService.isPaymentExistsForAuction(auctionId)) return;
+        boolean ok = paymentService.createPendingPayment(auctionId, itemName);
+        if (ok) logger.info("Pending payment created for auction {}", auctionId);
+        else    logger.warn("Failed to create pending payment for auction {}", auctionId);
+      } catch (Exception e) {
+        logger.error("Payment init failed for auctionId={}", auctionId, e);
+      }
+    });
+  }
+
   // =========================================================================
   // IMPLEMENTED METHODS FROM AuctionEventListener
   // =========================================================================
 
-  /**
-   * KÍCH HOẠT QUY TRÌNH THANH TOÁN KHI PHIÊN ĐẤU GIÁ KẾT THÚC.
-   * Đẩy tác vụ xử lý tiền tệ sang luồng worker bất đồng bộ (Async).
-   */
+  // onAuctionEnded trở thành NO-OP thực sự, không còn chứa logic payment
   @Override
   public void onAuctionEnded(int userId, int auctionId, String itemName, BigDecimal finalPrice) {
-    paymentExecutor.submit(() -> {
-      try {
-        logger.info("PaymentTriggerObserver [WORKER] — Processing auction closure: id={}, item={}", auctionId, itemName);
-
-        // Idempotency check – tránh tạo trùng payment record
-        if (paymentService.isPaymentExistsForAuction(auctionId)) {
-          logger.info("PaymentTriggerObserver [WORKER] — Payment record already exists for auction id={}, skipping.", auctionId);
-          return;
-        }
-
-        boolean success = paymentService.createPendingPayment(auctionId, itemName);
-        if (success) {
-          logger.info("PaymentTriggerObserver [WORKER] — Pending payment initialized for auction id={}", auctionId);
-        } else {
-          logger.warn("PaymentTriggerObserver [WORKER] — Failed to initialize pending payment for auction id={}", auctionId);
-        }
-      } catch (Exception e) {
-        logger.error("PaymentTriggerObserver [WORKER] — Critical error for auctionId={}", auctionId, e);
-      }
-    });
+    // NO-OP — payment được trigger từ onAuctionSessionClosed
   }
 
   @Override

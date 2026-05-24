@@ -26,6 +26,7 @@ import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
 import server.common.entity.User;
+import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
 import server.common.enums.NotificationType;
@@ -42,7 +43,7 @@ import server.service.PaymentService;
 import server.service.ServerAuthService;
 import server.service.listeners.RealTimeObserver;
 
-public class ClientHandler implements Runnable{
+public class ClientHandler implements Runnable, RealTimeObserver{
     private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -112,6 +113,7 @@ public class ClientHandler implements Runnable{
         } finally {
             if(this.userId != -1){
                 ClientManager.remove(this.userId);
+                AuctionManager.getInstance().removeGlobalObserver(this);
             }
             try {
                 if(socket != null && !socket.isClosed()){
@@ -161,6 +163,8 @@ public class ClientHandler implements Runnable{
                         User loginUser = authService.getUser(identifier, password); // Lấy đối tượng User đầy đủ
                         if (loginUser != null) {
                             auctionService.registerOrGetUser(loginUser); // Đảm bảo user có trong AuctionManager
+                            AuctionManager.getInstance().removeGlobalObserver(this);
+                            AuctionManager.getInstance().addGlobalObserver(this);
                         } else {
                             System.err.println("Không thể lấy thông tin User từ DB sau khi login thành công, userId=" + loggedInUserId);
                         }
@@ -837,20 +841,25 @@ public class ClientHandler implements Runnable{
     }
 
     // ==================== REALTIME BID EVENTS ====================
-//    @Override
-//    public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.BID_PLACED, "Bid Successful", "You placed a bid of $" + amount + " on [" + itemName + "]."));
-//    }
-//
-//    @Override
-//    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.TIME_EXTENDED, "Auction Extended Time", "Auction [" + auctionId + "] has been extended by "
-//            + addedSeconds + " seconds."));
-//    }
-//
-//    @Override
-//    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
-//        send(String.format("PUSH_NOTIF|%s|%s|%s", NotificationType.AUCTION_ENDED, "Auction Ended", "Auction for [" + itemName + "] has closed at $" + finalPrice + "."));
-//    }
+    // Implement RealTimeObserver — nhận event từ Auction sau khi DB commit xong.
+    // Chỉ push command realtime về client qua socket, không xử lý business logic.
+    @Override
+    public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+        // Command realtime để UI cập nhật giá, lịch sử bid
+        send(String.format("BID_PLACED|%d|%d|%s|%s",
+            auctionId, bidderId, itemName, amount.toPlainString()));
+    }
+
+    @Override
+    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
+        send(String.format("TIME_EXTENDED|%d|%s|%d",
+            auctionId, itemName, addedSeconds));
+    }
+
+    @Override
+    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
+        send(String.format("AUCTION_ENDED|%d|%d|%s|%s",
+            auctionId, winnerId, itemName, finalPrice.toPlainString()));
+    }
 
 }
