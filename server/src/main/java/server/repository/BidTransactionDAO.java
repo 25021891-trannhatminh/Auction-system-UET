@@ -176,8 +176,9 @@ public class BidTransactionDAO {
     public boolean rollbackLastBid(Connection conn, int auctionId) throws SQLException{
         try (PreparedStatement ps = conn.prepareStatement(SQL_DELETE_LASTBID)) {
             ps.setInt(1, auctionId);
-            logger.info("rollbackLastBid() - Deleted {} manual bid for auction {}", ps.executeUpdate(), auctionId);
-            return ps.executeUpdate() > 0;
+            int result = ps.executeUpdate();
+            logger.info("rollbackLastBid() - Deleted {} manual bid for auction {}", result, auctionId);
+            return result > 0;
         }
     }
     private void executeStatement(Connection conn, String sql, Object... params) throws SQLException {

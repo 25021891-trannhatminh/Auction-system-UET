@@ -35,6 +35,21 @@ public class NotificationService {
     push(userId, title, message, type, null);
   }
 
+  /**
+   * Push realtime socket notification mà KHÔNG ghi vào database.
+   * Dùng cho onBidPlaced, onTimeExtended.
+   */
+  public void pushRealtimeOnly(int userId, String title, String message,
+                               NotificationType type, Integer relatedId) {
+    NotificationDispatcher.getInstance().submit(
+        new NotificationEvent(userId, title, message, type, relatedId)
+    );
+  }
+
+  public void pushRealtimeOnly(int userId, String title, String message, NotificationType type) {
+    pushRealtimeOnly(userId, title, message, type, null);
+  }
+
   // Lấy danh sách thông báo bỏ lỡ khi offline
   public List<Notification> getUnreadNotifications(int userId) {
     // Gọi DAO để lấy các thông báo có status 'isRead = false'

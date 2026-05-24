@@ -21,7 +21,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import server.common.AuctionConstants;
 import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
@@ -72,6 +71,7 @@ public class ClientHandler implements Runnable, RealTimeObserver{
     private final PaymentService paymentService;
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
+    private final AuctionHandler auctionHandler;
 
     /**
      * CONSTRUCTOR ĐÃ ĐƯỢC CHỈNH SỬA:
@@ -88,6 +88,7 @@ public class ClientHandler implements Runnable, RealTimeObserver{
         this.bidHandler = new BidHandler(auctionService);
         this.authHandler = new AuthHandler();
         this.adminHandler = new AdminHandler(auctionService);
+        this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -113,7 +114,7 @@ public class ClientHandler implements Runnable, RealTimeObserver{
         } finally {
             if(this.userId != -1){
                 ClientManager.remove(this.userId);
-                AuctionManager.getInstance().removeGlobalObserver(this);
+                auctionHandler.handleDisconnect(this);
             }
             try {
                 if(socket != null && !socket.isClosed()){
@@ -145,26 +146,17 @@ public class ClientHandler implements Runnable, RealTimeObserver{
                 String loginResult = authHandler.handleLogin(request, this);
                 send(loginResult);
                 // Đồng bộ và lưu giữ trạng thái authenticated user vào bên trong Connection Handler
-                if (loginResult.startsWith("LOGIN_SUCCESS")) {
+                if (loginResult.startsWith(ProtocolConstants.LOGIN_SUCCESS)) {
                     try {
                         String[] parts = loginResult.split(" ");
                         String[] fields = parts[1].split("\\|");
                         int loggedInUserId = Integer.parseInt(fields[0]);
-                        String loggedInUsername = fields[1];
-
-                        this.userId = loggedInUserId;
-                        this.username = loggedInUsername;
-
-                        // Đăng ký session lên bộ quản lý tập trung toàn cục
-                        ClientManager.add(loggedInUserId, this);
                         // Sử dụng identifier và password đã có sẵn trong request LOGIN
                         String identifier = request[1];
                         String password = request[2];
                         User loginUser = authService.getUser(identifier, password); // Lấy đối tượng User đầy đủ
                         if (loginUser != null) {
                             auctionService.registerOrGetUser(loginUser); // Đảm bảo user có trong AuctionManager
-                            AuctionManager.getInstance().removeGlobalObserver(this);
-                            AuctionManager.getInstance().addGlobalObserver(this);
                         } else {
                             System.err.println("Không thể lấy thông tin User từ DB sau khi login thành công, userId=" + loggedInUserId);
                         }
@@ -176,6 +168,18 @@ public class ClientHandler implements Runnable, RealTimeObserver{
             case ProtocolConstants.REGISTER:
                 String registerResult = authHandler.handleRegister(request);
                 send(registerResult);
+                break;
+
+            case ProtocolConstants.JOIN_AUCTION:
+                // Format: JOIN_AUCTION <AuctionID>
+                String joinResult = auctionHandler.handleJoin(request, this, this.userId);
+                send(joinResult);
+                break;
+
+            case ProtocolConstants.LEAVE_AUCTION:
+                // Format: LEAVE_AUCTION <AuctionID>
+                String leaveResult = auctionHandler.handleLeave(request, this, this.userId);
+                send(leaveResult);
                 break;
 
             case "CONFIRM_PAYMENT": {

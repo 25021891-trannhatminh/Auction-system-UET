@@ -156,31 +156,32 @@ public class AuctionManager {
           2. ItemDAO.updateStatus(item.getId(), "IN_AUCTION")
 
       @return Auction vừa được tạo
+     Không tự tạo mới Entity  trên RAM , dùng loadAuction để đồng bộ với DB
      */
-    public Auction createAuction(Item item, int sellerId,
-                                 LocalDateTime startTime, LocalDateTime endTime,
-                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
-                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
-        Auction auction = new Auction(
-            item, sellerId, startTime, endTime,
-            minBidIncrement, reservePrice,
-            snipeWindowSeconds, snipeExtensionSeconds
-        );
-
-        // Đăng ký global observers vào phiên mới
-        globalObservers.forEach(auction::addObserver);// Auction add từng Observers vào
-
-        auctionMap.put(auction.getId(), auction);
-
-        // Lên lịch tự động
-        scheduleOpen(auction);
-        scheduleClose(auction);
-
-        System.out.printf("[AuctionManager] Created auction %s for '%s'. Start: %s, End: %s%n",
-            auction.getId(), item.getName(), startTime, endTime);
-
-        return auction;
-    }
+//    public Auction createAuction(Item item, int sellerId,
+//                                 LocalDateTime startTime, LocalDateTime endTime,
+//                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
+//                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
+//        Auction auction = new Auction(
+//            item, sellerId, startTime, endTime,
+//            minBidIncrement, reservePrice,
+//            snipeWindowSeconds, snipeExtensionSeconds
+//        );
+//
+//        // Đăng ký global observers vào phiên mới
+//        globalObservers.forEach(auction::addObserver);// Auction add từng Observers vào
+//
+//        auctionMap.put(auction.getId(), auction);
+//
+//        // Lên lịch tự động
+//        scheduleOpen(auction);
+//        scheduleClose(auction);
+//
+//        System.out.printf("[AuctionManager] Created auction %s for '%s'. Start: %s, End: %s%n",
+//            auction.getId(), item.getName(), startTime, endTime);
+//
+//        return auction;
+//    }
 
     /**
      * Load auction đã có ID thật từ DB vào memory.

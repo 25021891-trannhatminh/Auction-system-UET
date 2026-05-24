@@ -621,7 +621,7 @@ public class Auction extends Entity {
     public int              getSnipeExtensionSeconds(){ return snipeExtensionSeconds; }
     public int              getTotalBids()           { return bidHistory.size(); }
     public List<BidTransaction> getBidHistory()      { return Collections.unmodifiableList(bidHistory); }
-
+    public List<RealTimeObserver> getObservers()     { return new ArrayList<>(observers);}
     /**
      * Khôi phục lịch sử bid từ DB khi server restart hoặc khi reload auction sau khi tạo.
      *
