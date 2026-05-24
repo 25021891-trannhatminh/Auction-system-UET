@@ -25,6 +25,11 @@ public final class ProtocolConstants {
     public static final String JOIN_AUCTION_SUCCESS =  "JOIN_AUCTION_SUCCESS";
     public static final String JOIN_AUCTION_FAIL = "JOIN_AUCTION_FAIL";
 
+    // ========== LEAVE_AUCTION ==========
+    public static final String LEAVE_AUCTION =  "LEAVE_AUCTION";
+    public static final String LEAVE_AUCTION_SUCCESS =  "LEAVE_AUCTION_SUCCESS";
+    public static final String LEAVE_AUCTION_FAIL = "LEAVE_AUCTION_FAIL";
+
     // ========== BID ==========
     public static final String BID = "BID";
     public static final String BID_SUCCESS = "BID_SUCCESS";

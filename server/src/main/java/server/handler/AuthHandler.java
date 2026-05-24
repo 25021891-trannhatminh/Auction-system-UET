@@ -1,6 +1,7 @@
 package server.handler;
 
 import server.common.ProtocolConstants;
+import server.network.ClientManager;
 import server.service.ServerAuthService;
 import server.handler.ClientHandler;
 
@@ -33,14 +34,17 @@ public class AuthHandler {
         
         String[] authRequest = {ProtocolConstants.LOGIN, identifier, password};
         String response = authService.login(authRequest);
-        
+
         if (response.startsWith(ProtocolConstants.LOGIN_SUCCESS)) {
             String[] parts = response.substring(ProtocolConstants.LOGIN_SUCCESS.length() + 1)
                             .split("\\|");
             if (parts.length >= 2) {
                 try {
-                    client.setUserId(Integer.parseInt(parts[0]));
+                    int userId = Integer.parseInt(parts[0]);
+                    client.setUserId(userId);
                     client.setUsername(parts[1]);
+                    // Đăng ký session lên bộ quản lý tập trung toàn cục
+                    ClientManager.add(userId, client);
                 } catch (NumberFormatException e) {
                     // Ignore
                 }

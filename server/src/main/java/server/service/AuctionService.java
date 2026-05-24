@@ -579,6 +579,12 @@ public class AuctionService {
     }
   }
 
+  /** Persist AutoBid vào DB
+   * 1 Update state của Auction sau khi autobid casade xong
+   * 2 Lưu thông tin Bid vào DB
+   *
+   * Rollback + return false : nếu persist fail
+   * */
   private boolean persistAutoBidTransaction(Auction auction, BidTransaction autoBidTx) {
     try (Connection conn = DBConnection.getConnection()) {
       conn.setAutoCommit(false);
