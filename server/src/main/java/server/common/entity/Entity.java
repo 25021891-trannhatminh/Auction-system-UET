@@ -1,8 +1,7 @@
 package server.common.entity;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
-    // Dùng UUID: tránh lộ số lượng, khó dò tìm lộ thông tin, không bị trùng ID
+// Dùng UUID: tránh lộ số lượng, khó dò tìm lộ thông tin, không bị trùng ID
 
 /*
     Mọi entity đều có id và createdAt
@@ -25,7 +24,7 @@ public abstract class Entity {
         this.createdAt = createdAt;
     }
 
-    public int        getId()        { return id; }
+    public int getId()        { return id; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public abstract void printInfo();

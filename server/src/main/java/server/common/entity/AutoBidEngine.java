@@ -2,6 +2,7 @@ package server.common.entity;
 
 
 import java.util.List;
+import server.common.entity.Auction.PlaceBidResult;
 import server.common.entity.exception.InvalidBidException;
 
 import java.math.BigDecimal;
@@ -163,7 +164,7 @@ public class AutoBidEngine {
     }
 
     /* Xử lý return BidTransaction */
-    private BidTransaction executeWinnerBidTransaction(Auction auction, AutoBidConfig winner, AutoBidConfig secondWinner) {
+    private PlaceBidResult executeWinnerBidTransaction(Auction auction, AutoBidConfig winner, AutoBidConfig secondWinner) {
         BigDecimal amountBidWinner = calculateWinnerAmount(auction.getCurrentPrice(), winner, secondWinner);
         if (amountBidWinner.compareTo(auction.getCurrentPrice()) <= 0) {
             winner.complete();
@@ -177,11 +178,10 @@ public class AutoBidEngine {
             return null;
         }
         try {
-            BidTransaction transaction = auction.placeBid(winnerBidder, amountBidWinner, true);
-            // Nếu winner đã dùng hết maxBid → đánh dấu COMPLETED
+            // placeBid() giờ trả PlaceBidResult — lấy tx từ đó
+            Auction.PlaceBidResult result = auction.placeBid(winnerBidder, amountBidWinner, true);
             if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) winner.complete();
-
-            return transaction;
+            return result;
 
         } catch (InvalidBidException e) {
             System.err.printf("[AutoBidEngine] Auto-bid failed for %s: %s%n",
@@ -202,7 +202,7 @@ public class AutoBidEngine {
      *   Bước 3 — return BidTransaction
      *
      */
-    public BidTransaction trigger(Auction auction, User triggeringBidder) {
+    public Auction.PlaceBidResult trigger(Auction auction, User triggeringBidder) {
         int auctionId = auction.getId();
         // Xác định winner
         AutoBidConfig winner;

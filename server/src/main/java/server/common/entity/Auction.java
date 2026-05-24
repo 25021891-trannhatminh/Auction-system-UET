@@ -214,7 +214,7 @@ public class Auction extends Entity {
      * @throws AuctionClosedException nếu phiên không ở trạng thái RUNNING
      * @throws InvalidBidException    nếu amount không hợp lệ
      */
-    public BidTransaction placeBid(User bidder, BigDecimal amount, boolean isAutoBid) {
+    public PlaceBidResult placeBid(User bidder, BigDecimal amount, boolean isAutoBid) {
 
         // ── Step 1: Kiểm tra trạng thái — TRƯỚC khi lock ─────────────────────
         // Tối ưu: không cần lock để đọc status (read-only check)
@@ -228,7 +228,7 @@ public class Auction extends Entity {
             throw new InvalidBidException("User cannot bid on their own auction", amount, currentPrice);
         }
 
-        BidTransaction bidTransaction = null;   // output
+        BidTransaction tx = null;   // output
         boolean timeExtended = false;   // Anti-snipping = false
 
         // ── Step 2: Acquire lock ──────────────────────────────────────────────
@@ -240,20 +240,24 @@ public class Auction extends Entity {
             if (status != AuctionStatus.RUNNING) {
                 throw new AuctionClosedException(getId(), status);
             }
+            BigDecimal previousPrice   = this.currentPrice;
+            User previousLeader        = this.currentLeader;
+            LocalDateTime previousEnd  = this.endTime;
+            LocalDateTime previousLast = this.lastBidTime;
 
             // ── Step 4: Validate amount ───────────────────────────────────────
             validateBid(amount); // False -> throw Exception
 
             // ── Step 5: Cập nhật state ────────────────────────────────────────
 
-            // Đánh dấu bid cũ là OUTBID
-            markCurrentWinnerOutbid();
+            // Đánh dấu bid cũ là OUTBID, giữ lại reference để rollback đúng
+            BidTransaction outbidTx = markCurrentWinnerOutbidAndReturn();
 
             // Tạo transaction mới
-            bidTransaction = new BidTransaction(
+            tx = new BidTransaction(
                 getId(), bidder.getId(), bidder.getUsername(), amount, isAutoBid
             );
-            bidHistory.add(bidTransaction);
+            bidHistory.add(tx);
 
             // Cập nhật state phiên
             currentPrice  = amount;
@@ -266,6 +270,7 @@ public class Auction extends Entity {
                 extendTime(snipeExtensionSeconds);
                 timeExtended = true;
             }
+            return new PlaceBidResult(tx, outbidTx, timeExtended, previousPrice, previousLeader, previousEnd, previousLast);
 
         } finally {
             // ── Step 7: LUÔN LUÔN unlock, dù có exception ────────────────────
@@ -274,24 +279,74 @@ public class Auction extends Entity {
 
 
 
-        // ── Step 8: Notify observers NGOÀI lock ──────────────────────────────
-        // Quan trọng: notify ngoài lock để tránh deadlock
-        // (Observer có thể gọi lại các method khác của Auction)
-        if (bidTransaction != null) {
-            notifyBidUpdated(bidTransaction);
-            if (timeExtended) {
-                notifyTimeExtended(snipeExtensionSeconds);
-            }
-        }
-
-        return bidTransaction;
+        // ⚠️  Step 8 (notify) ĐÃ BỊ XÓA khỏi đây.
+        //     Service sẽ gọi notifyBidCommitted() sau conn.commit().
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Validation
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Result wrapper — tránh trả nhiều giá trị rời rạc
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
+     * Kết quả trả về của placeBid().
+     * Service dùng để notify observer SAU khi DB commit thành công.
+     *
+     * @param tx           BidTransaction vừa được tạo
+     * @param timeExtended true nếu anti-sniping đã kích hoạt và endTime bị kéo dài
+     */
+    public record PlaceBidResult(
+        BidTransaction tx,
+        BidTransaction outbidTx,        // ← bid vừa bị markOutbid(), null nếu không có
+        boolean timeExtended,
+        BigDecimal previousPrice,
+        User previousLeader,
+        LocalDateTime previousEndTime,
+        LocalDateTime previousLastBid
+    ) {}
+
+    /**
+     * Tìm bid OUTBID gần nhất của một bidder.
+     * Dùng bởi AuctionService để lấy outbidTx khi rollback auto-bid.
+     */
+    public BidTransaction findLastOutbidOf(int bidderId) {
+        for (int i = bidHistory.size() - 1; i >= 0; i--) {
+            BidTransaction tx = bidHistory.get(i);
+            if (tx.getBidderId() == bidderId && tx.getStatus() == BidStatus.OUTBID) {
+                return tx;
+            }
+        }
+        return null;
+    }
+
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Notify — chỉ gọi từ Service SAU KHI DB commit thành công
+// ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Phát sự kiện tới các Observer sau khi DB đã commit thành công.
+     *
+     * Tách khỏi placeBid() để đảm bảo client không nhận event
+     * khi giao dịch DB chưa persist hoặc đã bị rollback.
+     *
+     * Gọi ngoài lock — Observer có thể gọi lại các method khác của Auction
+     * mà không gây deadlock.
+     *
+     * @param tx           BidTransaction vừa được commit xuống DB
+     * @param timeExtended true nếu anti-sniping đã kích hoạt trong lần bid này
+     */
+    public void notifyBidCommitted(BidTransaction tx, boolean timeExtended) {
+        notifyBidUpdated(tx);
+        if (timeExtended) {
+            notifyTimeExtended(snipeExtensionSeconds);
+        }
+    }
+
+     /**
      * Validate bid amount.
      * @return Exception
      */
@@ -486,15 +541,16 @@ public class Auction extends Entity {
     //  Helper queries
     // ─────────────────────────────────────────────────────────────────────────
     /** Đánh dấu bid WINNING hiện tại thành OUTBID. Gọi trong vùng lock. */
-    private void markCurrentWinnerOutbid() {
-        // Tìm bid đang WINNING và chuyển sang OUTBID
+    // Thay thế markCurrentWinnerOutbid()
+    private BidTransaction markCurrentWinnerOutbidAndReturn() {
         for (int i = bidHistory.size() - 1; i >= 0; i--) {
             BidTransaction tx = bidHistory.get(i);
             if (tx.getStatus() == BidStatus.WINNING) {
                 tx.markOutbid();
-                break; // Chỉ có tối đa 1 bid WINNING tại mọi thời điểm
+                return tx;  // ← trả về đúng bid vừa bị mark
             }
         }
+        return null;  // không có winner trước đó (bid đầu tiên)
     }
 
     /** Lấy bid đang ở trạng thái WINNING (chỉ có tối đa 1) */
@@ -584,7 +640,7 @@ public class Auction extends Entity {
      * @param previousPrice   currentPrice trước khi placeBid() chạy
      * @param previousLeader  currentLeader trước khi placeBid() chạy — có thể null
      */
-    public void rollbackLastBid(BidTransaction failedTx, BigDecimal previousPrice, User previousLeader) {
+    public void rollbackLastBid(BidTransaction failedTx,BidTransaction outbidTx, BigDecimal previousPrice, User previousLeader,LocalDateTime previousEndTime, LocalDateTime previousLastBidTime){ // thêmLocalDateTime previousLastBidTime) {
         lock.lock();
         try {
             // Xoá tx thất bại khỏi bidHistory
@@ -598,17 +654,12 @@ public class Auction extends Entity {
             // Khôi phục currentPrice và currentLeader về snapshot trước bid
             this.currentPrice  = previousPrice;
             this.currentLeader = previousLeader;
+            this.endTime       = previousEndTime;
+            this.lastBidTime   = previousLastBidTime;
 
-            // Bid trước đó đã bị markOutbid() bên trong placeBid() — cần hoàn tác:
-            // Tìm bid cuối cùng của previousLeader và đánh dấu lại là WINNING
-            if (previousLeader != null) {
-                for (int i = bidHistory.size() - 1; i >= 0; i--) {
-                    BidTransaction prev = bidHistory.get(i);
-                    if (prev.getBidderId() == previousLeader.getId()) {
-                        prev.restoreWinning(); // hoàn tác OUTBID → WINNING
-                        break;
-                    }
-                }
+            // Restore đúng bid bằng reference, không tìm kiếm mò
+            if (outbidTx != null) {
+                outbidTx.restoreWinning();
             }
         } finally {
             lock.unlock();

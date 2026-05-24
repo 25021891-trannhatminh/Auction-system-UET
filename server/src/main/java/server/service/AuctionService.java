@@ -233,22 +233,23 @@ public class AuctionService {
     }
 
     // ── Bước 2: Cascade AutoBid sau khi manual bid đã committed xuống DB ────
-    // Snapshot trạng thái AUTO-BID trước trigger — dùng để rollback RAM auto-bid nếu persist fail.
-    // Lưu ý: KHÔNG snapshot cho manual bid vì nó đã committed, không rollback.
+    // Snapshot SAU manual bid commit — dùng để rollback RAM nếu auto-bid persist fail
+    BigDecimal priceAfterManual    = auction.getCurrentPrice();
+    User leaderAfterManual         = auction.getCurrentLeader();
+    LocalDateTime endTimeAfterManual  = auction.getEndTime();
+    LocalDateTime lastBidAfterManual  = auction.getLastBidTime();
 
-    BigDecimal priceAfterManual = auction.getCurrentPrice();
-    User leaderAfterManual = auction.getCurrentLeader();
-
-    BidTransaction autoBidTx = null;
+    Auction.PlaceBidResult autoBidResult = null;
     try {
-      autoBidTx = auctionManager.getAutoBidEngine().trigger(auction, bidder);
+      autoBidResult = auctionManager.getAutoBidEngine().trigger(auction, bidder);
     } catch (InvalidBidException e) {
       logger.error("placeBid() – AutoBidEngine.trigger() threw exception for auction {}", auctionId, e);
-      // trigger fail or autoBidTx = null → không persist, không rollback manual bid
+      // trigger fail hoặc autoBidResult = null → không persist, không rollback manual bid
     }
 
     // ── Bước 3: Persist auto-bid nếu engine vừa đặt ─────────────────────────
-    if (autoBidTx != null) {
+    if (autoBidResult != null) {
+      BidTransaction autoBidTx = autoBidResult.tx();
       boolean persisted = persistAutoBidTransaction(auction, autoBidTx);
 
       if (!persisted) {
@@ -256,15 +257,12 @@ public class AuctionService {
         // Manual bid KHÔNG bị rollback vì đã committed DB ở Bước 1.
         logger.warn("placeBid() – auto-bid persist failed, rolling back RAM to post-manual state " +
             "for auction {}", auctionId);
-        auction.rollbackLastBid(autoBidTx, priceAfterManual, leaderAfterManual);
+        auction.rollbackLastBid(autoBidTx, autoBidResult.outbidTx(), priceAfterManual, leaderAfterManual, endTimeAfterManual, lastBidAfterManual);
         // Không return false — manual bid vẫn thành công, chỉ auto-bid bị bỏ qua lần này.
-      }
-    }
-
-      // Reschedule đóng nếu anti-snipe đã gia hạn endTime trong lúc bid
-      if (auction.checkAndResetExtensionFlag()) {
+      }else if(autoBidResult.timeExtended()){
         auctionManager.rescheduleClose(auction);
       }
+    }
 
     // ── Bước 4: Notify listener ───────────────────────────────────────────────
     String itemName = (auction.getItem() != null) ? auction.getItem().getName() : "Unknown";
@@ -471,11 +469,10 @@ public class AuctionService {
     }
 
     try {
-      BidTransaction autoBidTx = auctionManager.getAutoBidEngine()
-          .trigger(auction, previousWinner);
+      Auction.PlaceBidResult autoBidResult = auctionManager.getAutoBidEngine().trigger(auction, previousWinner);  // ← đổi nhận PlaceBidResult
 
-      if (autoBidTx != null) {
-        persistAutoBidTransaction(auction, autoBidTx);
+      if (autoBidResult != null) {
+        persistAutoBidTransaction(auction, autoBidResult.tx());  // ← lấy tx từ result
       }
     } catch (Exception e) {
       logger.error("Auto-bid trigger failed for auction {}", auction.getId(), e);

@@ -33,7 +33,7 @@ public class BidResultDTO {
     /** True nếu manual bidder bị auto-bid của người khác vượt ngay sau khi bid */
     public boolean wasOutbidByAutoBid() {
       return autoBidTransaction != null
-          && !autoBidTransaction.getBidderId().equals(manualTransaction.getBidderId());
+          && autoBidTransaction.getBidderId() != manualTransaction.getBidderId();
     }
 
   public BidTransaction getManualTransaction()  { return manualTransaction; }

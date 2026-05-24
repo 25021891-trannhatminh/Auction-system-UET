@@ -92,7 +92,7 @@ public class UserDTO{
     if (user == null) return null;
 
     return new UserDTO(
-        Integer.parseInt(user.getId()),
+        user.getId(),
         user.getUsername(),
         user.getEmail(),
         user.getFullName(),

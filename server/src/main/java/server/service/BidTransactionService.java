@@ -1,6 +1,8 @@
 package server.service;
 
+import java.time.LocalDateTime;
 import server.common.entity.Auction;
+import server.common.entity.Auction.PlaceBidResult;
 import server.common.entity.BidTransaction;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
@@ -54,31 +56,29 @@ public class BidTransactionService {
       throw new InvalidBidException("Không tìm thấy phiên đấu giá hoặc người dùng trên hệ thống RAM", amount, BigDecimal.ZERO);
     }
 
-    // SỬA LỖI SCOPE: Khai báo biến Snapshot bên ngoài khối try-catch để tầng catch có thể nhìn thấy và thực hiện Rollback RAM
-    BigDecimal previousPrice = auction.getCurrentPrice();
-    User previousLeader = auction.getCurrentLeader();
-
     try (Connection conn = DBConnection.getConnection()) {
       conn.setAutoCommit(false);
-
+      BidTransaction tx = null;
+      PlaceBidResult result = null;
       try {
         // Khóa dòng vật lý và lấy trạng thái thực tế dưới Database hạ tầng
         String dbStatus = bidTransactionDAO.lockAuctionRowAndGetStatus(conn, auctionId);
         if (dbStatus == null) {
           conn.rollback();
           logger.warn("executePlaceBidFlow() - auction {} not found under DB", auctionId);
-          throw new InvalidBidException("Phiên đấu giá không tồn tại dưới Database hạ tầng", amount, previousPrice);
+          throw new InvalidBidException("Phiên đấu giá không tồn tại dưới Database hạ tầng", amount, auction.getCurrentPrice());
         }
 
         // Check trạng thái đóng từ DB hạ tầng trước khi nạp cược
-        if ("FINISHED".equals(dbStatus) || "ENDED".equals(dbStatus)) {
+        if ("FINISHED".equals(dbStatus) || "ENDED".equals(dbStatus) || "CANCELED".equals(dbStatus)) {
           conn.rollback();
           throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
         }
 
         // 1. Thực thi nghiệp vụ đặt giá chính thống trên Core RAM nhằm sinh Entity nguyên bản
         // Lưu ý: Nếu bước placeBid này ném ra InvalidBidException, nó sẽ trùng khớp với catch phía dưới
-        BidTransaction tx = auction.placeBid(bidder, amount, isAutoBid);
+        result = auction.placeBid(bidder, amount, isAutoBid);
+        tx = result.tx();
         if (tx == null) {
           conn.rollback();
           return null;
@@ -98,8 +98,11 @@ public class BidTransactionService {
         bidTransactionDAO.insertBidTransaction(conn, txDTO);
 
         conn.commit();
+        auction.notifyBidCommitted(tx, result.timeExtended());
+        if (result.timeExtended()) {
+          AuctionManager.getInstance().rescheduleClose(auction);
+        }
         logger.info("executePlaceBidFlow() - success auctionId={} bidderId={} amount={}", auctionId, bidderId, amount);
-
         return tx;
 
       } catch (AuctionClosedException | InvalidBidException e) {
@@ -109,8 +112,16 @@ public class BidTransactionService {
         try { conn.rollback(); } catch (SQLException ignored) {}
         logger.error("executePlaceBidFlow() - rollback RAM state due to unexpected error", e);
 
-        // SỬA LỖI: Các biến snapshot 'previousPrice' và 'previousLeader' hiện đã hợp lệ và gọi thành công tại đây
-        auction.rollbackLastBid(null, previousPrice, previousLeader);
+        if (result != null) {
+          auction.rollbackLastBid(
+              tx,
+              result.outbidTx(),
+              result.previousPrice(),
+              result.previousLeader(),
+              result.previousEndTime(),
+              result.previousLastBid()
+          );
+        }
         return null;
       } finally {
         conn.setAutoCommit(true);

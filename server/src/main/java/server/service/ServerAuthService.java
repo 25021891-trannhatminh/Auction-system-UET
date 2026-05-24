@@ -35,7 +35,7 @@ public class ServerAuthService {
       User user = accountDAO.login(identifier, password);
       if (user != null) {
         return "LOGIN_SUCCESS " + fields(
-            Integer.parseInt(user.getId()),
+            user.getId(),
             user.getUsername(),
             user.getEmail(),
             user.getFullName(),
