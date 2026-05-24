@@ -1,17 +1,30 @@
 package server.service.listeners;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import server.service.NotificationService;
 import server.common.enums.NotificationType;
 
 import java.math.BigDecimal;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class NotificationEventHandler implements BusinessEventListener {
+  private static final Logger logger = LoggerFactory.getLogger(NotificationEventHandler.class);
   private final NotificationService notificationService;
 
   public NotificationEventHandler(NotificationService notificationService) {
     this.notificationService = notificationService;
   }
 
+  /**
+   * Worker thread riêng cho việc ghi DB (không chặn luồng chính)
+   */
+  private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor(r -> {
+    Thread t = new Thread(r, "notification-database-worker");
+    t.setDaemon(true);
+    return t;
+  });
   @Override
   public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
     notificationService.push(userId, "Outbid Alert!",
@@ -21,7 +34,7 @@ public class NotificationEventHandler implements BusinessEventListener {
 
   @Override
   public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-    notificationService.push(bidderId, "Bid Successful",
+    notificationService.pushRealtimeOnly(bidderId, "Bid Successful",
         "You placed a bid of $" + amount + " on [" + itemName + "].",
         NotificationType.BID_PLACED, auctionId);
   }
@@ -85,8 +98,8 @@ public class NotificationEventHandler implements BusinessEventListener {
 
   @Override
   public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-    notificationService.push(-1, "Auction Extended Time",
-        "Auction [" + auctionId + "] has been extended by "
+    notificationService.pushRealtimeOnly(-1, "Auction Extended Time",
+        "Auction for" + itemName + " has been extended by "
             + addedSeconds + " seconds.",
         NotificationType.TIME_EXTENDED, auctionId);
   }
@@ -95,4 +108,15 @@ public class NotificationEventHandler implements BusinessEventListener {
   public void onSystemNotification(int userId, String title, String message) {
     notificationService.push(userId, title, message, NotificationType.SYSTEM);
   }
+
+  // Helper: Đẩy công việc ghi DB vào queue
+//  private void submitDBTask() {
+//    databaseExecutor.submit(() -> {
+//      try {
+//
+//      } catch (Exception e) {
+//        logger.error("Notification DB worker error", e);
+//      }
+//    });
+//  }
 }

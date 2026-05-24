@@ -1,5 +1,6 @@
 package server.service;
 
+import java.lang.reflect.Field;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -21,11 +22,9 @@ import server.common.model.BidHistoryDTO;
 import server.common.model.BidResultDTO;
 import server.common.model.PaymentDTO;
 import server.database.DBConnection;
+import server.handler.ClientHandler;
 import server.repository.*;
-import server.service.listeners.AuctionEventListener;
-import server.service.listeners.BusinessEventListener;
-import server.service.listeners.NotificationEventHandler;
-import server.service.listeners.PaymentTriggerObserver;
+import server.service.listeners.*;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -366,7 +365,7 @@ public class AuctionService {
       // 🛠️ CƠ CHẾ CỨU NGUY RAM: Nếu DB fail do nghẽn mạng/rớt kết nối, bắt buộc phải trả trạng thái RAM
       // từ FINISHED/CANCELED ngược về RUNNING để Scheduler quét lại ở chu kỳ sau, tránh kẹt bộ nhớ.
       try {
-        java.lang.reflect.Field statusField = Auction.class.getDeclaredField("status");
+        Field statusField = Auction.class.getDeclaredField("status");
         statusField.setAccessible(true);
         statusField.set(auction, AuctionStatus.RUNNING);
       } catch (Exception ex) {
