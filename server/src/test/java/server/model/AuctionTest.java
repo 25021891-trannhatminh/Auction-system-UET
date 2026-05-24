@@ -28,11 +28,22 @@ class AuctionTest {
 
     @BeforeEach
     void setUp() {
-        nguoiBan = new User("seller", "seller@test.com", "hash", "Nguoi Ban", "123");
-        nguoiRaGia = new User("bidder", "bidder@test.com", "hash", "Nguoi Ra Gia", "456");
+        // Định nghĩa lớp nội bộ để gán ID riêng biệt
+        class UserForTest extends User {
+            private final int customId;
+            public UserForTest(int id, String username, String email, String passwordHash, String fullName, String phone) {
+                super(username, email, passwordHash, fullName, phone);
+                this.customId = id;
+            }
+            @Override
+            public int getId() { return this.customId; }
+        }
+
+        nguoiBan = new UserForTest(1, "seller", "seller@test.com", "hash", "Nguoi Ban", "123");
+        nguoiRaGia = new UserForTest(2, "bidder", "bidder@test.com", "hash", "Nguoi Ra Gia", "456");
 
         sanPham = new Item(nguoiBan.getId(), "iPhone 15", "Dien thoai moi",
-                new BigDecimal("10000000"), ItemStatus.APPROVED, ItemCategory.OTHER) {
+                new BigDecimal("10000000"), ItemStatus.AVAILABLE, ItemCategory.ELECTRONIC) {
             @Override public String getCategory() { return "Dien tu"; }
             @Override public boolean validate() { return true; }
         };

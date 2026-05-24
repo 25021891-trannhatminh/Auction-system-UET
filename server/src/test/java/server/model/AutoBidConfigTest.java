@@ -9,9 +9,9 @@ import server.common.enums.AutoBidStatus;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Unit test cho AutoBidConfig.
@@ -26,9 +26,8 @@ class AutoBidConfigTest {
      */
     @BeforeEach
     void setUp() {
-        // maxBid = 1000, increment = 100
-        config = new AutoBidConfig("auction_01", "bidder_01",
-                new BigDecimal("1000"), new BigDecimal("100"));
+        // Khởi tạo đúng kiểu dữ liệu int cho ID: auctionId = 1001, bidderId = 501
+        config = new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("100"));
     }
 
     // ==================== KHỞI TẠO ====================
@@ -40,8 +39,8 @@ class AutoBidConfigTest {
     @DisplayName("maxBid <= 0 → IllegalArgumentException")
     void constructor_negativeMaxBid_shouldThrow() {
         assertThrows(IllegalArgumentException.class, () ->
-                new AutoBidConfig("a1", "b1",
-                        new BigDecimal("-100"), new BigDecimal("50"))
+                new AutoBidConfig(1001, 501,
+                        new BigDecimal("-10"), new BigDecimal("100"))
         );
     }
 
@@ -52,9 +51,7 @@ class AutoBidConfigTest {
     @DisplayName("increment <= 0 → IllegalArgumentException")
     void constructor_negativeIncrement_shouldThrow() {
         assertThrows(IllegalArgumentException.class, () ->
-                new AutoBidConfig("a1", "b1",
-                        new BigDecimal("1000"), new BigDecimal("-50"))
-        );
+                new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("-50")));
     }
 
     /**
@@ -64,9 +61,7 @@ class AutoBidConfigTest {
     @DisplayName("maxBid < increment → IllegalArgumentException")
     void constructor_maxBidLessThanIncrement_shouldThrow() {
         assertThrows(IllegalArgumentException.class, () ->
-                new AutoBidConfig("a1", "b1",
-                        new BigDecimal("50"), new BigDecimal("100"))
-        );
+                new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("-50")));
     }
 
     /**
@@ -172,11 +167,10 @@ class AutoBidConfigTest {
     @Test
     @DisplayName("maxBid cao hơn → priority cao hơn trong PriorityQueue")
     void compareTo_higherMaxBid_shouldHaveHigherPriority() {
-        AutoBidConfig higher = new AutoBidConfig("auction_01", "bidder_02",
-                new BigDecimal("2000"), new BigDecimal("100"));
+        AutoBidConfig higher = new AutoBidConfig(1001, 502, new BigDecimal("2000"), new BigDecimal("100"));
 
         // higher.maxBid=2000 > config.maxBid=1000
-        // higher phải đứng trước → compareTo âm
+        // higher phải đứng trước → kết quả so sánh mong đợi phù hợp định nghĩa cấu trúc Heap của nhóm
         assertTrue(config.compareTo(higher) > 0);
         assertTrue(higher.compareTo(config) < 0);
     }
@@ -188,12 +182,11 @@ class AutoBidConfigTest {
     @DisplayName("maxBid bằng nhau → đăng ký sớm hơn có priority cao hơn")
     void compareTo_sameMaxBid_earlierRegistration_shouldHaveHigherPriority()
             throws InterruptedException {
-        // config được tạo trước trong setUp()
-        // Đợi 1ms để registeredAt khác nhau
-        Thread.sleep(1);
+        // config được tạo trước trong setUp() có maxBid = 1000
+        // Đợi 10ms để registeredAt khác nhau
+        Thread.sleep(10);
 
-        AutoBidConfig later = new AutoBidConfig("auction_01", "bidder_02",
-                new BigDecimal("1000"), new BigDecimal("100"));
+        AutoBidConfig later = new AutoBidConfig(1001,502,new BigDecimal("1000"), new BigDecimal("100"));
 
         // config đăng ký trước → priority cao hơn
         assertTrue(config.compareTo(later) < 0);

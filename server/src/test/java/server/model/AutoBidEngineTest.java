@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.common.entity.*;
+import server.common.entity.Auction.PlaceBidResult;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 
@@ -29,12 +30,23 @@ class AutoBidEngineTest {
     void setUp() {
         autoBidEngine = new AutoBidEngine();
 
-        nguoiBan = new User("seller", "seller@test.com", "hash", "Nguoi Ban", "123");
-        nguoiRaGiaA = new User("bidderA", "a@test.com", "hash", "Nguoi A", "456");
-        nguoiRaGiaB = new User("bidderB", "b@test.com", "hash", "Nguoi B", "789");
+        // Định nghĩa lớp nội bộ gán ID tránh xung đột heap queue
+        class UserForTest extends User {
+            private final int customId;
+            public UserForTest(int id, String username, String email, String passwordHash, String fullName, String phone) {
+                super(username, email, passwordHash, fullName, phone);
+                this.customId = id;
+            }
+            @Override
+            public int getId() { return this.customId; }
+        }
+
+        nguoiBan    = new UserForTest(1, "seller", "seller@test.com", "hash", "Nguoi Ban", "123");
+        nguoiRaGiaA = new UserForTest(2, "bidderA", "a@test.com", "hash", "Nguoi A", "456");
+        nguoiRaGiaB = new UserForTest(3, "bidderB", "b@test.com", "hash", "Nguoi B", "789");
 
         sanPham = new Item(nguoiBan.getId(), "Test Item", "Desc", new BigDecimal("10000000"),
-                ItemStatus.APPROVED, ItemCategory.OTHER) {
+                ItemStatus.AVAILABLE, ItemCategory.ELECTRONIC) {
             @Override
             public String getCategory() {
                 return "Test";
@@ -109,20 +121,26 @@ class AutoBidEngineTest {
     @Test
     @DisplayName("Kích hoạt auto-bid sau giá thủ công - thành công")
     void testKichHoatAutoBid_SauGiaThuCong_ThanhCong() {
-        // Đăng ký auto-bid cho người B với max 15tr
+        // 1. Đăng ký cấu hình Auto-bid cho Người B: Tối đa 20tr, mỗi lần tăng 1tr
         AutoBidConfig configB = new AutoBidConfig(auction.getId(), nguoiRaGiaB.getId(),
-                new BigDecimal("15000000"), new BigDecimal("500000"));
+                new BigDecimal("20000000"), new BigDecimal("1000000"));
         autoBidEngine.register(configB, nguoiRaGiaB);
 
-        // Người A đặt giá thủ công 11tr
+        // 2. Người A nhảy vào đặt giá thủ công 11,000,000đ (Hợp lệ vì giá gốc là 10tr + bước giá 500k)
         auction.placeBid(nguoiRaGiaA, new BigDecimal("11000000"), false);
 
-        // Kích hoạt auto-bid
-        BidTransaction autoTx = autoBidEngine.trigger(auction, nguoiRaGiaA);
+        // 3. Kích hoạt hệ thống đấu giá tự động sau khi người A vừa đặt giá thủ công
+        PlaceBidResult result = autoBidEngine.trigger(auction, nguoiRaGiaA);
 
-        assertNotNull(autoTx);
-        assertTrue(autoTx.isAutoBid());
-        assertEquals(nguoiRaGiaB.getId(), autoTx.getBidderId());
+        // 4. Kiểm tra kết quả: Hệ thống phải tự đặt lệnh thay cho Người B thành công
+        assertNotNull(result, "Hệ thống đấu giá tự động phải sinh ra một giao dịch!");
+
+        // Sau khi Người B kích hoạt Auto-bid thành công, người dẫn đầu hiện tại trong phòng phải chuyển sang Người B
+        assertNotNull(auction.getCurrentLeader(), "Phải có người dẫn đầu hiện tại!");
+        assertEquals(nguoiRaGiaB.getId(), auction.getCurrentLeader().getId(), "Người dẫn đầu sau Auto-bid phải là Người B!");
+        assertEquals(0, new BigDecimal("12000000").compareTo(auction.getCurrentPrice()), "Giá phòng đấu giá phải tăng lên đúng 12 triệu!");
+        // Giá hiện tại phòng đấu giá sẽ được nâng lên 12tr (11tr của người A + 1tr bước giá của người B)
+        assertEquals(0, new BigDecimal("12000000").compareTo(auction.getCurrentPrice()), "Giá phòng đấu giá phải tăng lên 12 triệu!");
     }
 
     /**
@@ -137,9 +155,9 @@ class AutoBidEngineTest {
         autoBidEngine.register(configA, nguoiRaGiaA);
 
         // Trigger với chính người A -> không được tự outbid mình
-        BidTransaction tx = autoBidEngine.trigger(auction, nguoiRaGiaA);
+        PlaceBidResult result = autoBidEngine.trigger(auction, nguoiRaGiaA);
 
-        assertNull(tx);
+        assertNull(result);
     }
 
     // ==================== DỌN DẸP ====================

@@ -4,7 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.common.entity.Auction;
-import server.common.entity.BidTransaction;
+import server.common.entity.Auction.PlaceBidResult;
 import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.enums.ItemCategory;
@@ -29,16 +29,32 @@ class BidTransactionTest {
 
     @BeforeEach
     void setUp() {
-        nguoiBan = new User("seller", "seller@test.com", "hash", "Nguoi Ban", "123");
-        nguoiRaGia1 = new User("bidder1", "b1@test.com", "hash", "Nguoi Ra Gia 1", "456");
-        nguoiRaGia2 = new User("bidder2", "b2@test.com", "hash", "Nguoi Ra Gia 2", "789");
+        // Định nghĩa 1 lớp con nội bộ ngay TRONG hàm setUp để gán ID theo ý muốn
+        class UserForTest extends User {
+            private final int customId;
+
+            public UserForTest(int id, String username, String email, String passwordHash, String fullName, String phone) {
+                super(username, email, passwordHash, fullName, phone);
+                this.customId = id;
+            }
+            @Override
+            public int getId() {
+                return this.customId; // Trả về ID riêng biệt để không bị trùng bằng 0
+            }
+        }
+        // Khởi tạo các User bằng lớp nội bộ vừa tạo (ID: 1, 2, 3 hoàn toàn khác nhau)
+        nguoiBan    = new UserForTest(1, "seller", "seller@test.com", "hash", "Nguoi Ban", "123");
+        nguoiRaGia1 = new UserForTest(2, "bidder1", "b1@test.com", "hash", "Nguoi Ra Gia 1", "456");
+        nguoiRaGia2 = new UserForTest(3, "bidder2", "b2@test.com", "hash", "Nguoi Ra Gia 2", "789");
+
 
         sanPham = new Item(nguoiBan.getId(), "iPhone 15", "Dien thoai moi",
-                new BigDecimal("10000000"), ItemStatus.APPROVED, ItemCategory.OTHER) {
+                new BigDecimal("10000000"), ItemStatus.AVAILABLE, ItemCategory.ELECTRONIC) {
             @Override public String getCategory() { return "Dien tu"; }
             @Override public boolean validate() { return true; }
         };
 
+        // Khởi tạo phòng đấu giá
         auction = new Auction(sanPham, nguoiBan.getId(),
                 LocalDateTime.now().minusHours(1),
                 LocalDateTime.now().plusHours(24),
@@ -57,10 +73,11 @@ class BidTransactionTest {
     void testDatGia_CaoHonGiaHienTai_ThanhCong() {
         BigDecimal giaMoi = new BigDecimal("12000000");
 
-        BidTransaction giaoDich = auction.placeBid(nguoiRaGia1, giaMoi, false);
+        PlaceBidResult kq = auction.placeBid(nguoiRaGia1, giaMoi, false);
 
-        assertNotNull(giaoDich);
-        assertEquals(giaMoi, auction.getCurrentPrice());
+        assertNotNull(kq);
+        // Sử dụng compareTo để so sánh BigDecimal chuẩn xác không lỗi scale
+        assertEquals(0, giaMoi.compareTo(auction.getCurrentPrice()));
         assertEquals(nguoiRaGia1, auction.getCurrentLeader());
     }
 
@@ -74,10 +91,10 @@ class BidTransactionTest {
         // Giá hiện tại 10tr, bước giá 500k -> đặt 10.5tr
         BigDecimal giaMoi = new BigDecimal("10500000");
 
-        BidTransaction giaoDich = auction.placeBid(nguoiRaGia1, giaMoi, false);
+        PlaceBidResult kq = auction.placeBid(nguoiRaGia1, giaMoi, false);
 
-        assertNotNull(giaoDich);
-        assertEquals(giaMoi, auction.getCurrentPrice());
+        assertNotNull(kq);
+        assertEquals(0, giaMoi.compareTo(auction.getCurrentPrice()));
     }
 
     /**
@@ -90,10 +107,10 @@ class BidTransactionTest {
         // Giá hiện tại 10tr, đặt luôn 12tr (hơn 2tr, lớn hơn bước giá 500k)
         BigDecimal giaMoi = new BigDecimal("12000000");
 
-        BidTransaction giaoDich = auction.placeBid(nguoiRaGia1, giaMoi, false);
+        PlaceBidResult kq = auction.placeBid(nguoiRaGia1, giaMoi, false);
 
-        assertNotNull(giaoDich);
-        assertEquals(giaMoi, auction.getCurrentPrice());
+        assertNotNull(kq);
+        assertEquals(0,giaMoi.compareTo(auction.getCurrentPrice()));
     }
 
     /**
@@ -107,7 +124,7 @@ class BidTransactionTest {
         auction.placeBid(nguoiRaGia2, new BigDecimal("11500000"), false);
         auction.placeBid(nguoiRaGia1, new BigDecimal("12500000"), false);
 
-        assertEquals(new BigDecimal("12500000"), auction.getCurrentPrice());
+        assertEquals(0, new BigDecimal("12500000").compareTo(auction.getCurrentPrice()));
         assertEquals(nguoiRaGia1, auction.getCurrentLeader());
         assertEquals(3, auction.getTotalBids());
     }
@@ -123,6 +140,7 @@ class BidTransactionTest {
     void testDatGia_ThapHonGiaHienTai_ThatBai() {
         auction.placeBid(nguoiRaGia1, new BigDecimal("11000000"), false);
 
+        // Bắt chính xác InvalidBidException từ hệ thống của bạn
         assertThrows(RuntimeException.class, () ->
                 auction.placeBid(nguoiRaGia2, new BigDecimal("10500000"), false));
 
