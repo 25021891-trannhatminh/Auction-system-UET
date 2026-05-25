@@ -42,7 +42,7 @@ public class BidTransactionService {
 
     // SỬA LỖI: Cập nhật chuẩn xác 3 tham số cho InvalidBidException theo đúng file Exception gốc
     if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-      throw new InvalidBidException("Số tiền đặt giá phải lớn hơn 0", amount, BigDecimal.ZERO);
+      throw new InvalidBidException("Bid amount must be greater than 0", amount, BigDecimal.ZERO);
     }
 
     Auction auction = AuctionManager.getInstance()
@@ -55,7 +55,7 @@ public class BidTransactionService {
 
     if (auction == null || bidder == null) {
       logger.warn("executePlaceBidFlow() - auction or bidder not found");
-      throw new InvalidBidException("Không tìm thấy phiên đấu giá hoặc người dùng trên hệ thống RAM", amount, BigDecimal.ZERO);
+      throw new InvalidBidException("Auction or user was not found in server memory", amount, BigDecimal.ZERO);
     }
 
     try (Connection conn = DBConnection.getConnection()) {
@@ -68,7 +68,7 @@ public class BidTransactionService {
         if (lockInfo == null) {
           conn.rollback();
           logger.warn("executePlaceBidFlow() - auction {} not found under DB", auctionId);
-          throw new InvalidBidException("Phiên đấu giá không tồn tại dưới Database hạ tầng", amount, auction.getCurrentPrice());
+          throw new InvalidBidException("Auction was not found in the database", amount, auction.getCurrentPrice());
         }
 
         // ── Bước 2: Guard status từ DB ────────────────────────────────────────────────────────
@@ -111,6 +111,10 @@ public class BidTransactionService {
         conn.commit();
 
         // ── Bước 7: Notify sau khi DB commit thành công ───────────────────────────────────────
+        // Gửi raw realtime trước để UI đang mở phòng auction cập nhật giá, bid count,
+        // countdown và anti-snipe extension ngay sau khi transaction đã an toàn trong DB.
+        publishRealtimeBidUpdate(auction, tx, result.timeExtended());
+
         // Truyền toàn bộ result để notifyBidCommitted() lấy previousLeader đúng snapshot,
         // tránh bug gửi onOutbid nhầm cho người vừa thắng.
         auction.notifyBidCommitted(result);

@@ -67,12 +67,11 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double USER_ACTION_GAP = 6;
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
-  private static final double AUCTION_DETAIL_MEDIA_WIDTH = 650;
-  private static final double AUCTION_DETAIL_INFO_WIDTH = 430;
-  private static final double AUCTION_DETAIL_GAP = 22;
-  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 330;
-  private static final double AUCTION_DETAIL_THUMB_WIDTH = 100;
-  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 74;
+  private static final double AUCTION_DETAIL_INFO_WIDTH = 300;
+  private static final double AUCTION_DETAIL_GAP = 14;
+  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 260;
+  private static final double AUCTION_DETAIL_THUMB_WIDTH = 78;
+  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 58;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
   private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
   private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
@@ -1443,22 +1442,24 @@ public class UserDashboardController extends BaseDashboardController {
     detailShell.getStyleClass().add("auction-detail-shell");
     detailShell.setAlignment(Pos.TOP_LEFT);
     detailShell.setFillHeight(false);
-    lockRegionWidth(
-        detailShell,
-        AUCTION_DETAIL_MEDIA_WIDTH + AUCTION_DETAIL_GAP + AUCTION_DETAIL_INFO_WIDTH);
+    detailShell.setMinWidth(0);
+    detailShell.setMaxWidth(Double.MAX_VALUE);
 
-    VBox mediaColumn = new VBox(14);
+    VBox mediaColumn = new VBox(12);
     mediaColumn.getStyleClass().add("auction-detail-media-column");
-    lockRegionWidth(mediaColumn, AUCTION_DETAIL_MEDIA_WIDTH);
-    HBox.setHgrow(mediaColumn, Priority.NEVER);
+    mediaColumn.setMinWidth(0);
+    mediaColumn.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(mediaColumn, Priority.ALWAYS);
 
     StackPane mainImage = createAuctionImageWrap(data.imagePath, AUCTION_DETAIL_IMAGE_HEIGHT);
     mainImage.getStyleClass().add("auction-detail-main-image");
-    lockRegionWidth(mainImage, AUCTION_DETAIL_MEDIA_WIDTH);
+    mainImage.setMinWidth(0);
+    mainImage.setMaxWidth(Double.MAX_VALUE);
 
-    HBox thumbnails = new HBox(10);
+    HBox thumbnails = new HBox(8);
     thumbnails.getStyleClass().add("auction-detail-thumbnails");
-    lockRegionWidth(thumbnails, AUCTION_DETAIL_MEDIA_WIDTH);
+    thumbnails.setMinWidth(0);
+    thumbnails.setMaxWidth(Double.MAX_VALUE);
     List<String> imagePaths = imagePathsFromPayload(data.imagePayload);
     if (imagePaths.isEmpty()) {
       imagePaths.add(data.imagePath);
@@ -1476,17 +1477,18 @@ public class UserDashboardController extends BaseDashboardController {
         fallback(data.description, "No description stored for this item."));
     descriptionLine.getStyleClass().add("auction-detail-description-line");
     descriptionLine.setWrapText(true);
-    descriptionLine.setMaxWidth(AUCTION_DETAIL_MEDIA_WIDTH);
+    descriptionLine.setMaxWidth(Double.MAX_VALUE);
+    descriptionLine.maxWidthProperty().bind(mediaColumn.widthProperty());
 
     mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionLine);
 
-    VBox infoColumn = new VBox(14);
+    VBox infoColumn = new VBox(12);
     infoColumn.getStyleClass().add("auction-detail-info-column");
     lockRegionWidth(infoColumn, AUCTION_DETAIL_INFO_WIDTH);
     HBox.setHgrow(infoColumn, Priority.NEVER);
 
     HBox countdown = buildCountdown(data.secondsLeft);
-    lockRegionWidth(countdown, AUCTION_DETAIL_INFO_WIDTH - 44);
+    countdown.setMaxWidth(Double.MAX_VALUE);
 
     VBox bidPanel = new VBox(14);
     bidPanel.getStyleClass().add("auction-detail-price-panel");
@@ -1516,7 +1518,7 @@ public class UserDashboardController extends BaseDashboardController {
     placeBidButton.setMnemonicParsing(false);
     placeBidButton.getStyleClass().add("auction-market-bid-btn");
     placeBidButton.setDisable(!isAuctionBidEnabled(data));
-    lockRegionWidth(placeBidButton, 126);
+    lockRegionWidth(placeBidButton, 112);
     placeBidButton.setOnAction(event -> submitManualBid(data, bidInput));
 
     bidRow.getChildren().addAll(bidInput, placeBidButton);
@@ -1593,17 +1595,17 @@ public class UserDashboardController extends BaseDashboardController {
 
     String amount = normalizeBidAmount(bidInput.getText());
     if (amount.isBlank()) {
-      showBidFeedback("Nhập số tiền bid hợp lệ.", true);
+      showBidFeedback("Please enter a valid bid amount.", true);
       return;
     }
 
     try {
       if (new BigDecimal(amount).compareTo(BigDecimal.ZERO) <= 0) {
-        showBidFeedback("Số tiền bid phải lớn hơn 0.", true);
+        showBidFeedback("Bid amount must be greater than 0.", true);
         return;
       }
     } catch (NumberFormatException exception) {
-      showBidFeedback("Số tiền bid không đúng định dạng.", true);
+      showBidFeedback("Invalid bid amount format.", true);
       return;
     }
 
@@ -1611,14 +1613,14 @@ public class UserDashboardController extends BaseDashboardController {
       networkManager = NetworkManager.getInstance();
     }
     if (networkManager == null) {
-      showBidFeedback("Chưa kết nối được server.", true);
+      showBidFeedback("Cannot connect to the server.", true);
       return;
     }
 
     if (activeAuctionBidButton != null) {
       activeAuctionBidButton.setDisable(true);
     }
-    showBidFeedback("Đang gửi bid lên server...", false);
+    showBidFeedback("Sending bid to the server...", false);
     networkManager.send("BID " + data.auctionId + " " + amount);
   }
 
@@ -1672,8 +1674,8 @@ public class UserDashboardController extends BaseDashboardController {
       if (activeAuctionBidButton != null) {
         activeAuctionBidButton.setDisable(false);
       }
-      showBidFeedback("Bid đã được server xác nhận.", false);
-      notifUIHandler.showSuccess("Bid accepted", "Giá của phiên sẽ tự cập nhật theo realtime.");
+      showBidFeedback("Your bid has been confirmed by the server.", false);
+      notifUIHandler.showSuccess("Bid accepted", "The auction price will update in real time.");
       return;
     }
     if (message.startsWith("FAIL ") && activeAuctionDetailId != null) {
@@ -1717,7 +1719,7 @@ public class UserDashboardController extends BaseDashboardController {
     replaceAuctionCardBid(auctionId, amount, totalBids, secondsLeft, endTime);
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionPrice(amount, totalBids);
-      showBidFeedback("Giá hiện tại đã cập nhật realtime.", false);
+      showBidFeedback("Current price updated in real time.", false);
     } else if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
       renderWorkspace(currentSectionKey, activeFilter);
     }
@@ -1734,7 +1736,7 @@ public class UserDashboardController extends BaseDashboardController {
     int addedSeconds = parseIntOrDefault(safeField(fields, 3), 0);
     replaceAuctionCardBid(auctionId, null, -1, secondsLeft, endTime);
     if (isActiveAuction(auctionId)) {
-      showBidFeedback("Auction được gia hạn thêm " + addedSeconds + " giây.", false);
+      showBidFeedback("Auction extended by " + addedSeconds + " seconds.", false);
     }
   }
 
@@ -1755,7 +1757,7 @@ public class UserDashboardController extends BaseDashboardController {
         activeAuctionBidButton.setDisable(true);
       }
       updateActiveAuctionPrice(finalPrice, -1);
-      showBidFeedback("Phiên đã đóng với trạng thái " + status + ".", false);
+      showBidFeedback("This auction has closed with status " + status + ".", false);
     }
     requestUserAuctions();
   }
@@ -1845,15 +1847,26 @@ public class UserDashboardController extends BaseDashboardController {
   private String readableBidFailure(String reason) {
     String normalized = reason == null ? "" : reason.trim();
     return switch (normalized) {
-      case "NOT_LOGGED_IN" -> "Mày cần đăng nhập trước khi bid.";
-      case "INVALID_FORMAT" -> "Format bid không hợp lệ.";
-      case "AUCTION_CLOSED" -> "Phiên đấu giá đã đóng.";
-      case "USER_CANNOT_BID_ON_THEIR_OWN_AUCTION" -> "Không thể bid vào auction của chính mày.";
-      case "AMOUNT_MUST_BE_POSITIVE" -> "Số tiền bid phải lớn hơn 0.";
-      case "DB_PERSIST_FAILED" -> "Server chưa lưu được bid xuống database.";
-      case "SYSTEM_ERROR" -> "Server gặp lỗi khi xử lý bid.";
-      default -> normalized.isBlank() ? "Bid không thành công." : normalized.replace('_', ' ');
+      case "NOT_LOGGED_IN" -> "Please sign in before placing a bid.";
+      case "INVALID_FORMAT" -> "Invalid bid format.";
+      case "AUCTION_CLOSED" -> "This auction is closed.";
+      case "USER_CANNOT_BID_ON_THEIR_OWN_AUCTION" -> "You cannot bid on your own auction.";
+      case "BID_AMOUNT_MUST_BE_POSITIVE" -> "Bid amount must be greater than 0.";
+      case "AMOUNT_MUST_BE_POSITIVE" -> "Bid amount must be greater than 0.";
+      case "USER_OFFLINE" -> "Your session is not registered as online. Please sign in again.";
+      case "USER_NOT_FOUND" -> "Your account could not be found on the server.";
+      case "DB_PERSIST_FAILED" -> "The server could not save your bid. Please try again.";
+      case "SYSTEM_ERROR" -> "The server encountered an error while processing your bid.";
+      default -> normalized.isBlank() ? "Bid failed." : toSentenceCase(normalized.replace('_', ' '));
     };
+  }
+
+  private String toSentenceCase(String value) {
+    if (value == null || value.isBlank()) {
+      return "";
+    }
+    String lower = value.toLowerCase();
+    return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
   }
 
   private void lockRegionWidth(Region region, double width) {
