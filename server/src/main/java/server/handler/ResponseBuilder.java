@@ -1,7 +1,9 @@
 package server.handler;
 
+import java.time.LocalDateTime;
 import server.common.ProtocolConstants;
 import java.math.BigDecimal;
+import server.common.enums.AuctionStatus;
 
 /**
  * Builder tạo response message theo protocol chuẩn.
@@ -148,6 +150,61 @@ public final class ResponseBuilder {
     public static String newBid(String username, int auctionId, BigDecimal amount) {
         return String.format("%s %s %d %s",
             ProtocolConstants.NEW_BID, username, auctionId, amount);
+    }
+
+    // ==================== REALTIME AUCTION STATE ====================
+
+    /**
+     * Push trạng thái phiên sau mỗi bid thành công — broadcast tới auction watchers.
+     *
+     * <p>Client nhận message này để cập nhật toàn bộ state liên quan đến giá mà không cần
+     * gọi lại JOIN_AUCTION: currentPrice, leader, countdown timer và bid count đều có đủ.</p>
+     *
+     * <p>Format: {@code AUCTION_BID_UPDATE|auctionId|currentPrice|leaderId|leaderName|endTime|totalBids|isAutoBid}</p>
+     *
+     * @param auctionId    ID phiên đấu giá
+     * @param currentPrice giá hiện tại sau bid (plain decimal, không ký tự khoa học)
+     * @param leaderId     ID người đang dẫn đầu; -1 nếu chưa có
+     * @param leaderName   username của leader; "None" nếu chưa có
+     * @param endTime      thời điểm kết thúc, có thể đã bị anti-sniping extend
+     * @param totalBids    tổng số bid của phiên tính đến thời điểm này
+     * @param isAutoBid    true nếu bid vừa đặt là auto-bid
+     * @return chuỗi protocol AUCTION_BID_UPDATE
+     */
+    public static String auctionBidUpdate(int auctionId, BigDecimal currentPrice, int leaderId, String leaderName, LocalDateTime endTime, int totalBids, boolean isAutoBid) {return String.format("%s|%d|%s|%d|%s|%s|%d|%s",
+            ProtocolConstants.AUCTION_BID_UPDATE,
+            auctionId,
+            currentPrice.toPlainString(),
+            leaderId,
+            leaderName != null ? leaderName : "None",
+            endTime.toString(),
+            totalBids,
+            isAutoBid ? "AUTO" : "MANUAL");
+    }
+
+    /**
+     * Push trạng thái đóng phiên — broadcast tới auction watchers.
+     *
+     * <p>Client nhận message này để render màn hình kết quả: hiển thị winner,
+     * giá cuối, và chuyển trạng thái UI sang FINISHED/CANCELED mà không cần poll lại.</p>
+     *
+     * <p>Format: {@code AUCTION_CLOSED_UPDATE|auctionId|finalStatus|finalPrice|winnerId|winnerName}</p>
+     *
+     * @param auctionId   ID phiên đấu giá
+     * @param finalStatus FINISHED hoặc CANCELED
+     * @param finalPrice  giá cuối cùng
+     * @param winnerId    ID người thắng; -1 nếu CANCELED hoặc không có winner
+     * @param winnerName  username của người thắng; "None" nếu không có
+     * @return chuỗi protocol AUCTION_CLOSED_UPDATE
+     */
+    public static String auctionClosedUpdate(int auctionId, AuctionStatus finalStatus, BigDecimal finalPrice, int winnerId, String winnerName) {
+        return String.format("%s|%d|%s|%s|%d|%s",
+            ProtocolConstants.AUCTION_CLOSED_UPDATE,
+            auctionId,
+            finalStatus.name(),
+            finalPrice.toPlainString(),
+            winnerId,
+            winnerName != null ? winnerName : "None");
     }
     
     // ==================== ADMIN ====================

@@ -72,6 +72,10 @@ public final class ProtocolConstants {
     // ========== BROADCAST ==========
     public static final String NEW_BID = "NEW_BID";
     public static final String AUCTION_CLOSED = "AUCTION_CLOSED";
+
+    // ========== REALTIME AUCTION STATE ==========
+    public static final String AUCTION_BID_UPDATE = "AUCTION_BID_UPDATE";
+    public static final String AUCTION_CLOSED_UPDATE = "AUCTION_CLOSED_UPDATE";
     
     // ========== HEARTBEAT ==========
     public static final String PING = "PING";

@@ -1,8 +1,11 @@
 package server.handler;
 
+import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.BidTransaction;
+import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
+import server.common.enums.AuctionStatus;
 import server.network.NotificationDispatcher;
 import server.service.listeners.RealTimeObserver;
 
@@ -16,6 +19,12 @@ import java.util.Optional;
  * JOIN_AUCTION  <auctionId> — đăng ký nhận realtime update của phiên, gửi snapshot hiện tại.
  * LEAVE_AUCTION <auctionId> — hủy đăng ký khỏi phiên.
  *
+ * Protocol response:
+ *   JOIN thành công  → AUCTION_SNAPSHOT|... (phiên đang chạy/mở)
+ *                    → AUCTION_CLOSED_UPDATE|... (phiên đã đóng — client render màn kết quả)
+ *   JOIN thất bại    → JOIN_AUCTION_FAIL reason
+ *   LEAVE thành công → LEAVE_AUCTION_SUCCESS auctionId
+ *   LEAVE thất bại   → LEAVE_AUCTION_FAIL reason
  */
 public class AuctionHandler {
 
@@ -42,32 +51,36 @@ public class AuctionHandler {
   public String handleJoin(String[] request, int userId) {
     // 1. Kiểm tra đăng nhập
     if (userId <= 0) {
-      return "JOIN_AUCTION_FAIL NOT_LOGGED_IN";
+      return ProtocolConstants.JOIN_AUCTION_FAIL + " NOT_LOGGED_IN";
     }
 
     // 2. Validate tham số
     if (request == null || request.length < 2) {
-      return "JOIN_AUCTION_FAIL INVALID_FORMAT";
+      return ProtocolConstants.JOIN_AUCTION_FAIL + " INVALID_FORMAT";
     }
 
     int auctionId;
     try {
       auctionId = Integer.parseInt(request[1]);
     } catch (NumberFormatException e) {
-      return "JOIN_AUCTION_FAIL INVALID_AUCTION_ID";
+      return ProtocolConstants.JOIN_AUCTION_FAIL + " INVALID_AUCTION_ID";
     }
 
     // 3. Tìm auction trong RAM
     Optional<Auction> opt = auctionManager.getAuction(auctionId);
     if (opt.isEmpty()) {
-      return "JOIN_AUCTION_FAIL AUCTION_NOT_FOUND";
+      return ProtocolConstants.JOIN_AUCTION_FAIL + " AUCTION_NOT_FOUND";
     }
     Auction auction = opt.get();
 
-    // 4. Đăng ký observer vào đúng phiên này (per-auction, không global)
-    NotificationDispatcher.getInstance().subscribeAuction(auctionId, userId);
+    // 4. Phiên đã đóng: trả closed update ngay để client render màn kết quả,
+    //    không đăng ký watcher vì không còn event nào sẽ được push.
+    if (auction.isFinished()) {
+      return buildClosedUpdate(auction);
+    }
 
-    // 5. Gửi snapshot hiện tại của phiên về client ngay sau khi join
+    // 5. Phiên đang OPEN hoặc RUNNING: đăng ký watcher rồi trả snapshot đầy đủ
+    NotificationDispatcher.getInstance().subscribeAuction(auctionId, userId);
     return buildSnapshot(auction);
   }
 
@@ -80,27 +93,24 @@ public class AuctionHandler {
    * @return Chuỗi xác nhận hoặc lỗi
    */
   public String handleLeave(String[] request, int userId) {
-    // 1. Kiểm tra đăng nhập
     if (userId <= 0) {
-      return "LEAVE_AUCTION_FAIL NOT_LOGGED_IN";
+      return ProtocolConstants.LEAVE_AUCTION_FAIL + " NOT_LOGGED_IN";
     }
 
-    // 2. Validate tham số
     if (request == null || request.length < 2) {
-      return "LEAVE_AUCTION_FAIL INVALID_FORMAT";
+      return ProtocolConstants.LEAVE_AUCTION_FAIL + " INVALID_FORMAT";
     }
 
     int auctionId;
     try {
       auctionId = Integer.parseInt(request[1]);
     } catch (NumberFormatException e) {
-      return "LEAVE_AUCTION_FAIL INVALID_AUCTION_ID";
+      return ProtocolConstants.LEAVE_AUCTION_FAIL + " INVALID_AUCTION_ID";
     }
 
-    // 3. Hủy đăng ký — không cần kiểm tra auction tồn tại, nếu không có thì removeObserver no-op
+    // Không cần kiểm tra auction tồn tại — unsubscribe là no-op nếu không có entry
     NotificationDispatcher.getInstance().unsubscribeAuction(auctionId, userId);
-
-    return "LEAVE_AUCTION_SUCCESS " + auctionId;
+    return ProtocolConstants.LEAVE_AUCTION_SUCCESS + " " + auctionId;
   }
 
   /**
@@ -114,33 +124,32 @@ public class AuctionHandler {
   }
 
   /**
-   * Build snapshot hiện tại của phiên đấu giá để gửi về client ngay sau khi JOIN.
-   * Client nhận được trạng thái đầy đủ mà không cần hỏi lại.
+   * Build snapshot đầy đủ cho phiên đang OPEN hoặc RUNNING.
+   * Payload giống AUCTION_BID_UPDATE nhưng có thêm recentBids để client render bảng lịch sử ngay.
    *
-   * Format: AUCTION_SNAPSHOT|<auctionId>|<status>|<currentPrice>|<leaderId>|<leaderName>
-   *         |<endTime>|<totalBids>|<recentBid1Amount>:<recentBid1BidderId>,...
+   * Format:
+   *   AUCTION_SNAPSHOT|auctionId|status|currentPrice|leaderId|leaderName
+   *                   |endTime|totalBids|recentBids
+   *
+   * recentBids: chuỗi CSV, mỗi entry là "amount:bidderId:AUTO|MANUAL"
+   *   Ví dụ: "1000000:42:MANUAL,950000:17:AUTO"
    */
   private String buildSnapshot(Auction auction) {
-    String leaderId   = auction.getCurrentLeader() != null
-        ? String.valueOf(auction.getCurrentLeader().getId()) : "-1";
-    String leaderName = auction.getCurrentLeader() != null
-        ? auction.getCurrentLeader().getUsername() : "None";
+    int leaderId      = auction.getCurrentLeader() != null ? auction.getCurrentLeader().getId()       : -1;
+    String leaderName = auction.getCurrentLeader() != null ? auction.getCurrentLeader().getUsername() : "None";
 
-    // Lấy 5 bid gần nhất để client render bảng lịch sử ngay
+    // 5 bid gần nhất để client render bảng lịch sử không cần round-trip thêm
     List<BidTransaction> recentBids = auction.getRecentBids(5);
     StringBuilder bidsSb = new StringBuilder();
     for (int i = 0; i < recentBids.size(); i++) {
       BidTransaction tx = recentBids.get(i);
       bidsSb.append(tx.getAmount().toPlainString())
-          .append(":")
-          .append(tx.getBidderId())
-          .append(":")
-          .append(tx.isAutoBid() ? "AUTO" : "MANUAL");
+          .append(":").append(tx.getBidderId())
+          .append(":").append(tx.isAutoBid() ? "AUTO" : "MANUAL");
       if (i < recentBids.size() - 1) bidsSb.append(",");
     }
 
-    return String.format(
-        "AUCTION_SNAPSHOT|%d|%s|%s|%s|%s|%s|%d|%s",
+    return String.format("AUCTION_SNAPSHOT|%d|%s|%s|%d|%s|%s|%d|%s",
         auction.getId(),
         auction.getStatus().name(),
         auction.getCurrentPrice().toPlainString(),
@@ -148,7 +157,33 @@ public class AuctionHandler {
         leaderName,
         auction.getEndTime().toString(),
         auction.getTotalBids(),
-        bidsSb.toString()
-    );
+        bidsSb.toString());
+  }
+
+  /**
+   * Build closed update cho phiên đã FINISHED / CANCELED / PAID.
+   * Dùng ResponseBuilder để đảm bảo format nhất quán với push realtime từ AuctionService.
+   *
+   * Client nhận message này khi JOIN một phiên đã đóng — render màn kết quả ngay
+   * mà không cần gọi thêm endpoint nào.
+   */
+  private String buildClosedUpdate(Auction auction) {
+    User winner   = auction.getCurrentLeader();
+    int winnerId   = winner != null ? winner.getId()       : -1;
+    String winnerName = winner != null ? winner.getUsername() : "None";
+
+    // Nếu CANCELED thì không có winner thật sự dù currentLeader có thể != null
+    // (leader bị huỷ do không đạt reserve price) → override về -1
+    if (auction.getStatus() == AuctionStatus.CANCELED) {
+      winnerId   = -1;
+      winnerName = "None";
+    }
+
+    return ResponseBuilder.auctionClosedUpdate(
+        auction.getId(),
+        auction.getStatus(),
+        auction.getCurrentPrice(),
+        winnerId,
+        winnerName);
   }
 }
