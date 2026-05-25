@@ -1,24 +1,21 @@
 package server.common.entity;
 
 
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import server.common.ProtocolConstants;
-import server.common.entity.exception.AuctionClosedException;
-import server.common.entity.exception.InvalidBidException;
-import server.common.enums.AuctionStatus;
-import server.common.enums.BidStatus;
-import server.service.AuctionService;
-import server.service.listeners.RealTimeObserver;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
+
+import server.common.ProtocolConstants;
+import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.InvalidBidException;
+import server.common.enums.AuctionStatus;
+import server.common.enums.BidStatus;
+import server.service.listeners.RealTimeObserver;
 
 /*
   ═══════════════════════════════════════════════════════════
@@ -493,28 +490,30 @@ public class Auction extends Entity {
     /**
      * Phát sự kiện tới các Observer sau khi DB đã commit thành công.
      *
-     * Tách khỏi placeBid() để đảm bảo client không nhận event
-     * khi giao dịch DB chưa persist hoặc đã bị rollback.
+     * <p>Nhận toàn bộ {@link PlaceBidResult} thay vì các tham số rời rạc để
+     * {@code notifyBidUpdated()} có thể đọc {@code previousLeader} từ snapshot
+     * đúng thời điểm trước khi {@code placeBid()} ghi đè {@code currentLeader}.
+     * Điều này ngăn bug gửi {@code onOutbid} nhầm cho người vừa thắng.</p>
      *
-     * Gọi ngoài lock — Observer có thể gọi lại các method khác của Auction
-     * mà không gây deadlock.
+     * <p>Gọi ngoài lock — Observer có thể gọi lại các method khác của Auction
+     * mà không gây deadlock.</p>
      *
-     * @param tx           BidTransaction vừa được commit xuống DB
-     * @param timeExtended true nếu anti-sniping đã kích hoạt trong lần bid này
+     * @param result kết quả đầy đủ từ {@link #placeBid}, chứa tx, outbidTx,
+     *               previousLeader và flag timeExtended
      */
-    public void notifyBidCommitted(BidTransaction tx, BidTransaction outbidTx, boolean timeExtended) {
-        notifyBidUpdated(tx, outbidTx);
-        if (timeExtended) {
+    public void notifyBidCommitted(PlaceBidResult result) {
+        notifyBidUpdated(result.tx(), result.previousLeader());
+        if (result.timeExtended()) {
             notifyTimeExtended(snipeExtensionSeconds);
         }
     }
 
-    /**
-     * Notify toàn bộ RealTimeObserver (ClientHandler) rằng phiên đã đóng.
-     * Chỉ được gọi từ AuctionService.onAuctionClosed() — sau khi DB persist xong —
-     * đảm bảo client query lại luôn thấy dữ liệu nhất quán.
-     * KHÔNG gọi từ closeSession() hay forceCancel().
-     */
+//    /**
+//     * Notify toàn bộ RealTimeObserver (ClientHandler) rằng phiên đã đóng.
+//     * Chỉ được gọi từ AuctionService.onAuctionClosed() — sau khi DB persist xong —
+//     * đảm bảo client query lại luôn thấy dữ liệu nhất quán.
+//     * KHÔNG gọi từ closeSession() hay forceCancel().
+//     */
 //    public void notifyRealTimeAuctionClosed(int winnerId, String itemName, BigDecimal finalPrice) {
 //        List<RealTimeObserver> snapshot;
 //        synchronized (observers) { snapshot = new ArrayList<>(observers); }
@@ -526,25 +525,53 @@ public class Auction extends Entity {
 //            }
 //        });
 //    }
-    private void notifyBidUpdated(BidTransaction transaction, BidTransaction outbidTx) {
+    /**
+     * Gửi các sự kiện real-time sau khi một bid được commit thành công xuống DB.
+     *
+     * <p><b>Tại sao nhận {@code previousLeader} thay vì đọc {@code this.currentLeader}?</b><br>
+     * {@code placeBid()} đã ghi đè {@code currentLeader = bidder} trước khi method này
+     * được gọi. Nếu đọc {@code this.currentLeader} tại đây, ta sẽ lấy được người vừa
+     * thắng — và gửi {@code onOutbid} nhầm cho chính họ. {@code previousLeader} là
+     * snapshot được capture bên trong lock của {@code placeBid()}, đảm bảo luôn trỏ
+     * đúng người vừa bị vượt qua.</p>
+     *
+     * <p><b>Tại sao guard {@code previousLeader != null}?</b><br>
+     * Bid đầu tiên của phiên không có người dẫn trước ({@code previousLeader == null}).
+     * Không guard → {@code NullPointerException} hoặc gửi {@code onOutbid} cho userId 0.</p>
+     *
+     * <p><b>Tại sao guard {@code previousLeader.getId() != bidderId}?</b><br>
+     * Trường hợp phòng thủ: nếu cùng một người bid lại chính mình (không thể xảy ra do
+     * {@code validateBid()} chặn, nhưng guard rõ ràng giúp unit test và review dễ hơn).</p>
+     *
+     * @param transaction  BidTransaction vừa được commit
+     * @param previousLeader người đang dẫn đầu TRƯỚC khi bid này được đặt; null nếu là bid đầu tiên
+     */
+    private void notifyBidUpdated(BidTransaction transaction, User previousLeader) {
         List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
+
+        int bidderId  = transaction.getBidderId();
+        int auctionId = this.getId();
+        String itemName = this.item.getName();
+        BigDecimal amount = transaction.getAmount();
+
         snapshot.forEach(obs -> {
             try {
-                int bidderId = transaction.getBidderId();
-                int auctionId = this.getId();
-                obs.onBidPlacedSuccess(bidderId, auctionId, this.item.getName(), transaction.getAmount());
-                obs.onBidPlacedSuccess(
-                    ProtocolConstants.NOTIFICATION_AUCTION_USER_ID,
-                    auctionId,
-                    this.item.getName(),
-                    transaction.getAmount()
-                );
-                if (outbidTx != null && outbidTx.getBidderId() != bidderId) {
-                    obs.onOutbid(outbidTx.getBidderId(), auctionId, this.item.getName(), transaction.getAmount());
-                }
-            } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
+                // 1. Thông báo cho người vừa đặt giá thành công
+                obs.onBidPlacedSuccess(bidderId, auctionId, itemName, amount);
 
+                // 2. Broadcast toàn phòng (userId = NOTIFICATION_AUCTION_USER_ID là sentinel "all")
+                obs.onBidPlacedSuccess(ProtocolConstants.NOTIFICATION_AUCTION_USER_ID, auctionId, itemName, amount);
+
+                // 3. Thông báo OUTBID cho người vừa bị vượt qua.
+                //    Guard: chỉ gửi khi thực sự có người bị vượt VÀ người đó khác người vừa thắng.
+                if (previousLeader != null && previousLeader.getId() != bidderId) {
+                    obs.onOutbid(previousLeader.getId(), auctionId, itemName, amount);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Observer error: " + e.getMessage());
+            }
         });
     }
 
