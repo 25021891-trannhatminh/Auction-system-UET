@@ -3,6 +3,7 @@ package server.service.listeners;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.service.NotificationService;
+import server.common.ProtocolConstants;
 import server.common.enums.NotificationType;
 
 import java.math.BigDecimal;
@@ -27,6 +28,12 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
 
   @Override
   public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+    if (bidderId == ProtocolConstants.NOTIFICATION_AUCTION_USER_ID) {
+      notificationService.pushRealtimeOnly(bidderId, "New Bid",
+          "A new bid of $" + amount + " was placed on [" + itemName + "].",
+          NotificationType.BID_PLACED, auctionId);
+      return;
+    }
     notificationService.pushRealtimeOnly(bidderId, "Bid Successful",
         "You placed a bid of $" + amount + " on [" + itemName + "].",
         NotificationType.BID_PLACED, auctionId);
@@ -35,7 +42,7 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
   @Override
   public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
     notificationService.pushRealtimeOnly(0, "Auction Extended Time",
-        "Auction for" + itemName + " has been extended by "
+        "Auction for [" + itemName + "] has been extended by "
             + addedSeconds + " seconds.",
         NotificationType.TIME_EXTENDED, auctionId);
   }

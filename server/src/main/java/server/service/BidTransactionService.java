@@ -13,6 +13,7 @@ import server.common.model.BidHistoryDTO;
 import server.database.DBConnection;
 import server.repository.AccountDAO;
 import server.repository.BidTransactionDAO;
+import server.network.NotificationDispatcher;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,7 +99,8 @@ public class BidTransactionService {
         bidTransactionDAO.insertBidTransaction(conn, txDTO);
 
         conn.commit();
-        auction.notifyBidCommitted(tx, result.timeExtended());
+        auction.notifyBidCommitted(tx, result.outbidTx(), result.timeExtended());
+        publishRealtimeBidUpdate(auction, tx, result.timeExtended());
         if (result.timeExtended()) {
           AuctionManager.getInstance().rescheduleClose(auction);
         }
@@ -130,6 +132,50 @@ public class BidTransactionService {
       logger.error("executePlaceBidFlow() - DB network connection error", e);
       return null;
     }
+  }
+
+  /**
+   * Phát payload realtime riêng cho UI đang mở đúng phòng đấu giá.
+   * Gói tin này chỉ được gửi sau khi transaction đã commit thành công xuống DB.
+   */
+  private void publishRealtimeBidUpdate(Auction auction, BidTransaction tx, boolean timeExtended) {
+    String leaderName = auction.getCurrentLeader() != null
+        ? auction.getCurrentLeader().getUsername()
+        : "";
+
+    String bidUpdateMessage = String.format(
+        "BID_UPDATE|%d|%d|%s|%d|%s|%d|%s|%s",
+        auction.getId(),
+        tx.getBidderId(),
+        tx.getAmount().toPlainString(),
+        auction.getTotalBids(),
+        encodeRealtimeField(leaderName),
+        auction.getSecondsRemaining(),
+        auction.getEndTime().toString(),
+        tx.isAutoBid() ? "true" : "false"
+    );
+    NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), bidUpdateMessage);
+
+    if (timeExtended) {
+      String timeExtendedMessage = String.format(
+          "TIME_EXTENDED|%d|%d|%s|%d",
+          auction.getId(),
+          auction.getSecondsRemaining(),
+          auction.getEndTime().toString(),
+          auction.getSnipeExtensionSeconds()
+      );
+      NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), timeExtendedMessage);
+    }
+  }
+
+  private String encodeRealtimeField(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace("\\", "\\\\")
+        .replace("|", "\\p")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r");
   }
 
   /**

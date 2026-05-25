@@ -2189,12 +2189,25 @@
 }
 
 .auction-market-bid-btn {
-    -fx-background-color: #2d2d2d;
+    -fx-background-color: linear-gradient(to right, #d1b15d, #b89443);
     -fx-background-radius: 16;
-    -fx-text-fill: rgba(247, 243, 233, 0.52);
+    -fx-text-fill: #061207;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-padding: 11 14 11 14;
+    -fx-cursor: hand;
+    -fx-opacity: 1;
+}
+
+.auction-market-bid-btn:hover {
+    -fx-opacity: 0.72;
+}
+
+.auction-market-bid-btn:disabled {
+    -fx-background-color: #2d2d2d;
+    -fx-text-fill: rgba(247, 243, 233, 0.46);
+    -fx-opacity: 1;
+    -fx-cursor: default;
 }
 
 .auction-market-view-btn {
@@ -2274,21 +2287,21 @@
 
 .auction-detail-countdown {
     -fx-background-color: #151515;
-    -fx-background-radius: 22;
+    -fx-background-radius: 18;
     -fx-border-color: #2c2c2c;
-    -fx-border-radius: 22;
-    -fx-padding: 20 18 20 18;
+    -fx-border-radius: 18;
+    -fx-padding: 12 10 12 10;
     -fx-alignment: center;
 }
 
 .auction-detail-countdown-unit {
     -fx-alignment: center;
-    -fx-min-width: 70;
+    -fx-min-width: 44;
 }
 
 .auction-detail-countdown-number {
     -fx-text-fill: #ff5b64;
-    -fx-font-size: 26px;
+    -fx-font-size: 20px;
     -fx-font-weight: bold;
 }
 
@@ -2299,7 +2312,7 @@
 
 .auction-detail-countdown-separator {
     -fx-text-fill: rgba(247, 243, 233, 0.70);
-    -fx-font-size: 24px;
+    -fx-font-size: 18px;
     -fx-font-weight: bold;
 }
 
@@ -2310,7 +2323,7 @@
 
 .auction-detail-price {
     -fx-text-fill: #d1b15d;
-    -fx-font-size: 26px;
+    -fx-font-size: 22px;
     -fx-font-weight: bold;
 }
 
@@ -2362,16 +2375,16 @@
 
 .auction-detail-description-line {
     -fx-text-fill: rgba(247, 243, 233, 0.82);
-    -fx-font-size: 15px;
-    -fx-line-spacing: 3px;
+    -fx-font-size: 12px;
+    -fx-line-spacing: 2px;
 }
 
 .auction-detail-price-panel {
     -fx-background-color: #101010;
-    -fx-background-radius: 24;
+    -fx-background-radius: 20;
     -fx-border-color: #2a2a2a;
-    -fx-border-radius: 24;
-    -fx-padding: 16;
+    -fx-border-radius: 20;
+    -fx-padding: 12;
 }
 
 .auction-detail-meta-row {
@@ -2380,12 +2393,12 @@
 
 .auction-detail-meta-key {
     -fx-text-fill: rgba(247, 243, 233, 0.56);
-    -fx-font-size: 13px;
+    -fx-font-size: 11px;
 }
 
 .auction-detail-meta-value {
     -fx-text-fill: #f7f3e9;
-    -fx-font-size: 14px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
 }
 
@@ -2395,13 +2408,13 @@
 
 .auction-detail-bid-input {
     -fx-background-color: #202020;
-    -fx-background-radius: 18;
+    -fx-background-radius: 16;
     -fx-border-color: transparent;
-    -fx-border-radius: 18;
+    -fx-border-radius: 16;
     -fx-text-fill: #f7f3e9;
     -fx-prompt-text-fill: rgba(247, 243, 233, 0.70);
-    -fx-font-size: 13px;
-    -fx-padding: 11 16 11 16;
+    -fx-font-size: 12px;
+    -fx-padding: 10 12 10 12;
 }
 
 .auction-detail-bid-input:disabled {
@@ -2410,15 +2423,15 @@
 
 .auction-detail-end-note {
     -fx-text-fill: rgba(247, 243, 233, 0.66);
-    -fx-font-size: 12px;
+    -fx-font-size: 11px;
 }
 
 .auction-detail-info-column {
     -fx-background-color: #080808;
-    -fx-background-radius: 32;
+    -fx-background-radius: 24;
     -fx-border-color: #2a2a2a;
-    -fx-border-radius: 32;
-    -fx-padding: 22;
+    -fx-border-radius: 24;
+    -fx-padding: 12;
 }
 
 /* Flatten workspace content: remove the extra table card layer and repeated titles. */
@@ -2432,7 +2445,7 @@
 }
 
 .user-dashboard-root .surface-card {
-    -fx-padding: 22 24 24 24;
+    -fx-padding: 14 16 16 16;
 }
 
 .user-dashboard-root .workspace-body {

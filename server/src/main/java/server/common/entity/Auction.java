@@ -493,8 +493,8 @@ public class Auction extends Entity {
      * @param tx           BidTransaction vừa được commit xuống DB
      * @param timeExtended true nếu anti-sniping đã kích hoạt trong lần bid này
      */
-    public void notifyBidCommitted(BidTransaction tx, boolean timeExtended) {
-        notifyBidUpdated(tx);
+    public void notifyBidCommitted(BidTransaction tx, BidTransaction outbidTx, boolean timeExtended) {
+        notifyBidUpdated(tx, outbidTx);
         if (timeExtended) {
             notifyTimeExtended(snipeExtensionSeconds);
         }
@@ -517,17 +517,23 @@ public class Auction extends Entity {
 //            }
 //        });
 //    }
-    private void notifyBidUpdated(BidTransaction transaction) {
+    private void notifyBidUpdated(BidTransaction transaction, BidTransaction outbidTx) {
         List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
-                int previouswinner = this.currentLeader.getId();
                 int bidderId = transaction.getBidderId();
                 int auctionId = this.getId();
-                obs.onBidPlacedSuccess(bidderId,auctionId,this.item.getName(),transaction.getAmount());
-                obs.onBidPlacedSuccess(ProtocolConstants.NOTIFICATION_AUCTION_USER_ID,auctionId,this.item.getName(),transaction.getAmount());
-                obs.onOutbid(previouswinner,auctionId,this.item.getName(),transaction.getAmount());
+                obs.onBidPlacedSuccess(bidderId, auctionId, this.item.getName(), transaction.getAmount());
+                obs.onBidPlacedSuccess(
+                    ProtocolConstants.NOTIFICATION_AUCTION_USER_ID,
+                    auctionId,
+                    this.item.getName(),
+                    transaction.getAmount()
+                );
+                if (outbidTx != null && outbidTx.getBidderId() != bidderId) {
+                    obs.onOutbid(outbidTx.getBidderId(), auctionId, this.item.getName(), transaction.getAmount());
+                }
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
 
         });

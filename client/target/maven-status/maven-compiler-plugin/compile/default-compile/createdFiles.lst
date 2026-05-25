@@ -3,6 +3,7 @@ client\service\SessionManager.class
 client\controller\UserDashboardController$CreateItemUpload.class
 client\controller\UserDashboardController$CategoryData.class
 client\controller\BaseDashboardController$SectionContent.class
+client\service\CloudMediaManager.class
 client\controller\UserDashboardController$UserRow.class
 client\service\NetworkManager.class
 client\Launcher.class
