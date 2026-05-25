@@ -3,7 +3,6 @@ package server.service;
 import java.lang.reflect.Field;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +18,7 @@ import server.common.enums.AuctionStatus;
 import server.common.enums.ItemStatus;
 import server.common.model.AuctionDTO;
 import server.common.model.BidHistoryDTO;
-import server.common.model.BidResultDTO;
-import server.common.model.PaymentDTO;
 import server.database.DBConnection;
-import server.handler.ClientHandler;
 import server.network.NotificationDispatcher;
 import server.repository.*;
 import server.service.listeners.*;
