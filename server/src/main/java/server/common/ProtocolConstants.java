@@ -59,15 +59,18 @@ public final class ProtocolConstants {
     public static final String ITEM = "ITEM";
     
     // ========== AUTO-BID ==========
-    public static final String AUTOBID = "AUTOBID";
     public static final String AUTOBID_SUCCESS = "AUTOBID_SUCCESS";
-    public static final String CANCEL_AUTOBID = "CANCEL_AUTOBID";
-    public static final String CANCEL_AUTOBID_SUCCESS = "CANCEL_AUTOBID_SUCCESS";
+    public static final String AUTOBID_REGISTER = "AUTOBID_REGISTER";
+    public static final String AUTOBID_CANCEL = "AUTOBID_CANCEL";
     
     // ========== ADMIN ==========
     public static final String ADMIN_BAN_USER = "ADMIN_BAN_USER";
     public static final String ADMIN_BAN_SUCCESS = "ADMIN_BAN_SUCCESS";
     public static final String ADMIN_BAN_FAIL = "ADMIN_BAN_FAIL";
+
+    public static final String ADMIN_UNBAN_USER = "ADMIN_UNBAN_USER";
+    public static final String ADMIN_UNBAN_SUCCESS = "ADMIN_UNBAN_SUCCESS";
+    public static final String ADMIN_UNBAN_FAIL = "ADMIN_UNBAN_FAIL";
     
     // ========== BROADCAST ==========
     public static final String NEW_BID = "NEW_BID";

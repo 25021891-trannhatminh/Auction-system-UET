@@ -77,6 +77,7 @@ public class ClientHandler implements Runnable{
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
     private final AuctionHandler auctionHandler;
+    private final AutoBidHandler autoBidHandler;;
 
     /**
      * CONSTRUCTOR ĐÃ ĐƯỢC CHỈNH SỬA:
@@ -95,6 +96,7 @@ public class ClientHandler implements Runnable{
         this.adminHandler = new AdminHandler(auctionService);
         this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
         this.imageUploadHandler = new ImageUploadHandler();
+        this.autoBidHandler = new AutoBidHandler(auctionService);
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -214,6 +216,16 @@ public class ClientHandler implements Runnable{
                 String leaveResult = auctionHandler.handleLeave(request, this.userId);
                 send(leaveResult);
                 break;
+
+            case ProtocolConstants.AUTOBID_REGISTER:
+                // Format: AUTOBID_REGISTER <auctionID> <bidderID> <maxBidAmount> <increment>
+                String registerAutoBid = autoBidHandler.handleAutoBidRegister(request);
+                send(registerAutoBid);
+
+            case ProtocolConstants.AUTOBID_CANCEL:
+                // Format: AUTOBID_REGISTER <auctionID> <bidderID> <maxBidAmount> <increment>
+                String cancelAutoBid = autoBidHandler.handleAutoBidCancel(request);
+                send(cancelAutoBid);
 
             case "CONFIRM_PAYMENT": {
                 // Format: CONFIRM_PAYMENT <auctionId> <itemName...>
@@ -352,7 +364,7 @@ public class ClientHandler implements Runnable{
                 send(banResult);
                 break;
 
-            case "ADMIN_UNBAN_USER":
+            case ProtocolConstants.ADMIN_UNBAN_USER:
                 if (request.length > 1) {
                     int targetUserId = Integer.parseInt(request[1]);
                     boolean unbanUserSuccess = adminService.unbanUser(this.userId, targetUserId);
