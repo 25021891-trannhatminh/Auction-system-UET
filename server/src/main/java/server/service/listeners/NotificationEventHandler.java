@@ -26,30 +26,16 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
 // ==== RealTimeObserver implement ====
   @Override
   public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-    notificationService.push(userId, "You have been outbid",
+    notificationService.pushRealtimeOnly(userId, "You have been outbid",
         "A higher bid of " + formatMoney(newPrice) + " was placed on "
             + safeItemName(itemName) + ". Open the auction to bid again.",
         NotificationType.OUTBID, auctionId);
   }
 
-  /**
-   * Được gọi 2 lần sau mỗi bid thành công:
-   *   (a) bidderId = người vừa thắng  → PUSH_NOTIF cá nhân "Bid Successful"
-   *   (b) bidderId = NOTIFICATION_AUCTION_USER_ID (0) → push AUCTION_BID_UPDATE
-   *       giàu dữ liệu tới toàn bộ watcher của phiên qua NotificationDispatcher.
-   *
-   * Tách 2 luồng để PUSH_NOTIF cá nhân và state-sync toàn phòng không phụ thuộc nhau.
-   * Nếu một trong hai fail, luồng kia vẫn chạy nhờ try-catch riêng ở Auction.notifyBidUpdated().
-   */
   @Override
   public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-    if (bidderId == ProtocolConstants.NOTIFICATION_AUCTION_USER_ID) {
-      // Nhánh broadcast: push AUCTION_BID_UPDATE giàu dữ liệu tới toàn bộ watcher
-      pushBidUpdateToWatchers(auctionId, amount);
-      return;
-    }
     // Nhánh cá nhân: lưu DB và gửi thông báo riêng cho người vừa đặt giá thành công.
-    notificationService.push(bidderId, "Bid placed",
+    notificationService.pushRealtimeOnly(bidderId, "Bid placed",
         "Your bid of " + formatMoney(amount) + " for " + safeItemName(itemName)
             + " has been recorded.",
         NotificationType.BID_PLACED, auctionId);
