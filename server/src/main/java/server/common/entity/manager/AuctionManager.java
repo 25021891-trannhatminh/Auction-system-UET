@@ -492,11 +492,11 @@ public class AuctionManager {
      */
     public void addGlobalObserver(RealTimeObserver observer) {
         globalObservers.add(observer);
-        // Đăng ký vào tất cả auction đang active
-        auctionMap.values().stream()
-            .filter(a -> a.getStatus() == AuctionStatus.RUNNING
-                      || a.getStatus() == AuctionStatus.OPEN)
-            .forEach(a -> a.addObserver(observer));
+        // Đăng ký vào tất cả auction đang active (theo flow loadAllDatabase add vào rồi)
+//        auctionMap.values().stream()
+//            .filter(a -> a.getStatus() == AuctionStatus.RUNNING
+//                      || a.getStatus() == AuctionStatus.OPEN)
+//            .forEach(a -> a.addObserver(observer));
     }
 
     public void removeGlobalObserver(RealTimeObserver observer) {

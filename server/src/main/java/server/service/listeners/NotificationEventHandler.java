@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class NotificationEventHandler implements BusinessEventListener {
+public class NotificationEventHandler implements BusinessEventListener, RealTimeObserver {
   private static final Logger logger = LoggerFactory.getLogger(NotificationEventHandler.class);
   private final NotificationService notificationService;
 
@@ -17,27 +17,31 @@ public class NotificationEventHandler implements BusinessEventListener {
     this.notificationService = notificationService;
   }
 
-  /**
-   * Worker thread riêng cho việc ghi DB (không chặn luồng chính)
-   */
-  private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor(r -> {
-    Thread t = new Thread(r, "notification-database-worker");
-    t.setDaemon(true);
-    return t;
-  });
+// ==== RealTimeObserver implement ====
   @Override
   public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-    notificationService.push(userId, "Outbid Alert!",
+    notificationService.pushRealtimeOnly(userId, "Outbid Alert!",
         "Someone bid higher ($" + newPrice + ") on [" + itemName + "].",
         NotificationType.OUTBID, auctionId);
   }
 
   @Override
-  public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+  public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
     notificationService.pushRealtimeOnly(bidderId, "Bid Successful",
         "You placed a bid of $" + amount + " on [" + itemName + "].",
         NotificationType.BID_PLACED, auctionId);
   }
+
+  @Override
+  public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
+    notificationService.pushRealtimeOnly(0, "Auction Extended Time",
+        "Auction for" + itemName + " has been extended by "
+            + addedSeconds + " seconds.",
+        NotificationType.TIME_EXTENDED, auctionId);
+  }
+
+
+  // ==== BusinessEventListener implement ====
 
   @Override
   public void onAuctionStarted(int userId, int auctionId, String itemName) {
@@ -96,27 +100,10 @@ public class NotificationEventHandler implements BusinessEventListener {
         NotificationType.ITEM_REJECTED, itemId);
   }
 
-  @Override
-  public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-    notificationService.pushRealtimeOnly(-1, "Auction Extended Time",
-        "Auction for" + itemName + " has been extended by "
-            + addedSeconds + " seconds.",
-        NotificationType.TIME_EXTENDED, auctionId);
-  }
+
 
   @Override
   public void onSystemNotification(int userId, String title, String message) {
     notificationService.push(userId, title, message, NotificationType.SYSTEM);
   }
-
-  // Helper: Đẩy công việc ghi DB vào queue
-//  private void submitDBTask() {
-//    databaseExecutor.submit(() -> {
-//      try {
-//
-//      } catch (Exception e) {
-//        logger.error("Notification DB worker error", e);
-//      }
-//    });
-//  }
 }

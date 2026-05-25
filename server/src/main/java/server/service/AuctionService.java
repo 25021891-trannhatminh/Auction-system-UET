@@ -263,9 +263,6 @@ public class AuctionService {
       }
     }
 
-    // ── Bước 4: Notify listener ───────────────────────────────────────────────
-    String itemName = (auction.getItem() != null) ? auction.getItem().getName() : "Unknown";
-    notifyBidPlaced(userId, auctionId, itemName, amount);
     return true;
   }
 
@@ -376,7 +373,8 @@ public class AuctionService {
 
     // ── BƯỚC 3: GỬI LỆNH REALTIME CHO UI BIẾT ĐỂ CẬP NHẬT (SOCKET) ─────────────────
     int winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : -1;
-    auction.notifyRealTimeAuctionClosed(winnerId, itemName, finalPrice);
+//    auction.notifyRealTimeAuctionClosed(winnerId, itemName, finalPrice);
+    notifyAuctionEnded(sellerId, auctionId, itemName, finalPrice);
     logger.info("Realtime: Đã phát tín hiệu kết thúc phiên lên Socket mạng.");
 
     // ── BƯỚC 4: KÍCH HOẠT TẠO PENDING PAYMENT (PaymentTriggerObserver) ───────────
@@ -465,6 +463,13 @@ public class AuctionService {
     if (listeners.remove(listener)) {
       logger.info("Listener unregistered: {}", listener.getClass().getSimpleName());
     }
+  }
+
+  public void addGlobalObserver(RealTimeObserver observer){
+    auctionManager.addGlobalObserver(observer);
+  }
+  public void removeGlobalObserver(RealTimeObserver observer){
+    auctionManager.removeGlobalObserver(observer);
   }
 
   // Các phương thức gửi sự kiện đến tất cả listener
@@ -646,13 +651,13 @@ public class AuctionService {
   }
 
   // Các hàm notify cụ thể – gọi listener tương ứng
-  public void notifyBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-    listeners.forEach(l -> l.onBidPlaced(bidderId, auctionId, itemName, amount));
-  }
+//  public void notifyBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+//    listeners.forEach(l -> l.onBidPlaced(bidderId, auctionId, itemName, amount));
+//  }
 
-  public void notifyOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-    listeners.forEach(l -> l.onOutbid(userId, auctionId, itemName, newPrice));
-  }
+//  public void notifyOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
+//    listeners.forEach(l -> l.onOutbid(userId, auctionId, itemName, newPrice));
+//  }
 
   public void notifyAuctionStarted(int userId, int auctionId, String itemName) {
     listeners.forEach(l -> l.onAuctionStarted(userId, auctionId, itemName));

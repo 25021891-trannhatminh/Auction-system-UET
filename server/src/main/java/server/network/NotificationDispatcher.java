@@ -2,9 +2,14 @@ package server.network;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.common.ProtocolConstants;
 import server.common.model.NotificationEvent;
 
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import server.common.model.WalletUpdateEvent;
 
@@ -14,6 +19,9 @@ public class NotificationDispatcher implements Runnable {
 
   // Singleton
   private static final NotificationDispatcher instance = new NotificationDispatcher();
+
+  // ── Registry: auctionId → Set<userId> đang xem phiên đó ─────────────────
+  private final Map<Integer, Set<Integer>> auctionWatchers = new ConcurrentHashMap<>();
 
 
   private NotificationDispatcher() {}
@@ -96,9 +104,12 @@ public class NotificationDispatcher implements Runnable {
 
       // 3. Đẩy sang ClientManager
       // Nếu user offline, sendToUser sẽ không tìm thấy handler và bỏ qua (Hợp lý)
-      if (event.getUserId() == -1) {
+      if (event.getUserId() == ProtocolConstants.NOTIFICATION_GLOBAL_USER_ID) {
         // Nếu ID là -1, gọi hàm broadcast trong ClientManager
         ClientManager.broadcast(rawProtocolMessage);
+      } else if (event.getUserId() == ProtocolConstants.NOTIFICATION_AUCTION_USER_ID) {
+        // Nếu ID = 0, thông báo cho Users trong Auction
+        pushToAuctionWatchers(event.getRelatedId(), rawProtocolMessage);
       } else {
         // Nếu là ID cụ thể, gửi cho đúng người đó
         ClientManager.sendToUser(event.getUserId(), rawProtocolMessage);
@@ -109,6 +120,75 @@ public class NotificationDispatcher implements Runnable {
     }
   }
 
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Registry management
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Đăng ký user vào danh sách watcher của một phiên.
+   */
+  public void subscribeAuction(int auctionId, int userId) {
+    auctionWatchers
+        .computeIfAbsent(auctionId, k -> ConcurrentHashMap.newKeySet())
+        .add(userId);
+    logger.debug("Dispatcher – userId={} subscribed to auctionId={}", userId, auctionId);
+  }
+
+  /**
+   * Hủy đăng ký user khỏi một phiên cụ thể.
+   */
+  public void unsubscribeAuction(int auctionId, int userId) {
+    Set<Integer> watchers = auctionWatchers.get(auctionId);
+    if (watchers != null) {
+      watchers.remove(userId);
+      // Dọn map nếu phiên không còn ai xem — tránh memory leak khi nhiều phiên đóng
+      if (watchers.isEmpty()) {
+        auctionWatchers.remove(auctionId, watchers);
+      }
+    }
+    logger.debug("Dispatcher – userId={} unsubscribed from auctionId={}", userId, auctionId);
+  }
+
+  /**
+   * Hủy đăng ký user khỏi tất cả phiên — gọi khi client disconnect.
+   */
+  public void unsubscribeAll(int userId) {
+    auctionWatchers.values().forEach(watchers -> watchers.remove(userId));
+    logger.debug("Dispatcher – userId={} unsubscribed from all auctions", userId);
+  }
+
+  /**
+   * Dọn toàn bộ watcher của một phiên khi phiên đóng.
+   * Gọi bởi AuctionService.onAuctionClosed() sau khi DB persist xong.
+   */
+  public void clearAuction(int auctionId) {
+    auctionWatchers.remove(auctionId);
+    logger.debug("Dispatcher – Cleared all watchers for auctionId={}", auctionId);
+  }
+
+
+  /**
+   * Push message đến tất cả userId đang xem phiên auctionId.
+   * Gọi từ dispatch() trong worker thread — không cần sync thêm vì
+   * auctionWatchers là ConcurrentHashMap và Set là ConcurrentHashSet.
+   */
+  private void pushToAuctionWatchers(int auctionId, String message) {
+    Set<Integer> watchers = auctionWatchers.get(auctionId);
+    if (watchers == null || watchers.isEmpty()) {
+      logger.debug("Dispatcher – No watchers for auctionId={}, skip broadcast", auctionId);
+      return;
+    }
+    // Snapshot set để tránh ConcurrentModificationException nếu
+    // có subscribe/unsubscribe xảy ra đồng thời trong khi đang iterate
+    Set<Integer> snapshotUserList = Set.copyOf(watchers);
+    int counter = 0;
+    for (int userId : snapshotUserList) {
+      if (ClientManager.sendToUser(userId, message)) counter++;
+    }
+    logger.debug("Dispatcher – Broadcast auctionId={} → {}/{} watchers reached",
+        auctionId, counter, snapshotUserList.size());
+  }
   public int getQueueSize() {
     return queue.size();
   }

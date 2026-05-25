@@ -69,16 +69,6 @@ public class PaymentTriggerObserver implements BusinessEventListener {
   }
 
   @Override
-  public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-    // Không cần xử lý logic thanh toán tại thời điểm đặt giá (NO-OP)
-  }
-
-  @Override
-  public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-    // Không cần xử lý logic thanh toán khi có giá cao hơn vượt lên (NO-OP)
-  }
-
-  @Override
   public void onAuctionStarted(int userId, int auctionId, String itemName) {
     // Không cần xử lý logic thanh toán khi bắt đầu phiên (NO-OP)
   }
@@ -113,10 +103,6 @@ public class PaymentTriggerObserver implements BusinessEventListener {
     // Không cần xử lý tại listener này (NO-OP)
   }
 
-  @Override
-  public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-    // Không cần xử lý tại listener này (NO-OP)
-  }
 
   @Override
   public void onSystemNotification(int userId, String title, String message) {

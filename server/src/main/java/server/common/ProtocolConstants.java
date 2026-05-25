@@ -9,7 +9,10 @@ public final class ProtocolConstants {
     private ProtocolConstants() {
         throw new UnsupportedOperationException("Utility class cannot be instantiated");
     }
-    
+    // ========== USER_ID ==========
+    public static final int NOTIFICATION_GLOBAL_USER_ID = -1;
+    public static final int NOTIFICATION_AUCTION_USER_ID = 0;
+
     // ========== LOGIN ==========
     public static final String LOGIN = "LOGIN";
     public static final String LOGIN_SUCCESS = "LOGIN_SUCCESS";

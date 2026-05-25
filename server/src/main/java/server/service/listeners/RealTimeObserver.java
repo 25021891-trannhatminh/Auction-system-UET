@@ -7,9 +7,11 @@ import java.math.BigDecimal;
  * Chỉ ClientHandler (hoặc các class push socket realtime) được phép implement.
  */
 public interface RealTimeObserver {
-  void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount);
+  void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice);
+
+  void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount);
 
   void onTimeExtended(int auctionId, String itemName, int addedSeconds);
 
-  void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice);
+//  void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice);
 }

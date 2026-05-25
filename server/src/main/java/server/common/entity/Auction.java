@@ -2,12 +2,13 @@ package server.common.entity;
 
 
 import java.util.concurrent.CopyOnWriteArrayList;
+
+import server.common.ProtocolConstants;
 import server.common.entity.exception.AuctionClosedException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 import server.service.AuctionService;
-import server.service.listeners.AuctionEventListener;
 import server.service.listeners.RealTimeObserver;
 
 import java.math.BigDecimal;
@@ -325,46 +326,7 @@ public class Auction extends Entity {
     }
 
 
-// ─────────────────────────────────────────────────────────────────────────
-//  Notify — chỉ gọi từ Service SAU KHI DB commit thành công
-// ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Phát sự kiện tới các Observer sau khi DB đã commit thành công.
-     *
-     * Tách khỏi placeBid() để đảm bảo client không nhận event
-     * khi giao dịch DB chưa persist hoặc đã bị rollback.
-     *
-     * Gọi ngoài lock — Observer có thể gọi lại các method khác của Auction
-     * mà không gây deadlock.
-     *
-     * @param tx           BidTransaction vừa được commit xuống DB
-     * @param timeExtended true nếu anti-sniping đã kích hoạt trong lần bid này
-     */
-    public void notifyBidCommitted(BidTransaction tx, boolean timeExtended) {
-        notifyBidUpdated(tx);
-        if (timeExtended) {
-            notifyTimeExtended(snipeExtensionSeconds);
-        }
-    }
-
-    /**
-     * Notify toàn bộ RealTimeObserver (ClientHandler) rằng phiên đã đóng.
-     * Chỉ được gọi từ AuctionService.onAuctionClosed() — sau khi DB persist xong —
-     * đảm bảo client query lại luôn thấy dữ liệu nhất quán.
-     * KHÔNG gọi từ closeSession() hay forceCancel().
-     */
-    public void notifyRealTimeAuctionClosed(int winnerId, String itemName, BigDecimal finalPrice) {
-        List<RealTimeObserver> snapshot;
-        synchronized (observers) { snapshot = new ArrayList<>(observers); }
-        snapshot.forEach(obs -> {
-            try {
-                obs.onAuctionEnded(winnerId, getId(), itemName, finalPrice);
-            } catch (Exception e) {
-                System.err.println("[Auction] RealTimeObserver error: " + e.getMessage());
-            }
-        });
-    }
 
      /**
      * Validate bid amount.
@@ -515,31 +477,62 @@ public class Auction extends Entity {
         synchronized (observers) { observers.remove(observer); }
     }
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Notify — chỉ gọi từ Service SAU KHI DB commit thành công
+// ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Phát sự kiện tới các Observer sau khi DB đã commit thành công.
+     *
+     * Tách khỏi placeBid() để đảm bảo client không nhận event
+     * khi giao dịch DB chưa persist hoặc đã bị rollback.
+     *
+     * Gọi ngoài lock — Observer có thể gọi lại các method khác của Auction
+     * mà không gây deadlock.
+     *
+     * @param tx           BidTransaction vừa được commit xuống DB
+     * @param timeExtended true nếu anti-sniping đã kích hoạt trong lần bid này
+     */
+    public void notifyBidCommitted(BidTransaction tx, boolean timeExtended) {
+        notifyBidUpdated(tx);
+        if (timeExtended) {
+            notifyTimeExtended(snipeExtensionSeconds);
+        }
+    }
+
+    /**
+     * Notify toàn bộ RealTimeObserver (ClientHandler) rằng phiên đã đóng.
+     * Chỉ được gọi từ AuctionService.onAuctionClosed() — sau khi DB persist xong —
+     * đảm bảo client query lại luôn thấy dữ liệu nhất quán.
+     * KHÔNG gọi từ closeSession() hay forceCancel().
+     */
+//    public void notifyRealTimeAuctionClosed(int winnerId, String itemName, BigDecimal finalPrice) {
+//        List<RealTimeObserver> snapshot;
+//        synchronized (observers) { snapshot = new ArrayList<>(observers); }
+//        snapshot.forEach(obs -> {
+//            try {
+//                obs.onAuctionEnded(winnerId, getId(), itemName, finalPrice);
+//            } catch (Exception e) {
+//                System.err.println("[Auction] RealTimeObserver error: " + e.getMessage());
+//            }
+//        });
+//    }
     private void notifyBidUpdated(BidTransaction transaction) {
         List<RealTimeObserver> snapshot;
         synchronized (observers) { snapshot = new ArrayList<>(observers); }
         snapshot.forEach(obs -> {
             try {
+                int previouswinner = this.currentLeader.getId();
                 int bidderId = transaction.getBidderId();
                 int auctionId = this.getId();
-                obs.onBidPlaced(bidderId,auctionId,this.item.getName(),transaction.getAmount());
+                obs.onBidPlacedSuccess(bidderId,auctionId,this.item.getName(),transaction.getAmount());
+                obs.onBidPlacedSuccess(ProtocolConstants.NOTIFICATION_AUCTION_USER_ID,auctionId,this.item.getName(),transaction.getAmount());
+                obs.onOutbid(previouswinner,auctionId,this.item.getName(),transaction.getAmount());
             } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
 
         });
     }
 
-    private void notifyAuctionClosed() {
-        List<RealTimeObserver> snapshot;
-        synchronized (observers) { snapshot = new ArrayList<>(observers); }
-        snapshot.forEach(obs -> {
-            try {
-                int winnerId = (this.getCurrentLeader() != null) ? this.getCurrentLeader().getId() : -1;
-                int auctionId = this.getId();
-                obs.onAuctionEnded(winnerId,auctionId,this.item.getName(),this.getCurrentPrice());
-            } catch (Exception e) { System.err.println("Observer error: " + e.getMessage()); }
-
-        });
-    }
 
     private void notifyTimeExtended(int seconds) {
         List<RealTimeObserver> snapshot;

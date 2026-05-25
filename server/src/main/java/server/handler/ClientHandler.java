@@ -42,8 +42,8 @@ import server.service.PaymentService;
 import server.service.ServerAuthService;
 import server.service.listeners.RealTimeObserver;
 
-public class ClientHandler implements Runnable, RealTimeObserver{
-    private static final int GLOBAL_USER_ID = -1;
+public class ClientHandler implements Runnable{
+//    private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -57,7 +57,7 @@ public class ClientHandler implements Runnable, RealTimeObserver{
 
     // Infor Account connect với Server
     private String username = "Guest"; // Tên hiển thị mặc định
-    private int userId = GLOBAL_USER_ID ;   // Default UserID
+    private int userId = ProtocolConstants.NOTIFICATION_GLOBAL_USER_ID ;   // Default UserID
 
     // DAOs (Refactor sau không cho DAO vào Handler)
     private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
@@ -112,9 +112,9 @@ public class ClientHandler implements Runnable, RealTimeObserver{
         } catch (IOException e) {
             System.out.println("Client " + username + " disconnected");
         } finally {
-            if(this.userId != -1){
+            if(this.userId != ProtocolConstants.NOTIFICATION_GLOBAL_USER_ID){
                 ClientManager.remove(this.userId);
-                auctionHandler.handleDisconnect(this);
+                auctionHandler.handleDisconnect(userId);
             }
             try {
                 if(socket != null && !socket.isClosed()){
@@ -172,13 +172,13 @@ public class ClientHandler implements Runnable, RealTimeObserver{
 
             case ProtocolConstants.JOIN_AUCTION:
                 // Format: JOIN_AUCTION <AuctionID>
-                String joinResult = auctionHandler.handleJoin(request, this, this.userId);
+                String joinResult = auctionHandler.handleJoin(request, this.userId);
                 send(joinResult);
                 break;
 
             case ProtocolConstants.LEAVE_AUCTION:
                 // Format: LEAVE_AUCTION <AuctionID>
-                String leaveResult = auctionHandler.handleLeave(request, this, this.userId);
+                String leaveResult = auctionHandler.handleLeave(request, this.userId);
                 send(leaveResult);
                 break;
 
@@ -847,23 +847,29 @@ public class ClientHandler implements Runnable, RealTimeObserver{
     // ==================== REALTIME BID EVENTS ====================
     // Implement RealTimeObserver — nhận event từ Auction sau khi DB commit xong.
     // Chỉ push command realtime về client qua socket, không xử lý business logic.
-    @Override
-    public void onBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-        // Command realtime để UI cập nhật giá, lịch sử bid
-        send(String.format("BID_PLACED|%d|%d|%s|%s",
-            auctionId, bidderId, itemName, amount.toPlainString()));
-    }
+//    @Override
+//    public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
+//        // Command realtime để UI cập nhật giá, lịch sử bid
+//        send(String.format("BID_PLACED|%d|%d|%s|%s",
+//            auctionId, bidderId, itemName, amount.toPlainString()));
+//    }
+//
+//    @Override
+//    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
+//        send(String.format("TIME_EXTENDED|%d|%s|%d",
+//            auctionId, itemName, addedSeconds));
+//    }
+//
+//    @Override
+//    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
+//        send(String.format("AUCTION_ENDED|%d|%d|%s|%s",
+//            auctionId, winnerId, itemName, finalPrice.toPlainString()));
+//    }
+//
+//    @Override
+//    public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
+//
+//    }
 
-    @Override
-    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-        send(String.format("TIME_EXTENDED|%d|%s|%d",
-            auctionId, itemName, addedSeconds));
-    }
-
-    @Override
-    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
-        send(String.format("AUCTION_ENDED|%d|%d|%s|%s",
-            auctionId, winnerId, itemName, finalPrice.toPlainString()));
-    }
 
 }

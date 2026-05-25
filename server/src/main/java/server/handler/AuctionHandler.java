@@ -3,6 +3,7 @@ package server.handler;
 import server.common.entity.Auction;
 import server.common.entity.BidTransaction;
 import server.common.entity.manager.AuctionManager;
+import server.network.NotificationDispatcher;
 import server.service.listeners.RealTimeObserver;
 
 import java.math.BigDecimal;
@@ -15,7 +16,6 @@ import java.util.Optional;
  * JOIN_AUCTION  <auctionId> — đăng ký nhận realtime update của phiên, gửi snapshot hiện tại.
  * LEAVE_AUCTION <auctionId> — hủy đăng ký khỏi phiên.
  *
- * Không xử lý BID — đó là trách nhiệm của BidHandler.
  */
 public class AuctionHandler {
 
@@ -36,11 +36,10 @@ public class AuctionHandler {
    *   4. Gửi snapshot hiện tại của phiên về client ngay lập tức.
    *
    * @param request  Mảng lệnh từ ClientHandler
-   * @param observer ClientHandler (đã implement RealTimeObserver)
    * @param userId   ID người dùng từ session — dùng để check đăng nhập
    * @return Chuỗi snapshot hoặc thông báo lỗi gửi về client
    */
-  public String handleJoin(String[] request, RealTimeObserver observer, int userId) {
+  public String handleJoin(String[] request, int userId) {
     // 1. Kiểm tra đăng nhập
     if (userId <= 0) {
       return "JOIN_AUCTION_FAIL NOT_LOGGED_IN";
@@ -66,7 +65,7 @@ public class AuctionHandler {
     Auction auction = opt.get();
 
     // 4. Đăng ký observer vào đúng phiên này (per-auction, không global)
-    auctionManager.addObserverToAuction(auctionId, observer);
+    NotificationDispatcher.getInstance().subscribeAuction(auctionId, userId);
 
     // 5. Gửi snapshot hiện tại của phiên về client ngay sau khi join
     return buildSnapshot(auction);
@@ -77,11 +76,10 @@ public class AuctionHandler {
    * Format: LEAVE_AUCTION <auctionId>
    *
    * @param request  Mảng lệnh từ ClientHandler
-   * @param observer ClientHandler (đã implement RealTimeObserver)
    * @param userId   ID người dùng từ session
    * @return Chuỗi xác nhận hoặc lỗi
    */
-  public String handleLeave(String[] request, RealTimeObserver observer, int userId) {
+  public String handleLeave(String[] request, int userId) {
     // 1. Kiểm tra đăng nhập
     if (userId <= 0) {
       return "LEAVE_AUCTION_FAIL NOT_LOGGED_IN";
@@ -100,7 +98,7 @@ public class AuctionHandler {
     }
 
     // 3. Hủy đăng ký — không cần kiểm tra auction tồn tại, nếu không có thì removeObserver no-op
-    auctionManager.removeObserverFromAuction(auctionId, observer);
+    NotificationDispatcher.getInstance().unsubscribeAuction(auctionId, userId);
 
     return "LEAVE_AUCTION_SUCCESS " + auctionId;
   }
@@ -110,13 +108,9 @@ public class AuctionHandler {
    * Cách đơn giản: duyệt qua tất cả auction trong RAM và remove observer.
    * Chấp nhận được vì disconnect không phải hot path.
    *
-   * @param observer ClientHandler đang disconnect
    */
-  public void handleDisconnect(RealTimeObserver observer) {
-    auctionManager.getAllAuctions()
-        .forEach(auction ->
-            auctionManager.removeObserverFromAuction(auction.getId(), observer)
-        );
+  public void handleDisconnect(int userID) {
+    NotificationDispatcher.getInstance().unsubscribeAll(userID);
   }
 
   /**
