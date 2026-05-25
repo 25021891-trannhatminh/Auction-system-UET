@@ -2492,3 +2492,93 @@
 .user-dashboard-root .data-header {
     -fx-padding: 12 18 12 18;
 }
+
+/* Compact auction room layout: gallery left, thumbnails in the middle, bid panel right. */
+.user-dashboard-root .surface-card {
+    -fx-background-color: #050505;
+    -fx-border-color: rgba(255, 255, 255, 0.08);
+}
+
+.auction-detail-shell {
+    -fx-padding: 0;
+    -fx-spacing: 12;
+    -fx-fill-width: true;
+}
+
+.auction-detail-page-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-content {
+    -fx-alignment: top-left;
+    -fx-fill-height: false;
+}
+
+.auction-detail-gallery {
+    -fx-alignment: top-left;
+}
+
+.auction-detail-main-image {
+    -fx-background-radius: 26;
+    -fx-border-radius: 26;
+    -fx-border-color: rgba(255, 255, 255, 0.08);
+}
+
+.auction-detail-side-thumbnails {
+    -fx-padding: 0;
+    -fx-spacing: 8;
+}
+
+.auction-detail-thumb {
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+}
+
+.auction-detail-side-panel {
+    -fx-background-color: #101010;
+    -fx-background-radius: 24;
+    -fx-border-color: #2a2a2a;
+    -fx-border-radius: 24;
+    -fx-padding: 16;
+}
+
+.auction-detail-panel-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.auction-detail-side-panel .auction-detail-countdown {
+    -fx-background-color: #171717;
+    -fx-padding: 16 12 16 12;
+}
+
+.auction-detail-side-panel .auction-detail-countdown-unit {
+    -fx-min-width: 46;
+}
+
+.auction-detail-side-panel .auction-detail-countdown-number {
+    -fx-font-size: 26px;
+}
+
+.auction-detail-side-panel .auction-detail-meta-row {
+    -fx-border-color: rgba(255, 255, 255, 0.10) transparent rgba(255, 255, 255, 0.10) transparent;
+    -fx-padding: 12 0 12 0;
+}
+
+.auction-detail-side-panel .auction-detail-price {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 24px;
+}
+
+.auction-detail-side-panel .auction-market-bid-btn {
+    -fx-background-radius: 15;
+    -fx-padding: 10 12 10 12;
+}
+
+.auction-detail-description-line {
+    -fx-text-fill: rgba(247, 243, 233, 0.78);
+    -fx-font-size: 13px;
+}

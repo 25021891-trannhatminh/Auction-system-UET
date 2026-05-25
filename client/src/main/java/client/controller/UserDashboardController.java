@@ -68,11 +68,11 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double USER_ACTION_GAP = 6;
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
-  private static final double AUCTION_DETAIL_INFO_WIDTH = 300;
+  private static final double AUCTION_DETAIL_INFO_WIDTH = 318;
   private static final double AUCTION_DETAIL_GAP = 14;
-  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 330;
-  private static final double AUCTION_DETAIL_THUMB_WIDTH = 92;
-  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 72;
+  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 318;
+  private static final double AUCTION_DETAIL_THUMB_WIDTH = 76;
+  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 66;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
   private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
   private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
@@ -1631,20 +1631,31 @@ public class UserDashboardController extends BaseDashboardController {
       userActionBar.getChildren().add(buildAuctionBreadcrumb(data));
     }
 
-    VBox detailShell = new VBox(14);
+    VBox detailShell = new VBox(12);
     detailShell.getStyleClass().add("auction-detail-shell");
     detailShell.setAlignment(Pos.TOP_LEFT);
     detailShell.setFillWidth(true);
     detailShell.setMinWidth(0);
     detailShell.setMaxWidth(Double.MAX_VALUE);
 
-    VBox mediaColumn = new VBox(12);
+    Label pageTitle = new Label(data.title);
+    pageTitle.getStyleClass().add("auction-detail-page-title");
+    pageTitle.setWrapText(true);
+    pageTitle.setMaxWidth(Double.MAX_VALUE);
+
+    HBox detailContent = new HBox(AUCTION_DETAIL_GAP);
+    detailContent.getStyleClass().add("auction-detail-content");
+    detailContent.setAlignment(Pos.TOP_LEFT);
+    detailContent.setMinWidth(0);
+    detailContent.setMaxWidth(Double.MAX_VALUE);
+
+    VBox mediaColumn = new VBox(10);
     mediaColumn.getStyleClass().add("auction-detail-media-column");
     mediaColumn.setMinWidth(0);
     mediaColumn.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(mediaColumn, Priority.ALWAYS);
 
-    HBox gallery = new HBox(12);
+    HBox gallery = new HBox(10);
     gallery.getStyleClass().add("auction-detail-gallery");
     gallery.setAlignment(Pos.TOP_LEFT);
     gallery.setMinWidth(0);
@@ -1685,24 +1696,21 @@ public class UserDashboardController extends BaseDashboardController {
 
     mediaColumn.getChildren().addAll(gallery, descriptionLine);
 
-    HBox infoRow = new HBox(12);
-    infoRow.getStyleClass().add("auction-detail-info-row");
-    infoRow.setAlignment(Pos.TOP_LEFT);
-    infoRow.setMinWidth(0);
-    infoRow.setMaxWidth(Double.MAX_VALUE);
+    VBox sidePanel = new VBox(14);
+    sidePanel.getStyleClass().add("auction-detail-side-panel");
+    sidePanel.setMinWidth(AUCTION_DETAIL_INFO_WIDTH);
+    sidePanel.setPrefWidth(AUCTION_DETAIL_INFO_WIDTH);
+    sidePanel.setMaxWidth(AUCTION_DETAIL_INFO_WIDTH);
+
+    Label timeTitle = new Label("Time Left");
+    timeTitle.getStyleClass().add("auction-detail-panel-title");
 
     HBox countdown = buildCountdown(data.secondsLeft);
-    countdown.setMinWidth(255);
-    countdown.setPrefWidth(255);
-    countdown.setMaxWidth(255);
-
-    VBox bidPanel = new VBox(14);
-    bidPanel.getStyleClass().add("auction-detail-price-panel");
-    bidPanel.setMaxWidth(Double.MAX_VALUE);
+    countdown.setMaxWidth(Double.MAX_VALUE);
 
     HBox metaRow = buildAuctionMetaRow(data);
 
-    VBox priceBox = new VBox(4);
+    VBox priceBox = new VBox(5);
     Label currentLabel = new Label("Current Bid");
     currentLabel.getStyleClass().add("auction-market-label");
     Label price = new Label(data.price);
@@ -1724,7 +1732,7 @@ public class UserDashboardController extends BaseDashboardController {
     placeBidButton.setMnemonicParsing(false);
     placeBidButton.getStyleClass().add("auction-market-bid-btn");
     placeBidButton.setDisable(!isAuctionBidEnabled(data));
-    lockRegionWidth(placeBidButton, 112);
+    lockRegionWidth(placeBidButton, 104);
     placeBidButton.setOnAction(event -> submitManualBid(data, bidInput));
 
     bidRow.getChildren().addAll(bidInput, placeBidButton);
@@ -1739,7 +1747,15 @@ public class UserDashboardController extends BaseDashboardController {
     endNote.getStyleClass().add("auction-detail-end-note");
     endNote.setWrapText(true);
 
-    bidPanel.getChildren().addAll(metaRow, priceBox, bidRow, bidMessage, endNote);
+    sidePanel.getChildren().addAll(
+        timeTitle,
+        countdown,
+        metaRow,
+        priceBox,
+        bidRow,
+        bidMessage,
+        endNote
+    );
 
     activeAuctionDetailId = data.auctionId;
     activeAuctionPriceLabel = price;
@@ -1748,12 +1764,12 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidButton = placeBidButton;
     activeAuctionBidMessageLabel = bidMessage;
 
-    HBox.setHgrow(bidPanel, Priority.ALWAYS);
-    infoRow.getChildren().addAll(countdown, bidPanel);
-    detailShell.getChildren().addAll(mediaColumn, infoRow);
+    detailContent.getChildren().addAll(mediaColumn, sidePanel);
+    detailShell.getChildren().addAll(pageTitle, detailContent);
     workspaceBox.getChildren().add(detailShell);
     joinAuctionRoom(data.auctionId);
   }
+
 
 
   private boolean isAuctionBidEnabled(AuctionCardData data) {
@@ -3166,9 +3182,11 @@ public class UserDashboardController extends BaseDashboardController {
     currencyBox.setMinHeight(50);
     currencyBox.setPrefHeight(50);
     currencyBox.setMaxHeight(50);
-    currencyBox.setVisibleRowCount(2);
-    currencyBox.getItems().setAll("VND", "USD");
+    currencyBox.setVisibleRowCount(1);
+    currencyBox.getItems().setAll("VND");
     currencyBox.getSelectionModel().select("VND");
+    currencyBox.setMouseTransparent(true);
+    currencyBox.setFocusTraversable(false);
 
     TextArea descriptionArea = new TextArea();
     descriptionArea.setPromptText("Description, condition, provenance, and notes for admin "

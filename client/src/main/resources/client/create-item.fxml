@@ -139,7 +139,7 @@
                                     </VBox>
                                     <VBox spacing="6.0" HBox.hgrow="ALWAYS">
                                         <Label text="Currency" styleClass="field-label" />
-                                        <TextField fx:id="currencyField" promptText="VND" styleClass="form-field" />
+                                        <TextField fx:id="currencyField" text="VND" editable="false" focusTraversable="false" styleClass="form-field" />
                                     </VBox>
                                 </HBox>
 

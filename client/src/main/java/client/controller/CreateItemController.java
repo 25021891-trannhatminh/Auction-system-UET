@@ -92,6 +92,7 @@ public class CreateItemController {
     setupCategoryOptions();
     setupPurchaseTypeGroup();
     setupCategorySpecificFields();
+    setupCurrencyField();
     bindPreview();
     updatePreviewNavigation();
     loadUserMeta();
@@ -107,6 +108,18 @@ public class CreateItemController {
   private void setupCategoryOptions() {
     categoryComboBox.getItems().setAll("ART", "VEHICLE", "ELECTRONIC");
     categoryComboBox.getSelectionModel().select("ART");
+  }
+
+  /**
+   * Keeps the create-item form aligned with the project database, which stores VND only.
+   */
+  private void setupCurrencyField() {
+    if (currencyField == null) {
+      return;
+    }
+    currencyField.setText("VND");
+    currencyField.setEditable(false);
+    currencyField.setFocusTraversable(false);
   }
 
   /**
@@ -344,7 +357,7 @@ public class CreateItemController {
         normalize(sizeField.getText()),
         normalize(propertyField.getText()),
         normalize(royaltyField.getText()),
-        normalize(currencyField.getText()),
+        "VND",
         artist,
         yearCreated,
         joinImageUris()
@@ -408,7 +421,7 @@ public class CreateItemController {
     sizeField.clear();
     propertyField.clear();
     royaltyField.clear();
-    currencyField.clear();
+    currencyField.setText("VND");
     artistField.clear();
     yearCreatedField.clear();
     descriptionArea.clear();
