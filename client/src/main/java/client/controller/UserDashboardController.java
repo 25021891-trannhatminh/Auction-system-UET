@@ -130,6 +130,9 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<MyBidData> myBids = new ArrayList<>();
   private List<MyBidData> incomingMyBids = new ArrayList<>();
   private boolean myBidsLoaded;
+  private final List<AutoBidData> autoBids = new ArrayList<>();
+  private List<AutoBidData> incomingAutoBids = new ArrayList<>();
+  private boolean autoBidsLoaded;
   private final Map<String, List<BidHistoryData>> sellerBidHistoryByAuction = new HashMap<>();
   private final Map<String, Boolean> sellerBidHistoryLoaded = new HashMap<>();
   private List<BidHistoryData> incomingSellerBidHistory = new ArrayList<>();
@@ -172,6 +175,10 @@ public class UserDashboardController extends BaseDashboardController {
   private Label activeAuctionBidCountLabel;
   private TextField activeAuctionBidInput;
   private Button activeAuctionBidButton;
+  private TextField activeAutoBidMaxInput;
+  private TextField activeAutoBidIncrementInput;
+  private Button activeAutoBidRegisterButton;
+  private Button activeAutoBidCancelButton;
   private Label activeAuctionBidMessageLabel;
 
 
@@ -207,6 +214,10 @@ public class UserDashboardController extends BaseDashboardController {
         Platform.runLater(() -> handleUserBidServerMessage(msg));
         return;
       }
+      if (isAutoBidListMessage(msg)) {
+        Platform.runLater(() -> handleAutoBidListMessage(msg));
+        return;
+      }
       if (isRealtimeBidMessage(msg)) {
         Platform.runLater(() -> handleRealtimeBidMessage(msg));
         return;
@@ -218,6 +229,7 @@ public class UserDashboardController extends BaseDashboardController {
     this.networkManager.addMessageHandler(userNetworkHandler);
     requestUserAuctions();
     requestUserBids();
+    requestUserAutoBids();
     requestNotificationHistory();
   }
 
@@ -292,6 +304,22 @@ public class UserDashboardController extends BaseDashboardController {
     }
   }
 
+  private void requestUserAutoBids() {
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      return;
+    }
+
+    User currentUser = SessionManager.getCurrentUser();
+    if (currentUser != null && currentUser.getUserId() > 0) {
+      networkManager.send("USER_LIST_AUTOBIDS " + currentUser.getUserId());
+    } else {
+      networkManager.send("USER_LIST_AUTOBIDS");
+    }
+  }
+
   private void requestSellerBidHistory(String auctionId) {
     if (auctionId == null || auctionId.isBlank()) {
       return;
@@ -322,6 +350,13 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("USER_BIDS_ERROR"));
   }
 
+  private boolean isAutoBidListMessage(String message) {
+    return message != null && (message.equals("USER_AUTOBIDS_BEGIN")
+        || message.equals("USER_AUTOBIDS_END")
+        || message.startsWith("USER_AUTOBID ")
+        || message.startsWith("USER_AUTOBIDS_ERROR"));
+  }
+
   private boolean isAuctionListMessage(String message) {
     return message.startsWith("USER_AUCTION")
         || message.equals("USER_AUCTIONS_DIRTY")
@@ -338,6 +373,8 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("AUCTION_CLOSED|")
         || message.startsWith("BID_SUCCESS")
         || message.startsWith("BID_FAIL")
+        || message.startsWith("AUTOBID_SUCCESS")
+        || message.startsWith("AUTOBID_FAIL")
         || message.startsWith("FAIL ")
         || message.startsWith("JOIN_AUCTION_FAIL")
         || message.startsWith("LEAVE_AUCTION_SUCCESS");
@@ -499,6 +536,70 @@ public class UserDashboardController extends BaseDashboardController {
         applyMyBidStatsIfVisible();
       }
     }
+  }
+
+  private void handleAutoBidListMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.equals("USER_AUTOBIDS_BEGIN")) {
+      incomingAutoBids = new ArrayList<>();
+      return;
+    }
+
+    if (message.startsWith("USER_AUTOBID ")) {
+      AutoBidData parsed = parseAutoBid(message.substring("USER_AUTOBID ".length()));
+      if (parsed != null) {
+        incomingAutoBids.add(parsed);
+      }
+      return;
+    }
+
+    if (message.equals("USER_AUTOBIDS_END")) {
+      autoBids.clear();
+      autoBids.addAll(incomingAutoBids);
+      autoBidsLoaded = true;
+      applyAutoBidStatsIfVisible();
+      if ("autoBids".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+        applyAutoBidStatsIfVisible();
+      }
+      return;
+    }
+
+    if (message.startsWith("USER_AUTOBIDS_ERROR")) {
+      autoBids.clear();
+      autoBidsLoaded = true;
+      applyAutoBidStatsIfVisible();
+      if ("autoBids".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+        applyAutoBidStatsIfVisible();
+      }
+    }
+  }
+
+  private AutoBidData parseAutoBid(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 13) {
+      return null;
+    }
+
+    return new AutoBidData(
+        safeField(fields, 0),
+        safeField(fields, 1),
+        safeField(fields, 2),
+        fallback(safeField(fields, 3), "Auction #" + safeField(fields, 1)),
+        safeField(fields, 4),
+        formatMoney(safeField(fields, 5)),
+        formatMoney(safeField(fields, 6)),
+        formatMoney(safeField(fields, 7)),
+        prettyStatus(safeField(fields, 8)),
+        shortTimestamp(safeField(fields, 9)),
+        fallback(safeField(fields, 10), "Seller"),
+        firstImage(safeField(fields, 11)),
+        parseLongOrDefault(safeField(fields, 12), 0L)
+    );
   }
 
   private MyBidData parseMyBid(String payload) {
@@ -727,7 +828,11 @@ public class UserDashboardController extends BaseDashboardController {
       requestUserBids();
       applyMyBidStatsIfVisible();
     }
-    if ("autoBids".equals(sectionKey) || "winners".equals(sectionKey)) {
+    if ("autoBids".equals(sectionKey)) {
+      requestUserAutoBids();
+      applyAutoBidStatsIfVisible();
+    }
+    if ("winners".equals(sectionKey)) {
       applyEmptyStats("Real DB rows", "Not wired", "Pending", "");
     }
   }
@@ -738,7 +843,7 @@ public class UserDashboardController extends BaseDashboardController {
     setLabelText(activityLine3, "Create listings and admin auction rooms to populate this view.");
     setLabelText(
         activityLine4,
-        "Manual bidding is wired to the server and updates the auction room in real time."
+        "Manual and auto bidding are wired to the server and update in real time."
     );
   }
 
@@ -843,11 +948,7 @@ public class UserDashboardController extends BaseDashboardController {
     switch (sectionKey) {
       case "auctions" -> renderAuctions(filter);
       case "myBids" -> renderMyBids(filter);
-      case "autoBids" -> renderNoLiveData(
-          "Auto Bid Controls",
-          "Chưa có truy vấn DB cho auto-bid của user trong màn này, "
-              + "nên không hiển thị dữ liệu ảo."
-      );
+      case "autoBids" -> renderAutoBids(filter);
       case "myItems" -> renderMyItemsLiveSummary(filter);
       case "winners" -> renderNoLiveData(
           "Transactions",
@@ -1313,11 +1414,72 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void renderAutoBids(String filter) {
-    renderNoLiveData(
-        "Auto Bid Rules",
-        "Chưa có truy vấn DB cho auto-bid của user trong màn này, "
-            + "nên không hiển thị dữ liệu ảo."
-    );
+    setWorkspaceTitle("Auto Bid Rules");
+    renderChips(filter, "All", "Active", "Near Limit", "Limit Reached", "Completed", "Canceled");
+    addHeader("Auto Rule", "Max Bid", "Increment");
+
+    if (!autoBidsLoaded) {
+      requestUserAutoBids();
+      addLoadingRow("Loading your auto-bid rules...");
+      return;
+    }
+
+    List<UserRow> rows = new ArrayList<>();
+    for (AutoBidData rule : autoBids) {
+      String status = resolveAutoBidStatus(rule);
+      rows.add(row(
+          rule.itemName,
+          buildAutoBidMeta(rule),
+          rule.maxBid,
+          rule.increment,
+          status,
+          buildAutoBidDetailText(rule, status),
+          initialsFor(rule.itemName),
+          "View"
+      ));
+    }
+
+    addFilteredRows(rows, filter);
+  }
+
+  private String buildAutoBidMeta(AutoBidData rule) {
+    return fallback(prettyStatus(rule.category), "Auction")
+        + " • AUC-" + rule.auctionId
+        + " • Current " + rule.currentPrice
+        + " • Seller " + rule.seller;
+  }
+
+  private String buildAutoBidDetailText(AutoBidData rule, String status) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Auto Bid ID: AB-").append(rule.autoBidId).append('\n');
+    builder.append("Auction ID: AUC-").append(rule.auctionId).append('\n');
+    builder.append("Item ID: ITEM-").append(rule.itemId).append('\n');
+    builder.append("Category: ").append(prettyStatus(rule.category)).append('\n');
+    builder.append("Current price: ").append(rule.currentPrice).append('\n');
+    builder.append("Max bid: ").append(rule.maxBid).append('\n');
+    builder.append("Increment: ").append(rule.increment).append('\n');
+    builder.append("Status: ").append(status).append('\n');
+    builder.append("Ends at: ").append(fallback(rule.endTime, "Not scheduled")).append('\n');
+    builder.append("Seller: ").append(rule.seller);
+    return builder.toString();
+  }
+
+  private String resolveAutoBidStatus(AutoBidData rule) {
+    String normalizedStatus = normalize(rule.status);
+    if (!normalizedStatus.equals("active")) {
+      return prettyStatus(rule.status);
+    }
+
+    BigDecimal current = moneyValue(rule.currentPrice);
+    BigDecimal max = moneyValue(rule.maxBid);
+    if (max.compareTo(BigDecimal.ZERO) > 0 && current.compareTo(max) >= 0) {
+      return "Limit Reached";
+    }
+    if (max.compareTo(BigDecimal.ZERO) > 0
+        && current.compareTo(max.multiply(new BigDecimal("0.9"))) >= 0) {
+      return "Near Limit";
+    }
+    return "Active";
   }
 
   private void renderMyItems(String filter) {
@@ -1724,6 +1886,11 @@ public class UserDashboardController extends BaseDashboardController {
     bidRow.getStyleClass().add("auction-detail-bid-row");
     TextField bidInput = new TextField();
     Button placeBidButton = new Button("Place Bid");
+    TextField autoBidMaxInput = new TextField();
+    TextField autoBidIncrementInput = new TextField();
+    Button autoBidRegisterButton = new Button("Enable Auto");
+    Button autoBidCancelButton = new Button("Cancel Auto");
+    VBox autoBidPanel = null;
     Label bidMessage = new Label();
 
     if (!sellerView) {
@@ -1740,6 +1907,8 @@ public class UserDashboardController extends BaseDashboardController {
       placeBidButton.setOnAction(event -> submitManualBid(data, bidInput));
 
       bidRow.getChildren().addAll(bidInput, placeBidButton);
+      autoBidPanel = buildAutoBidPanel(
+          data, autoBidMaxInput, autoBidIncrementInput, autoBidRegisterButton, autoBidCancelButton);
       bidMessage.setText(isAuctionBidEnabled(data)
           ? "Minimum increment: " + data.minimumIncrement
           : "This auction is not accepting bids right now.");
@@ -1758,7 +1927,11 @@ public class UserDashboardController extends BaseDashboardController {
     if (sellerView) {
       sidePanel.getChildren().add(buildSellerPerformancePanel(data));
     } else {
-      sidePanel.getChildren().addAll(bidRow, bidMessage);
+      sidePanel.getChildren().add(bidRow);
+      if (autoBidPanel != null) {
+        sidePanel.getChildren().add(autoBidPanel);
+      }
+      sidePanel.getChildren().add(bidMessage);
     }
     sidePanel.getChildren().add(endNote);
 
@@ -1767,6 +1940,10 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidCountLabel = bids;
     activeAuctionBidInput = sellerView ? null : bidInput;
     activeAuctionBidButton = sellerView ? null : placeBidButton;
+    activeAutoBidMaxInput = sellerView ? null : autoBidMaxInput;
+    activeAutoBidIncrementInput = sellerView ? null : autoBidIncrementInput;
+    activeAutoBidRegisterButton = sellerView ? null : autoBidRegisterButton;
+    activeAutoBidCancelButton = sellerView ? null : autoBidCancelButton;
     activeAuctionBidMessageLabel = sellerView ? null : bidMessage;
 
     detailContent.getChildren().addAll(mediaColumn, sidePanel);
@@ -1779,6 +1956,57 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
 
+  private VBox buildAutoBidPanel(
+      AuctionCardData data,
+      TextField maxInput,
+      TextField incrementInput,
+      Button registerButton,
+      Button cancelButton) {
+    VBox panel = new VBox(8);
+    panel.getStyleClass().add("auction-detail-auto-bid-panel");
+    panel.setMaxWidth(Double.MAX_VALUE);
+
+    Label title = new Label("Auto Bid");
+    title.getStyleClass().add("auction-detail-panel-title");
+
+    Label hint = new Label("Set a max limit and step. The server will raise your bid only when another bidder beats your current price.");
+    hint.getStyleClass().add("auction-detail-end-note");
+    hint.setWrapText(true);
+
+    HBox inputRow = new HBox(8);
+    inputRow.getStyleClass().add("auction-detail-auto-bid-input-row");
+    maxInput.setPromptText("Max bid");
+    incrementInput.setPromptText("Increment");
+    for (TextField input : new TextField[] {maxInput, incrementInput}) {
+      input.getStyleClass().add("auction-detail-bid-input");
+      input.setMinWidth(0);
+      input.setDisable(!isAuctionBidEnabled(data));
+      HBox.setHgrow(input, Priority.ALWAYS);
+    }
+    incrementInput.setText(normalize(data.minimumIncrement).equals("0 vnd") ? "" : data.minimumIncrement);
+    inputRow.getChildren().addAll(maxInput, incrementInput);
+
+    HBox actions = new HBox(8);
+    actions.setMaxWidth(Double.MAX_VALUE);
+    registerButton.setMnemonicParsing(false);
+    registerButton.getStyleClass().add("auction-market-bid-btn");
+    registerButton.setDisable(!isAuctionBidEnabled(data));
+    registerButton.setOnAction(event -> submitAutoBid(data, maxInput, incrementInput));
+
+    cancelButton.setMnemonicParsing(false);
+    cancelButton.getStyleClass().add("auction-detail-secondary-btn");
+    cancelButton.setDisable(!isAuctionBidEnabled(data));
+    cancelButton.setOnAction(event -> cancelAutoBid(data));
+
+    HBox.setHgrow(registerButton, Priority.ALWAYS);
+    HBox.setHgrow(cancelButton, Priority.ALWAYS);
+    registerButton.setMaxWidth(Double.MAX_VALUE);
+    cancelButton.setMaxWidth(Double.MAX_VALUE);
+    actions.getChildren().addAll(registerButton, cancelButton);
+
+    panel.getChildren().addAll(title, hint, inputRow, actions);
+    return panel;
+  }
 
   private AuctionCardData toSellerAuctionCard(SellerItemData item) {
     String price = item.currentPrice == null || item.currentPrice.isBlank()
@@ -1999,6 +2227,10 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidCountLabel = null;
     activeAuctionBidInput = null;
     activeAuctionBidButton = null;
+    activeAutoBidMaxInput = null;
+    activeAutoBidIncrementInput = null;
+    activeAutoBidRegisterButton = null;
+    activeAutoBidCancelButton = null;
     activeAuctionBidMessageLabel = null;
   }
 
@@ -2038,6 +2270,86 @@ public class UserDashboardController extends BaseDashboardController {
     networkManager.send("BID " + data.auctionId + " " + amount);
   }
 
+  private void submitAutoBid(AuctionCardData data, TextField maxInput, TextField incrementInput) {
+    if (data == null || maxInput == null || incrementInput == null) {
+      return;
+    }
+
+    String maxBid = normalizeBidAmount(maxInput.getText());
+    String increment = normalizeBidAmount(incrementInput.getText());
+    if (maxBid.isBlank() || increment.isBlank()) {
+      showBidFeedback("Please enter both max bid and increment for auto bid.", true);
+      return;
+    }
+
+    BigDecimal maxBidValue;
+    BigDecimal incrementValue;
+    try {
+      maxBidValue = new BigDecimal(maxBid);
+      incrementValue = new BigDecimal(increment);
+    } catch (NumberFormatException exception) {
+      showBidFeedback("Invalid auto-bid amount format.", true);
+      return;
+    }
+
+    if (maxBidValue.compareTo(BigDecimal.ZERO) <= 0 || incrementValue.compareTo(BigDecimal.ZERO) <= 0) {
+      showBidFeedback("Auto-bid max and increment must be greater than 0.", true);
+      return;
+    }
+    if (maxBidValue.compareTo(moneyValue(data.price)) <= 0) {
+      showBidFeedback("Auto-bid max must be higher than the current price.", true);
+      return;
+    }
+    if (incrementValue.compareTo(moneyValue(data.minimumIncrement)) < 0) {
+      showBidFeedback("Auto-bid increment must meet the minimum increment.", true);
+      return;
+    }
+
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      showBidFeedback("Cannot connect to the server.", true);
+      return;
+    }
+
+    setAutoBidControlsDisabled(true);
+    showBidFeedback("Saving auto-bid rule to the server...", false);
+    networkManager.send("AUTOBID_REGISTER " + data.auctionId + " " + maxBid + " " + increment);
+  }
+
+  private void cancelAutoBid(AuctionCardData data) {
+    if (data == null || data.auctionId == null || data.auctionId.isBlank()) {
+      return;
+    }
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      showBidFeedback("Cannot connect to the server.", true);
+      return;
+    }
+
+    setAutoBidControlsDisabled(true);
+    showBidFeedback("Canceling auto-bid rule...", false);
+    networkManager.send("AUTOBID_CANCEL " + data.auctionId);
+  }
+
+  private void setAutoBidControlsDisabled(boolean disabled) {
+    if (activeAutoBidMaxInput != null) {
+      activeAutoBidMaxInput.setDisable(disabled);
+    }
+    if (activeAutoBidIncrementInput != null) {
+      activeAutoBidIncrementInput.setDisable(disabled);
+    }
+    if (activeAutoBidRegisterButton != null) {
+      activeAutoBidRegisterButton.setDisable(disabled);
+    }
+    if (activeAutoBidCancelButton != null) {
+      activeAutoBidCancelButton.setDisable(disabled);
+    }
+  }
+
   private String normalizeBidAmount(String rawValue) {
     if (rawValue == null) {
       return "";
@@ -2047,6 +2359,18 @@ public class UserDashboardController extends BaseDashboardController {
         .replace("USD", "")
         .replace(",", "")
         .replace(" ", "");
+  }
+
+  private BigDecimal moneyValue(String rawValue) {
+    String normalized = normalizeBidAmount(rawValue);
+    if (normalized.isBlank()) {
+      return BigDecimal.ZERO;
+    }
+    try {
+      return new BigDecimal(normalized);
+    } catch (NumberFormatException exception) {
+      return BigDecimal.ZERO;
+    }
   }
 
   private void showBidFeedback(String message, boolean error) {
@@ -2093,6 +2417,14 @@ public class UserDashboardController extends BaseDashboardController {
       requestUserBids();
       return;
     }
+    if (message.startsWith("AUTOBID_SUCCESS")) {
+      handleAutoBidSuccess(message);
+      return;
+    }
+    if (message.startsWith("AUTOBID_FAIL")) {
+      handleAutoBidFail(message);
+      return;
+    }
     if (message.startsWith("BID_FAIL")) {
       handleBidFailMessage(message);
       return;
@@ -2106,6 +2438,44 @@ public class UserDashboardController extends BaseDashboardController {
     }
     if (message.startsWith("JOIN_AUCTION_FAIL")) {
       showBidFeedback(message, true);
+    }
+  }
+
+  private void handleAutoBidSuccess(String message) {
+    String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 3);
+    String auctionId = parts.length > 1 ? parts[1] : "";
+    String action = parts.length > 2 ? parts[2] : "REGISTERED";
+
+    if (activeAuctionDetailId == null || auctionId.isBlank() || activeAuctionDetailId.equals(auctionId)) {
+      setAutoBidControlsDisabled(false);
+      if ("REGISTERED".equalsIgnoreCase(action)) {
+        if (activeAutoBidMaxInput != null) {
+          activeAutoBidMaxInput.clear();
+        }
+        showBidFeedback("Auto-bid rule saved. The server will bid for you when needed.", false);
+        notifUIHandler.showSuccess("Auto bid enabled", "Your max bid rule is now active.");
+      } else {
+        showBidFeedback("Auto-bid rule canceled.", false);
+        notifUIHandler.showSuccess("Auto bid canceled", "The server will stop bidding for this auction.");
+      }
+    }
+
+    requestUserAutoBids();
+    requestUserBids();
+    requestUserAuctions();
+  }
+
+  private void handleAutoBidFail(String message) {
+    String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 3);
+    String auctionId = parts.length > 1 ? parts[1] : "";
+    String reason = parts.length > 2 ? parts[2] : "";
+
+    if (activeAuctionDetailId == null
+        || auctionId.isBlank()
+        || "-1".equals(auctionId)
+        || activeAuctionDetailId.equals(auctionId)) {
+      setAutoBidControlsDisabled(false);
+      showBidFeedback(readableAutoBidFailure(reason), true);
     }
   }
 
@@ -2199,6 +2569,7 @@ public class UserDashboardController extends BaseDashboardController {
       if (activeAuctionBidButton != null) {
         activeAuctionBidButton.setDisable(true);
       }
+      setAutoBidControlsDisabled(true);
       updateActiveAuctionPrice(finalPrice, -1);
       showBidFeedback("This auction has closed with status " + status + ".", false);
     }
@@ -2287,6 +2658,27 @@ public class UserDashboardController extends BaseDashboardController {
         card.snipeWindowSeconds,
         card.snipeExtensionSeconds
     );
+  }
+
+  private String readableAutoBidFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim().toUpperCase();
+    return switch (normalized) {
+      case "NOT_LOGGED_IN" -> "Please sign in before enabling auto bid.";
+      case "INVALID_FORMAT" -> "Invalid auto-bid command format.";
+      case "INVALID_AMOUNT" -> "Auto-bid max and increment must be greater than 0.";
+      case "AUCTION_NOT_RUNNING" -> "Auto bid can only be enabled while the auction is running.";
+      case "AUCTION_CLOSED" -> "This auction is closed.";
+      case "AUCTION_NOT_FOUND" -> "This auction could not be found.";
+      case "OWN_AUCTION" -> "You cannot auto bid on your own auction.";
+      case "BELOW_CURRENT_PRICE" -> "Auto-bid max must be higher than the current price.";
+      case "BELOW_MIN_INCREMENT" -> "Auto-bid increment must meet the minimum increment.";
+      case "AUTO_BID_NOT_FOUND" -> "No active auto-bid rule was found for this auction.";
+      case "DB_PERSIST_FAILED" -> "The server could not save your auto-bid rule. Please try again.";
+      case "SYSTEM_ERROR" -> "The server encountered an error while processing auto bid.";
+      default -> normalized.isBlank()
+          ? "Auto bid failed."
+          : toSentenceCase(normalized.replace('_', ' '));
+    };
   }
 
   private String readableBidFailure(String reason) {
@@ -4234,6 +4626,37 @@ public class UserDashboardController extends BaseDashboardController {
     setLabelText(statLabel2, "Winning");
     setLabelText(statLabel3, "Outbid");
     setLabelText(statLabel4, "Completed");
+  }
+
+  private void applyAutoBidStatsIfVisible() {
+    if (!"autoBids".equals(currentSectionKey)) {
+      return;
+    }
+
+    int total = autoBids.size();
+    int active = 0;
+    int nearLimit = 0;
+    int limitReached = 0;
+    for (AutoBidData rule : autoBids) {
+      String status = resolveAutoBidStatus(rule);
+      String normalized = normalize(status);
+      if (normalized.equals("active")) {
+        active++;
+      } else if (normalized.equals("near limit")) {
+        nearLimit++;
+      } else if (normalized.equals("limit reached")) {
+        limitReached++;
+      }
+    }
+
+    setLabelText(statValue1, twoDigit(total));
+    setLabelText(statValue2, twoDigit(active));
+    setLabelText(statValue3, twoDigit(nearLimit));
+    setLabelText(statValue4, twoDigit(limitReached));
+    setLabelText(statLabel1, "Rules");
+    setLabelText(statLabel2, "Active");
+    setLabelText(statLabel3, "Near Limit");
+    setLabelText(statLabel4, "Limit Reached");
   }
 
   private void applyUserAuctionStatsIfVisible() {

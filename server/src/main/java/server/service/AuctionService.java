@@ -270,30 +270,51 @@ public class AuctionService {
 
   // ==================== AUTO BID ====================
 
-  public void registerAutoBid(AutoBidConfig config, User bidder) {
-    int auctionId = config.getAuctionId();
-    int bidderId  = config.getBidderId();
-
-    // Persist config
-    if (autoBidConfigDAO.hasActiveBid(auctionId, bidderId)) {
-      autoBidConfigDAO.updateMaxBid(auctionId, bidderId, config.getMaxBid());
-    } else {
-      autoBidConfigDAO.create(config);
+  public boolean registerAutoBid(AutoBidConfig config, User bidder) {
+    if (config == null || bidder == null) {
+      return false;
     }
 
-    // Register in engine (may trigger immediate bid)
-    Auction auction = findAuctionById(config.getAuctionId());
-    auctionManager.registerAutoBid(config, bidder);
+    int auctionId = config.getAuctionId();
+    int bidderId = bidder.getId();
+    Auction auction = findAuctionById(auctionId);
+    if (auction == null) {
+      throw new IllegalArgumentException("AUCTION_NOT_FOUND");
+    }
+
+    AutoBidConfig authenticatedConfig = new AutoBidConfig(
+        auctionId,
+        bidderId,
+        config.getMaxBid(),
+        config.getIncrement()
+    );
+
+    boolean persisted = autoBidConfigDAO.upsertActive(authenticatedConfig);
+    if (!persisted) {
+      return false;
+    }
+
+    auctionManager.registerAutoBid(authenticatedConfig, bidder);
     triggerAutoBids(auction, auction.getCurrentLeader());
-    logger.info("Auto‑bid registered for auction {} by user {}", auctionId, bidderId);
+    logger.info("Auto-bid registered for auction {} by user {}", auctionId, bidderId);
+    return true;
   }
 
-  public void cancelAutoBid(int auctionId, User bidder) {
-    // Trigger lại để tìm winner mới
+  public boolean cancelAutoBid(int auctionId, User bidder) {
+    if (bidder == null) {
+      return false;
+    }
+
     Auction auction = findAuctionById(auctionId);
-    triggerAutoBids(auction, bidder);
+    if (auction == null) {
+      throw new IllegalArgumentException("AUCTION_NOT_FOUND");
+    }
+
     auctionManager.cancelAutoBid(auctionId, bidder);
-    autoBidConfigDAO.cancelByAuctionAndBidder(auctionId, bidder.getId());
+    boolean canceled = autoBidConfigDAO.cancelByAuctionAndBidder(auctionId, bidder.getId());
+    triggerAutoBids(auction, bidder);
+    logger.info("Auto-bid cancel requested for auction {} by user {}", auctionId, bidder.getId());
+    return canceled;
   }
 
   // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================

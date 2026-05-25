@@ -60,6 +60,7 @@ public final class ProtocolConstants {
     
     // ========== AUTO-BID ==========
     public static final String AUTOBID_SUCCESS = "AUTOBID_SUCCESS";
+    public static final String AUTOBID_FAIL = "AUTOBID_FAIL";
     public static final String AUTOBID_REGISTER = "AUTOBID_REGISTER";
     public static final String AUTOBID_CANCEL = "AUTOBID_CANCEL";
     

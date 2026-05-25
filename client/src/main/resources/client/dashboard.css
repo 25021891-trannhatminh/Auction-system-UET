@@ -2786,3 +2786,40 @@
     -fx-border-color: transparent;
     -fx-border-width: 0;
 }
+
+/* Auto-bid controls inside the auction detail panel. */
+.auction-detail-auto-bid-panel {
+    -fx-background-color: #171717;
+    -fx-background-radius: 18;
+    -fx-border-color: #2c2c2c;
+    -fx-border-radius: 18;
+    -fx-padding: 12;
+    -fx-spacing: 8;
+}
+
+.auction-detail-auto-bid-input-row {
+    -fx-alignment: center;
+}
+
+.auction-detail-secondary-btn {
+    -fx-background-color: #232323;
+    -fx-background-radius: 15;
+    -fx-border-color: #3a3a3a;
+    -fx-border-radius: 15;
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 12 10 12;
+    -fx-cursor: hand;
+}
+
+.auction-detail-secondary-btn:hover {
+    -fx-background-color: #2d2d2d;
+}
+
+.auction-detail-secondary-btn:disabled {
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: rgba(247, 243, 233, 0.42);
+    -fx-opacity: 1;
+    -fx-cursor: default;
+}

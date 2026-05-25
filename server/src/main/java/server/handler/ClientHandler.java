@@ -55,6 +55,7 @@ public class ClientHandler implements Runnable{
     private PrintWriter out;
 
     private final BidHandler bidHandler;
+    private final AutoBidHandler autoBidHandler;
     private final AuthHandler authHandler;
     private final AdminHandler adminHandler;
     private final ImageUploadHandler imageUploadHandler;
@@ -91,6 +92,7 @@ public class ClientHandler implements Runnable{
         this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
         this.bidHandler = new BidHandler(auctionService);
+        this.autoBidHandler = new AutoBidHandler(auctionService);
         this.authHandler = new AuthHandler();
         this.adminHandler = new AdminHandler(auctionService);
         this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
@@ -311,6 +313,10 @@ public class ClientHandler implements Runnable{
                 sendUserBids(request);
                 break;
 
+            case "USER_LIST_AUTOBIDS":
+                sendUserAutoBids(request);
+                break;
+
             case "SELLER_AUCTION_BIDS":
                 sendSellerAuctionBids(request);
                 break;
@@ -340,6 +346,26 @@ public class ClientHandler implements Runnable{
                 String bidReponse = bidHandler.handleBid(request, this.userId, this.username);
                 send(bidReponse);
                 if (bidReponse != null && bidReponse.startsWith(ProtocolConstants.BID_SUCCESS)) {
+                    ClientManager.broadcast("USER_AUCTIONS_DIRTY");
+                }
+                break;
+
+            case ProtocolConstants.AUTOBID_REGISTER:
+            case "AUTO_BID_REGISTER":
+                String autoBidRegisterResponse = autoBidHandler.handleAutoBidRegister(request, this.userId);
+                send(autoBidRegisterResponse);
+                if (autoBidRegisterResponse != null
+                    && autoBidRegisterResponse.startsWith(ProtocolConstants.AUTOBID_SUCCESS)) {
+                    ClientManager.broadcast("USER_AUCTIONS_DIRTY");
+                }
+                break;
+
+            case ProtocolConstants.AUTOBID_CANCEL:
+            case "AUTO_BID_CANCEL":
+                String autoBidCancelResponse = autoBidHandler.handleAutoBidCancel(request, this.userId);
+                send(autoBidCancelResponse);
+                if (autoBidCancelResponse != null
+                    && autoBidCancelResponse.startsWith(ProtocolConstants.AUTOBID_SUCCESS)) {
                     ClientManager.broadcast("USER_AUCTIONS_DIRTY");
                 }
                 break;
@@ -864,6 +890,85 @@ public class ClientHandler implements Runnable{
             }
         }
         return -1;
+    }
+
+    /**
+     * Sends persisted auto-bid rules for the current user.
+     *
+     * <p>Protocol payload matches the user dashboard auto-bid table:
+     * autoBidId|auctionId|itemId|itemName|category|currentPrice|maxBid|increment|status|
+     * endTime|sellerUsername|imageUrls|secondsLeft.</p>
+     */
+    private void sendUserAutoBids(String[] request) {
+        int targetUserId = resolveUserScopedRequest(request, 1);
+        send("USER_AUTOBIDS_BEGIN");
+        if (targetUserId <= 0) {
+            send("USER_AUTOBIDS_ERROR " + fields("NOT_LOGGED_IN"));
+            send("USER_AUTOBIDS_END");
+            return;
+        }
+
+        String sql = """
+            SELECT cfg.auto_bid_id,
+                   cfg.auction_id,
+                   a.item_id,
+                   COALESCE(i.name, '') AS item_name,
+                   COALESCE(i.category, '') AS category_name,
+                   a.current_price,
+                   cfg.max_bid,
+                   cfg.increment,
+                   cfg.status,
+                   a.end_time,
+                   COALESCE(seller.username, '') AS seller_username,
+                   COALESCE(imgs.image_urls, '') AS image_urls,
+                   GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left
+            FROM auto_bid_configs cfg
+            JOIN auctions a ON a.auction_id = cfg.auction_id
+            LEFT JOIN items i ON i.item_id = a.item_id
+            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+            LEFT JOIN (
+                SELECT item_id,
+                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                                    SEPARATOR '\n') AS image_urls
+                FROM item_images
+                GROUP BY item_id
+            ) imgs ON imgs.item_id = a.item_id
+            WHERE cfg.bidder_id = ?
+            ORDER BY CASE cfg.status
+                         WHEN 'ACTIVE' THEN 0
+                         WHEN 'COMPLETED' THEN 1
+                         ELSE 2
+                     END,
+                     a.end_time ASC, cfg.updated_at DESC
+            """;
+
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    send("USER_AUTOBID " + fields(
+                        rs.getInt("auto_bid_id"),
+                        rs.getInt("auction_id"),
+                        rs.getInt("item_id"),
+                        rs.getString("item_name"),
+                        rs.getString("category_name"),
+                        rs.getBigDecimal("current_price"),
+                        rs.getBigDecimal("max_bid"),
+                        rs.getBigDecimal("increment"),
+                        rs.getString("status"),
+                        rs.getTimestamp("end_time"),
+                        rs.getString("seller_username"),
+                        rs.getString("image_urls"),
+                        rs.getLong("seconds_left")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            send("USER_AUTOBIDS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        send("USER_AUTOBIDS_END");
     }
 
     /**

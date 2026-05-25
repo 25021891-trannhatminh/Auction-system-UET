@@ -379,6 +379,17 @@ public class AutoBidConfigDAO {
         ) VALUES (?, ?, ?, ?, ?)
         """;
 
+  private static final String SQL_UPSERT_ACTIVE = """
+        INSERT INTO auto_bid_configs (
+            auction_id, bidder_id, max_bid, increment, status
+        ) VALUES (?, ?, ?, ?, 'ACTIVE')
+        ON DUPLICATE KEY UPDATE
+            max_bid = VALUES(max_bid),
+            increment = VALUES(increment),
+            status = 'ACTIVE',
+            updated_at = NOW()
+        """;
+
   // Lấy tất cả auto bid ACTIVE của một phiên đấu giá
   private static final String SQL_SELECT_BY_AUCTION =
       SQL_BASE_SELECT + "WHERE auction_id = ? AND status = 'ACTIVE' ORDER BY max_bid DESC";
@@ -429,10 +440,10 @@ public class AutoBidConfigDAO {
         WHERE auction_id = ? AND status = 'ACTIVE'
         """;
   private static final String SQL_UPDATE_MAX_BID_BY_AUCTION_AND_BIDDER =
-      "UPDATE auto_bid_configs SET max_bid = ? WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
+      "UPDATE auto_bid_configs SET max_bid = ?, updated_at = NOW() WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
 
   private static final String SQL_CANCEL_BY_AUCTION_AND_BIDDER =
-      "UPDATE auto_bid_configs SET status = 'CANCELED' WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
+      "UPDATE auto_bid_configs SET status = 'CANCELED', updated_at = NOW() WHERE auction_id = ? AND bidder_id = ? AND status = 'ACTIVE'";
 
   private static final String SQL_DELETE =
       "DELETE FROM auto_bid_configs WHERE auto_bid_id = ?";
@@ -477,6 +488,43 @@ public class AutoBidConfigDAO {
   public boolean create(Connection conn, AutoBidConfig autoBidConfig) throws SQLException {
     try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT)) {
       return executeCreate(ps, autoBidConfig);
+    }
+  }
+
+  /**
+   * Tạo mới hoặc kích hoạt lại cấu hình auto bid cho cùng một cặp auction-user.
+   *
+   * <p>Bảng có UNIQUE(auction_id, bidder_id), nên user hủy rồi bật lại sẽ không insert được
+   * bằng {@link #create(AutoBidConfig)}. Upsert này cập nhật lại max bid, increment và đưa
+   * status về ACTIVE để flow UI -> server -> DB luôn idempotent.</p>
+   *
+   * @param autoBidConfig cấu hình auto bid cần lưu
+   * @return {@code true} nếu insert/update thành công
+   */
+  public boolean upsertActive(AutoBidConfig autoBidConfig) {
+    logger.debug("upsertActive() – auctionId={}, bidderId={}, maxBid={}, increment={}",
+        autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(),
+        autoBidConfig.getMaxBid(), autoBidConfig.getIncrement());
+
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_UPSERT_ACTIVE)) {
+      ps.setInt(1, autoBidConfig.getAuctionId());
+      ps.setInt(2, autoBidConfig.getBidderId());
+      ps.setBigDecimal(3, autoBidConfig.getMaxBid());
+      ps.setBigDecimal(4, autoBidConfig.getIncrement());
+      boolean saved = ps.executeUpdate() > 0;
+      if (saved) {
+        logger.info("upsertActive() – AutoBid saved for auctionId={}, bidderId={}",
+            autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
+      } else {
+        logger.warn("upsertActive() – No rows affected for auctionId={}, bidderId={}",
+            autoBidConfig.getAuctionId(), autoBidConfig.getBidderId());
+      }
+      return saved;
+    } catch (SQLException e) {
+      logger.error("upsertActive() – DB error for auctionId={}, bidderId={}",
+          autoBidConfig.getAuctionId(), autoBidConfig.getBidderId(), e);
+      return false;
     }
   }
 
