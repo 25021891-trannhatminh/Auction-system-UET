@@ -288,13 +288,14 @@ public class AuctionService {
         config.getMaxBid(),
         config.getIncrement()
     );
-
+    boolean needPersist = auctionManager.registerAutoBid(authenticatedConfig, bidder);
+    if (!needPersist) return false;
     boolean persisted = autoBidConfigDAO.upsertActive(authenticatedConfig);
     if (!persisted) {
       return false;
     }
 
-    auctionManager.registerAutoBid(authenticatedConfig, bidder);
+
     triggerAutoBids(auction, auction.getCurrentLeader());
     logger.info("Auto-bid registered for auction {} by user {}", auctionId, bidderId);
     return true;

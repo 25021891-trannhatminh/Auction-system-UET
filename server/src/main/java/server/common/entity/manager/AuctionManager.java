@@ -5,6 +5,7 @@ import server.common.entity.Auction;
 import server.common.entity.AutoBidConfig;
 import server.common.entity.Item;
 import server.common.entity.User;
+import server.common.entity.exception.InvalidBidException;
 import server.service.listeners.RealTimeObserver;
 import server.common.enums.AuctionStatus;
 import java.math.BigDecimal;
@@ -316,37 +317,43 @@ public class AuctionManager {
 
     /**
      * Đăng ký auto-bid cho một bidder trong một phiên.
-     *   LƯU Ý: nếu bidder đang là winner (top1 queue) -> không cho phép đăng ký maxBid bé hơn currentPrice
+     *   LƯU Ý: nếu bidder đang là winner của Auction + top1 queueConfig -> không cho phép đăng ký maxBid bé hơn currentPrice
      *   Luôn trigger sau đăng ký, engine tự kiểm tra:
      *        - Nếu bidder đã là winner current → engine không bid
      *        - Nếu bidder chưa phải winner → engine bid Jump-to-Winner ngay
      *
-     * ⚠️  Tầng DAO sau khi gọi method này:
-     *   AutoBidDAO.insertOrUpdate(config)
-     *   BidDAO.insert(autoBidTx) nếu autoBidTx != null
-     *   AuctionDAO.updateState(auction) nếu có auto-bid
-     *
+     *      Return false để không lưu vào DB
      */
-    public void registerAutoBid(AutoBidConfig config, User bidder) {
+    public boolean registerAutoBid(AutoBidConfig config, User bidder) {
         Auction auction = getAuctionByID(config.getAuctionId());
 
         if (!auction.isRunning()) {
             throw new IllegalStateException(
                 "Cannot register auto-bid on auction with status: " + auction.getStatus());
         }
-        // Nếu config mới của winner maxBid < CurrentPrice hoặc < maxBid cũ thì không cho đăng ký
+        BigDecimal currentPrice = auction.getCurrentPrice();
+        BigDecimal newMaxBid = config.getMaxBid();
+        BigDecimal increment = config.getIncrement();
+
+        if (newMaxBid.compareTo(currentPrice) < 0) {
+            throw new IllegalArgumentException(
+                "Max bid must be at least current price. Current: " + currentPrice
+                    + ", Requested: " + newMaxBid);
+        }
+        if (newMaxBid.compareTo(increment) < 0) {
+            throw new IllegalArgumentException("Max bid must be >= increment");
+        }
+
         AutoBidConfig currentWinnerConfig = autoBidEngine.peekWinner(auction.getId());
-        if (currentWinnerConfig != null && currentWinnerConfig.getBidderId() == bidder.getId()) {
-            // Bidder đang là winner trong queue → không cho hạ maxBid
-            if (config.getMaxBid().compareTo(auction.getCurrentPrice()) < 0
-                || config.getMaxBid().compareTo(currentWinnerConfig.getMaxBid()) < 0) {
-                return ;
+        boolean isCurrentLeader = (currentWinnerConfig != null
+            && currentWinnerConfig.getBidderId() == bidder.getId());
+
+        // Bidder đang là leader AutoBidConfig và còn đang là winner của Auction
+        if (isCurrentLeader && currentWinnerConfig.getBidderId() == auction.getCurrentLeader().getId()) {
+            if (newMaxBid.compareTo(currentWinnerConfig.getMaxBid()) <= 0) {
+                // Không cho giảm hoặc giữ nguyên maxBid khi đang là leader
+                return false; // Hoặc throw exception tùy theo yêu cầu UX
             }
-            // Cho phép nâng maxBid → cập nhật config, không cần trigger
-            // (winner vẫn là winner, chỉ mở rộng giới hạn)
-            bidder.setAutoBid(config);
-            autoBidEngine.register(config, bidder);
-            return ;
         }
 
         // Bidder không phải winner hiện tại → đăng ký bình thường
@@ -356,6 +363,7 @@ public class AuctionManager {
         System.out.printf("[AuctionManager] AutoBid registered: %s on auction %s (max=%.0f, inc=%.0f)%n",
             bidder.getUsername(), config.getAuctionId(),
             config.getMaxBid(), config.getIncrement());
+        return true;
     }
 
     /**
