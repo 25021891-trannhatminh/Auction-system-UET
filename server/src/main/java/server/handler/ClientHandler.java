@@ -283,8 +283,11 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.BID:
-                String bidReponse = bidHandler.handleBid(request,this.userId,this.username);
+                String bidReponse = bidHandler.handleBid(request, this.userId, this.username);
                 send(bidReponse);
+                if (bidReponse != null && bidReponse.startsWith(ProtocolConstants.BID_SUCCESS)) {
+                    ClientManager.broadcast("USER_AUCTIONS_DIRTY");
+                }
                 break;
 
             case "MSG":

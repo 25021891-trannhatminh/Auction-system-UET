@@ -2,6 +2,7 @@ package client.controller;
 
 import client.SceneNavigator;
 import client.model.User;
+import client.service.CloudMediaManager;
 import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.io.File;
@@ -75,7 +76,9 @@ public class CreateItemController {
   @FXML private Button submitItemButton;
 
   private final ToggleGroup purchaseTypeGroup = new ToggleGroup();
+  private final CloudMediaManager cloudMediaManager = new CloudMediaManager();
   private final List<Path> persistedImagePaths = new ArrayList<>();
+  private final List<String> publicImageUris = new ArrayList<>();
   private int currentPreviewImageIndex;
   private NetworkManager networkManager;
   private final Consumer<String> serverMessageHandler = this::handleServerMessage;
@@ -184,9 +187,8 @@ public class CreateItemController {
   /**
    * Cho seller chọn một hoặc nhiều ảnh item.
    *
-   * <p>Ảnh được copy vào thư mục local {@code ~/.auction-system/uploads} trước khi
-   * submit. DB hiện lưu URI/đường dẫn ảnh trong bảng {@code item_images}; chưa upload
-   * binary ảnh lên cloud storage.</p>
+   * <p>Ảnh được copy vào cache local để preview, đồng thời upload lên cloud storage
+   * trước khi submit. DB chỉ lưu public URL để mọi máy client đều load được ảnh.</p>
    */
   @FXML
   private void handleBrowseFiles() {
@@ -204,15 +206,29 @@ public class CreateItemController {
 
     try {
       List<File> limitedFiles = limitSelectedFiles(files);
+      List<Path> localPreviewPaths = persistSelectedFiles(limitedFiles);
+      List<String> uploadedUris = uploadPublicImages(localPreviewPaths);
+      if (uploadedUris.size() != localPreviewPaths.size()) {
+        persistedImagePaths.clear();
+        publicImageUris.clear();
+        currentPreviewImageIndex = 0;
+        previewImageView.setImage(null);
+        updatePreviewNavigation();
+        showErrorMessage("Cannot upload all images to cloud storage. Please try again.");
+        return;
+      }
+
       persistedImagePaths.clear();
-      persistedImagePaths.addAll(persistSelectedFiles(limitedFiles));
+      persistedImagePaths.addAll(localPreviewPaths);
+      publicImageUris.clear();
+      publicImageUris.addAll(uploadedUris);
       currentPreviewImageIndex = 0;
       updatePreviewImage(currentPreviewImageIndex);
       fileNameLabel.setText(limitedFiles.size() == 1
           ? limitedFiles.get(0).getName()
           : limitedFiles.get(0).getName() + " +" + (limitedFiles.size() - 1) + " more");
       updatePreviewNavigation();
-      helperTextLabel.setText("Images copied to local uploads storage and ready for submit.");
+      helperTextLabel.setText("Images uploaded to cloud storage and ready for submit.");
       showNeutralMessage(files.size() > MAX_IMAGE_COUNT
           ? "Chỉ lấy 5 ảnh đầu tiên để gửi cùng listing."
           : "Ảnh item đã sẵn sàng để gửi cùng listing.");
@@ -397,6 +413,7 @@ public class CreateItemController {
     yearCreatedField.clear();
     descriptionArea.clear();
     persistedImagePaths.clear();
+    publicImageUris.clear();
     currentPreviewImageIndex = 0;
     categoryComboBox.getSelectionModel().select("ART");
     fileNameLabel.setText("No file selected yet");
@@ -410,10 +427,9 @@ public class CreateItemController {
   }
 
   /**
-   * Copy ảnh được chọn vào thư mục local upload của app.
-   *
-   * <p>Hiện tại DB lưu URI local của file. Nếu sau này có cloud storage, hàm này là điểm
-   * nên thay bằng upload binary lên storage rồi trả về public URL.</p>
+   * Copy ảnh được chọn vào thư mục local upload của app để preview không phụ thuộc
+   * vào file gốc mà user vừa chọn. Public URL dùng cho database được tạo ở
+   * {@link #uploadPublicImages(List)}.
    *
    * @param files danh sách file người dùng chọn
    * @return danh sách path local đã copy
@@ -432,6 +448,28 @@ public class CreateItemController {
       paths.add(target);
     }
     return paths;
+  }
+
+  /**
+   * Upload ảnh local lên cloud storage và trả về URL công khai dùng chung cho mọi máy.
+   *
+   * @param localPaths danh sách path local đã copy
+   * @return danh sách public URL upload thành công, trả thiếu phần tử nếu có ảnh lỗi
+   */
+  private List<String> uploadPublicImages(List<Path> localPaths) {
+    List<String> uploadedUris = new ArrayList<>();
+    if (localPaths == null || localPaths.isEmpty()) {
+      return uploadedUris;
+    }
+
+    for (Path path : localPaths) {
+      String publicUri = cloudMediaManager.uploadAsset(path.toFile());
+      if (publicUri == null || publicUri.isBlank()) {
+        return uploadedUris;
+      }
+      uploadedUris.add(publicUri);
+    }
+    return uploadedUris;
   }
 
   private List<File> limitSelectedFiles(List<File> files) {
@@ -478,15 +516,10 @@ public class CreateItemController {
    * @return chuỗi URI ảnh hoặc rỗng nếu chưa upload
    */
   private String joinImageUris() {
-    if (persistedImagePaths.isEmpty()) {
+    if (publicImageUris.isEmpty()) {
       return "";
     }
-
-    List<String> uris = new ArrayList<>();
-    for (Path path : persistedImagePaths) {
-      uris.add(path.toUri().toString());
-    }
-    return String.join("\n", uris);
+    return String.join("\n", publicImageUris);
   }
 
   /**

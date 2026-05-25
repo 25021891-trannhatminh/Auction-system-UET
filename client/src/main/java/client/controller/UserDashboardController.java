@@ -1,6 +1,7 @@
 package client.controller;
 
 import client.model.User;
+import client.service.CloudMediaManager;
 import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.io.File;
@@ -122,6 +123,7 @@ public class UserDashboardController extends BaseDashboardController {
   private List<SellerItemData> incomingSellerItems = new ArrayList<>();
   private boolean sellerItemsLoaded;
   private final Map<String, Image> imageCache = new HashMap<>();
+  private final CloudMediaManager cloudMediaManager = new CloudMediaManager();
   /**
    * Reused connection for the inline Create Listing form.
    *
@@ -252,6 +254,7 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("TIME_EXTENDED|")
         || message.startsWith("AUCTION_CLOSED|")
         || message.startsWith("BID_SUCCESS")
+        || message.startsWith("BID_FAIL")
         || message.startsWith("FAIL ")
         || message.startsWith("JOIN_AUCTION_FAIL")
         || message.startsWith("LEAVE_AUCTION_SUCCESS");
@@ -296,7 +299,8 @@ public class UserDashboardController extends BaseDashboardController {
       userAuctionsLoaded = true;
       preloadAuctionImages();
       applyUserAuctionStatsIfVisible();
-      if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+      if (("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey))
+          && activeAuctionDetailId == null) {
         renderWorkspace(currentSectionKey, activeFilter);
       }
       return;
@@ -306,7 +310,8 @@ public class UserDashboardController extends BaseDashboardController {
       liveAuctionCards.clear();
       userAuctionsLoaded = true;
       applyUserAuctionStatsIfVisible();
-      if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+      if (("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey))
+          && activeAuctionDetailId == null) {
         renderWorkspace(currentSectionKey, activeFilter);
       }
     }
@@ -1451,15 +1456,23 @@ public class UserDashboardController extends BaseDashboardController {
     mediaColumn.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(mediaColumn, Priority.ALWAYS);
 
+    HBox gallery = new HBox(12);
+    gallery.getStyleClass().add("auction-detail-gallery");
+    gallery.setAlignment(Pos.TOP_LEFT);
+    gallery.setMinWidth(0);
+    gallery.setMaxWidth(Double.MAX_VALUE);
+
     StackPane mainImage = createAuctionImageWrap(data.imagePath, AUCTION_DETAIL_IMAGE_HEIGHT);
     mainImage.getStyleClass().add("auction-detail-main-image");
     mainImage.setMinWidth(0);
     mainImage.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(mainImage, Priority.ALWAYS);
 
-    HBox thumbnails = new HBox(8);
-    thumbnails.getStyleClass().add("auction-detail-thumbnails");
-    thumbnails.setMinWidth(0);
-    thumbnails.setMaxWidth(Double.MAX_VALUE);
+    VBox thumbnails = new VBox(8);
+    thumbnails.getStyleClass().add("auction-detail-side-thumbnails");
+    thumbnails.setAlignment(Pos.TOP_CENTER);
+    lockRegionWidth(thumbnails, AUCTION_DETAIL_THUMB_WIDTH);
+
     List<String> imagePaths = imagePathsFromPayload(data.imagePayload);
     if (imagePaths.isEmpty()) {
       imagePaths.add(data.imagePath);
@@ -1473,6 +1486,8 @@ public class UserDashboardController extends BaseDashboardController {
       thumbnails.getChildren().add(thumb);
     }
 
+    gallery.getChildren().addAll(mainImage, thumbnails);
+
     Label descriptionLine = new Label(
         fallback(data.description, "No description stored for this item."));
     descriptionLine.getStyleClass().add("auction-detail-description-line");
@@ -1480,7 +1495,7 @@ public class UserDashboardController extends BaseDashboardController {
     descriptionLine.setMaxWidth(Double.MAX_VALUE);
     descriptionLine.maxWidthProperty().bind(mediaColumn.widthProperty());
 
-    mediaColumn.getChildren().addAll(mainImage, thumbnails, descriptionLine);
+    mediaColumn.getChildren().addAll(gallery, descriptionLine);
 
     VBox infoColumn = new VBox(12);
     infoColumn.getStyleClass().add("auction-detail-info-column");
@@ -1678,6 +1693,10 @@ public class UserDashboardController extends BaseDashboardController {
       notifUIHandler.showSuccess("Bid accepted", "The auction price will update in real time.");
       return;
     }
+    if (message.startsWith("BID_FAIL")) {
+      handleBidFailMessage(message);
+      return;
+    }
     if (message.startsWith("FAIL ") && activeAuctionDetailId != null) {
       if (activeAuctionBidButton != null) {
         activeAuctionBidButton.setDisable(false);
@@ -1687,6 +1706,20 @@ public class UserDashboardController extends BaseDashboardController {
     }
     if (message.startsWith("JOIN_AUCTION_FAIL")) {
       showBidFeedback(message, true);
+    }
+  }
+
+  private void handleBidFailMessage(String message) {
+    String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 3);
+    String auctionId = parts.length > 1 ? parts[1] : "";
+    String reason = parts.length > 2 ? parts[2] : "";
+
+    if (activeAuctionDetailId != null
+        && (auctionId.isBlank() || "-1".equals(auctionId) || activeAuctionDetailId.equals(auctionId))) {
+      if (activeAuctionBidButton != null) {
+        activeAuctionBidButton.setDisable(false);
+      }
+      showBidFeedback(readableBidFailure(reason), true);
     }
   }
 
@@ -1853,6 +1886,11 @@ public class UserDashboardController extends BaseDashboardController {
       case "USER_CANNOT_BID_ON_THEIR_OWN_AUCTION" -> "You cannot bid on your own auction.";
       case "BID_AMOUNT_MUST_BE_POSITIVE" -> "Bid amount must be greater than 0.";
       case "AMOUNT_MUST_BE_POSITIVE" -> "Bid amount must be greater than 0.";
+      case "AMOUNT_NOT_POSITIVE" -> "Bid amount must be greater than 0.";
+      case "OWN_AUCTION" -> "You cannot bid on your own auction.";
+      case "BELOW_MIN_INCREMENT" -> "Your bid must meet the minimum increment.";
+      case "BELOW_CURRENT_PRICE" -> "Your bid must be higher than the current price.";
+      case "AUCTION_NOT_FOUND" -> "This auction could not be found.";
       case "USER_OFFLINE" -> "Your session is not registered as online. Please sign in again.";
       case "USER_NOT_FOUND" -> "Your account could not be found on the server.";
       case "DB_PERSIST_FAILED" -> "The server could not save your bid. Please try again.";
@@ -2694,6 +2732,7 @@ public class UserDashboardController extends BaseDashboardController {
       for (String imagePath : imagePathsFromPayload(editItem.imagePayload)) {
         pendingCreateItemUploads.add(new CreateItemUpload(
             imagePath,
+            imagePath,
             fileNameFromPath(imagePath),
             0
         ));
@@ -3172,16 +3211,32 @@ public class UserDashboardController extends BaseDashboardController {
 
       long batch = System.currentTimeMillis();
       int index = 0;
+      int uploadedCount = 0;
       for (File file : acceptedFiles) {
         String safeName = file.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
         Path target = uploadRoot.resolve(batch + "_" + index + "_" + safeName);
         Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
+
+        String publicUri = cloudMediaManager.uploadAsset(target.toFile());
+        if (publicUri == null || publicUri.isBlank()) {
+          showCreateMessage(messageLabel,
+              "Cannot upload image to cloud storage. Please try again.", true);
+          index++;
+          continue;
+        }
+
         pendingCreateItemUploads.add(new CreateItemUpload(
+            publicUri,
             target.toUri().toString(),
             file.getName(),
             file.length()
         ));
+        uploadedCount++;
         index++;
+      }
+
+      if (uploadedCount == 0) {
+        return;
       }
 
       if (pendingCreateItemPreviewIndex < 0
@@ -3202,9 +3257,9 @@ public class UserDashboardController extends BaseDashboardController {
       );
       refreshCreatePreviewImage(previewImage, previewPlaceholder, imageCounterLabel);
       showCreateMessage(messageLabel, selectedFiles.size() > remainingSlots
-          ? "Chỉ thêm được " + acceptedFiles.size() + " ảnh vì mỗi listing tối đa 5 ảnh."
-          : "Đã thêm " + acceptedFiles.size()
-              + " ảnh. Có thể browse tiếp nếu chưa đủ 5 ảnh.", false);
+          ? "Uploaded " + uploadedCount + " image(s) because each listing allows up to 5 images."
+          : "Uploaded " + uploadedCount
+              + " image(s) to cloud storage. Every machine can now load them.", false);
     } catch (IOException exception) {
       showCreateMessage(messageLabel, "Không thể lưu ảnh đã chọn.", true);
       exception.printStackTrace();
@@ -3328,7 +3383,7 @@ public class UserDashboardController extends BaseDashboardController {
         Math.min(pendingCreateItemPreviewIndex, pendingCreateItemUploads.size() - 1));
     previewPlaceholder.setVisible(false);
     previewPlaceholder.setManaged(false);
-    Image image = new Image(pendingCreateItemUploads.get(pendingCreateItemPreviewIndex).uri, true);
+    Image image = new Image(pendingCreateItemUploads.get(pendingCreateItemPreviewIndex).previewUri, true);
     setCoverImage(previewImage, image);
     updateCreatePreviewCounter(imageCounterLabel);
   }
@@ -3394,7 +3449,7 @@ public class UserDashboardController extends BaseDashboardController {
   private String pendingCreateItemImagePayload() {
     List<String> uris = new ArrayList<>();
     for (CreateItemUpload upload : pendingCreateItemUploads) {
-      uris.add(upload.uri);
+      uris.add(upload.publicUri);
     }
     return String.join("\n", uris);
   }
@@ -3988,12 +4043,14 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private static class CreateItemUpload {
-    private final String uri;
+    private final String publicUri;
+    private final String previewUri;
     private final String fileName;
     private final long sizeBytes;
 
-    private CreateItemUpload(String uri, String fileName, long sizeBytes) {
-      this.uri = uri;
+    private CreateItemUpload(String publicUri, String previewUri, String fileName, long sizeBytes) {
+      this.publicUri = publicUri;
+      this.previewUri = previewUri;
       this.fileName = fileName;
       this.sizeBytes = sizeBytes;
     }

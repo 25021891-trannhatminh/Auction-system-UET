@@ -2252,6 +2252,14 @@
     -fx-background-color: #0f0f0f;
 }
 
+.auction-detail-gallery {
+    -fx-alignment: top-left;
+}
+
+.auction-detail-side-thumbnails {
+    -fx-padding: 0;
+}
+
 .auction-detail-main-image {
     -fx-border-color: rgba(209, 177, 93, 0.18);
 }
@@ -2259,6 +2267,10 @@
 .auction-detail-thumb {
     -fx-cursor: hand;
     -fx-opacity: 0.88;
+    -fx-background-color: #141414;
+    -fx-background-radius: 18;
+    -fx-border-color: #2a2a2a;
+    -fx-border-radius: 18;
 }
 
 .auction-detail-thumb:hover {
