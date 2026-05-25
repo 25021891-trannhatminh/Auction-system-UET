@@ -199,59 +199,58 @@ public class NotificationDispatcher implements Runnable {
   }
 
   /**
-   * Xây dựng message theo Protocol một cách rõ ràng, dễ mở rộng
+   * Xây dựng message notification thống nhất cho client.
+   *
+   * <p>Client dashboard đang parse đúng 4 trường:
+   * {@code PUSH_NOTIF|TYPE|TITLE|MESSAGE}. Các payload cũ nhét relatedId vào giữa
+   * làm title trên UI bị biến thành số auctionId, ví dụ "5". RelatedId vẫn được lưu
+   * trong database ở tầng NotificationService, còn realtime UI chỉ cần nội dung dễ đọc.</p>
    */
   private String buildProtocolMessage(NotificationEvent event) {
-    String type = event.getType() != null ? event.getType().name() : "INFO";
-    String[] infoDetail = event.getTitle().split(" ");
-    String content = event.getMessage() != null ? event.getMessage() : "";
-    Integer relatedId = event.getRelatedId(); // thường là auctionId
+    String type = event.getType() != null ? event.getType().name() : "SYSTEM";
+    String title = sanitizeProtocolField(event.getTitle());
+    String content = sanitizeProtocolField(event.getMessage());
 
-    switch (event.getType()) {
-
-      case NotificationType.BID_PLACED:
-        // AUCTION_BID_UPDATE|auctionId|bidderId|itemName|amount
-        return String.format("PUSH_NOTIF|AUCTION_BID_UPDATE|%d|%d|%s|%s",
-            relatedId != null ? relatedId : 0,
-            event.getUserId(),                    // bidderId
-            infoDetail[0],                        // itemName
-            infoDetail[1]                         // amount
-        );
-
-      case NotificationType.TIME_EXTENDED:
-        // TIME_EXTENDED|auctionId|itemName|addSeconds
-        return String.format("PUSH_NOTIF|TIME_EXTENDED|%d|%s|%s",
-            relatedId != null ? relatedId : 0,
-            infoDetail[0],                       // itemName
-            infoDetail[1]                       // addSeconds
-        );
-
-      case NotificationType.OUTBID:
-        // OUTBID|auctionId|bidderId|itemName|newPrice
-        return String.format("PUSH_NOTIF|OUTBID|%d|%d|%s|%s",
-            relatedId != null ? relatedId : 0,
-            event.getUserId(),
-            infoDetail[0],                       // itemName
-            infoDetail[1]                       // newPrice
-        );
-      case NotificationType.AUCTION_WON:
-      case NotificationType.AUCTION_LOST:
-      case NotificationType.AUCTION_STARTED:
-      case NotificationType.AUCTION_ENDED:
-      case NotificationType.PAYMENT_DUE:
-      case NotificationType.PAYMENT_RECEIVED:
-      case NotificationType.ITEM_APPROVED:
-      case NotificationType.ITEM_REJECTED:
-      case NotificationType.SYSTEM:
-      default:
-        // Format mặc định: PUSH_NOTIF|TYPE|RELATED_ID|TITLE|CONTENT
-        return String.format("PUSH_NOTIF|%s|%s|%s|%s",
-            type,
-            relatedId != null ? relatedId : "",
-            event.getTitle(),
-            content
-        );
+    if (title.isBlank()) {
+      title = defaultTitle(event.getType());
     }
+    if (content.isBlank()) {
+      content = "You have a new auction notification.";
+    }
+
+    return String.format("PUSH_NOTIF|%s|%s|%s", type, title, content);
+  }
+
+  private String defaultTitle(NotificationType type) {
+    if (type == null) {
+      return "Notification";
+    }
+
+    return switch (type) {
+      case BID_PLACED -> "Bid placed";
+      case OUTBID -> "You have been outbid";
+      case AUCTION_WON -> "Auction won";
+      case AUCTION_LOST -> "Auction result";
+      case AUCTION_STARTED -> "Auction started";
+      case AUCTION_ENDED -> "Auction closed";
+      case PAYMENT_RECEIVED -> "Payment received";
+      case PAYMENT_DUE -> "Payment required";
+      case ITEM_APPROVED -> "Item approved";
+      case ITEM_REJECTED -> "Item rejected";
+      case SYSTEM -> "System message";
+      default -> "Notification";
+    };
+  }
+
+  private String sanitizeProtocolField(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value
+        .replace("|", "/")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .trim();
   }
   public int getQueueSize() {
     return queue.size();

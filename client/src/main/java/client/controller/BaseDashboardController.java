@@ -7,6 +7,9 @@ import client.service.NetworkManager;
 import client.service.NotificationUIHandler;
 import client.service.SessionManager;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,6 +44,7 @@ public abstract class BaseDashboardController {
     private java.util.function.Consumer<String> realtimeNotificationHandler;
     private final List<NotificationModel> notificationInbox = new ArrayList<>();
     private int unreadNotificationCount = 0;
+    private int incomingHistoryUnreadCount = 0;
     private Popup notificationPopup;
 
     protected static class SectionContent {
@@ -250,6 +254,140 @@ public abstract class BaseDashboardController {
         return new NotificationModel(parts[1], parts[2], parts[3]);
     }
 
+    protected void requestNotificationHistory() {
+        NetworkManager manager = networkManager == null ? NetworkManager.getInstance() : networkManager;
+        User currentUser = SessionManager.getCurrentUser();
+        int userId = currentUser == null ? 0 : currentUser.getUserId();
+        if (manager != null) {
+            manager.send(userId > 0 ? "USER_LIST_NOTIFICATIONS " + userId : "USER_LIST_NOTIFICATIONS");
+        }
+    }
+
+    protected boolean isNotificationHistoryMessage(String message) {
+        return message != null && (message.equals("USER_NOTIFICATIONS_BEGIN")
+            || message.equals("USER_NOTIFICATIONS_END")
+            || message.startsWith("USER_NOTIFICATION "));
+    }
+
+    protected void handleNotificationHistoryMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+
+        if (message.equals("USER_NOTIFICATIONS_BEGIN")) {
+            notificationInbox.clear();
+            incomingHistoryUnreadCount = 0;
+            return;
+        }
+
+        if (message.startsWith("USER_NOTIFICATION ")) {
+            NotificationModel notification = parseStoredNotification(
+                message.substring("USER_NOTIFICATION ".length())
+            );
+            if (notification != null) {
+                notificationInbox.add(notification);
+                if (!notification.isRead()) {
+                    incomingHistoryUnreadCount++;
+                }
+            }
+            return;
+        }
+
+        if (message.equals("USER_NOTIFICATIONS_END")) {
+            unreadNotificationCount = incomingHistoryUnreadCount;
+            updateNotificationBadge();
+            if (notificationPopup != null && notificationPopup.isShowing()) {
+                refreshNotificationPopupContent();
+            }
+        }
+    }
+
+    private NotificationModel parseStoredNotification(String payload) {
+        List<String> fields = splitNotificationPayload(payload);
+        if (fields.size() < 6) {
+            return null;
+        }
+
+        String type = safeNotificationField(fields, 1);
+        String title = safeNotificationField(fields, 2);
+        String message = safeNotificationField(fields, 3);
+        boolean read = Boolean.parseBoolean(safeNotificationField(fields, 4));
+        LocalDateTime timestamp = parseNotificationTime(safeNotificationField(fields, 5));
+        return new NotificationModel(type, title, message, timestamp, read);
+    }
+
+    private void markNotificationsReadOnServer() {
+        NetworkManager manager = networkManager == null ? NetworkManager.getInstance() : networkManager;
+        User currentUser = SessionManager.getCurrentUser();
+        int userId = currentUser == null ? 0 : currentUser.getUserId();
+        if (manager != null) {
+            manager.send(userId > 0
+                ? "USER_MARK_NOTIFICATIONS_READ " + userId
+                : "USER_MARK_NOTIFICATIONS_READ");
+        }
+    }
+
+    private LocalDateTime parseNotificationTime(String value) {
+        if (value == null || value.isBlank()) {
+            return LocalDateTime.now();
+        }
+        String normalized = value.trim();
+        try {
+            return LocalDateTime.parse(normalized.replace(' ', 'T'));
+        } catch (DateTimeParseException ignored) {
+            // Fall through to common SQL timestamp formats.
+        }
+        String[] patterns = {"yyyy-MM-dd HH:mm:ss.S", "yyyy-MM-dd HH:mm:ss"};
+        for (String pattern : patterns) {
+            try {
+                return LocalDateTime.parse(normalized, DateTimeFormatter.ofPattern(pattern));
+            } catch (DateTimeParseException ignored) {
+                // Try next pattern.
+            }
+        }
+        return LocalDateTime.now();
+    }
+
+    private List<String> splitNotificationPayload(String payload) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean escaped = false;
+
+        for (int i = 0; i < payload.length(); i++) {
+            char character = payload.charAt(i);
+            if (escaped) {
+                switch (character) {
+                    case 'p' -> current.append('|');
+                    case 'n' -> current.append('\n');
+                    case 'r' -> current.append('\r');
+                    case '\\' -> current.append('\\');
+                    default -> current.append(character);
+                }
+                escaped = false;
+                continue;
+            }
+            if (character == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (character == '|') {
+                fields.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(character);
+        }
+        if (escaped) {
+            current.append('\\');
+        }
+        fields.add(current.toString());
+        return fields;
+    }
+
+    private String safeNotificationField(List<String> fields, int index) {
+        return index >= 0 && index < fields.size() ? fields.get(index) : "";
+    }
+
     private void toggleNotificationCenter() {
         if (notificationPopup != null && notificationPopup.isShowing()) {
             notificationPopup.hide();
@@ -311,6 +449,7 @@ public abstract class BaseDashboardController {
         markReadButton.setOnAction(event -> {
             unreadNotificationCount = 0;
             updateNotificationBadge();
+            markNotificationsReadOnServer();
             if (notificationPopup != null) {
                 notificationPopup.hide();
             }

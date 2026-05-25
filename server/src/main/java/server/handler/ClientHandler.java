@@ -46,6 +46,7 @@ public class ClientHandler implements Runnable{
 //    private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int LOG_MESSAGE_LIMIT = 500;
 
     private Socket socket;
     private BufferedReader in;
@@ -104,6 +105,33 @@ public class ClientHandler implements Runnable{
         out.println(msg);
     }
 
+    /**
+     * Builds a compact log entry for incoming protocol messages. Upload requests contain large
+     * Base64 image data, so only the command, file name and payload length are printed.
+     *
+     * @param msg raw message received from the client
+     * @return safe message text for server logs
+     */
+    private String safeMessageForLog(String msg) {
+        if (msg == null) {
+            return "";
+        }
+
+        if (msg.startsWith("UPLOAD_IMAGE ")) {
+            String[] parts = msg.split(" ", 3);
+            String fileName = parts.length > 1 ? parts[1] : "unknown";
+            int base64Length = parts.length > 2 ? parts[2].length() : 0;
+            return "UPLOAD_IMAGE " + fileName + " <base64:" + base64Length + " chars>";
+        }
+
+        if (msg.length() > LOG_MESSAGE_LIMIT) {
+            return msg.substring(0, LOG_MESSAGE_LIMIT)
+                + "... <truncated, " + msg.length() + " chars>";
+        }
+
+        return msg;
+    }
+
     @Override
     public void run() {
         try {
@@ -140,7 +168,7 @@ public class ClientHandler implements Runnable{
             send(ResponseBuilder.pong());
             return;
         }
-        System.out.println("MSG FROM CLIENT: " + msg);
+        System.out.println("MSG FROM CLIENT: " + safeMessageForLog(msg));
 
         // Xử lý request
         switch (contextRequest) {

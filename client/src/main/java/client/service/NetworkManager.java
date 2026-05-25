@@ -24,6 +24,7 @@ public class NetworkManager {
     private static final int BASE_RETRY_DELAY = 1000;
     private static final int MAX_RETRY_DELAY = 30000;
     private static final int HEARTBEAT_INTERVAL = 5000;
+    private static final int LOG_MESSAGE_LIMIT = 500;
 
     private Socket socket;
     private BufferedReader in;
@@ -209,7 +210,7 @@ public class NetworkManager {
         }
 
         if (!hasWritableSocket()) {
-            System.out.println("Queue message: " + msg);
+            System.out.println("Queue message: " + safeMessageForLog(msg));
             messageQueue.add(msg);
             ensureConnected();
             return;
@@ -217,10 +218,10 @@ public class NetworkManager {
 
         out.println(msg);
         out.flush();
-        System.out.println("Sent: " + msg);
+        System.out.println("Sent: " + safeMessageForLog(msg));
 
         if (out.checkError()) {
-            System.out.println("Send failed, queue again: " + msg);
+            System.out.println("Send failed, queue again: " + safeMessageForLog(msg));
             messageQueue.add(msg);
             markDisconnected();
             ensureConnected();
@@ -242,15 +243,42 @@ public class NetworkManager {
 
             out.println(msg);
             out.flush();
-            System.out.println("Sent queued: " + msg);
+            System.out.println("Sent queued: " + safeMessageForLog(msg));
 
             if (out.checkError()) {
-                System.out.println("Failed to send queued message, put back: " + msg);
+                System.out.println("Failed to send queued message, put back: " + safeMessageForLog(msg));
                 messageQueue.add(msg);
                 markDisconnected();
                 break;
             }
         }
+    }
+
+    /**
+     * Builds a compact log entry for socket messages. Image upload commands carry large Base64
+     * payloads, so the raw data is hidden to keep the terminal readable.
+     *
+     * @param msg raw protocol message
+     * @return safe message text for debug logs
+     */
+    private String safeMessageForLog(String msg) {
+        if (msg == null) {
+            return "";
+        }
+
+        if (msg.startsWith("UPLOAD_IMAGE ")) {
+            String[] parts = msg.split(" ", 3);
+            String fileName = parts.length > 1 ? parts[1] : "unknown";
+            int base64Length = parts.length > 2 ? parts[2].length() : 0;
+            return "UPLOAD_IMAGE " + fileName + " <base64:" + base64Length + " chars>";
+        }
+
+        if (msg.length() > LOG_MESSAGE_LIMIT) {
+            return msg.substring(0, LOG_MESSAGE_LIMIT)
+                + "... <truncated, " + msg.length() + " chars>";
+        }
+
+        return msg;
     }
 
     private void startHeartbeat() {

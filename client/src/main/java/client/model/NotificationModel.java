@@ -11,6 +11,7 @@ public class NotificationModel {
   private String title;
   private String message;
   private LocalDateTime timestamp;
+  private boolean read;
 
   /**
    * Creates a notification model with the current client timestamp.
@@ -20,10 +21,25 @@ public class NotificationModel {
    * @param message user-facing notification body
    */
   public NotificationModel(String type, String title, String message) {
+    this(type, title, message, LocalDateTime.now(), false);
+  }
+
+  /**
+   * Creates a notification model with a server-provided timestamp and read state.
+   *
+   * @param type notification type from the server protocol
+   * @param title short notification title
+   * @param message user-facing notification body
+   * @param timestamp time stored by the server, falls back to now when null
+   * @param read whether the notification has already been read
+   */
+  public NotificationModel(String type, String title, String message,
+      LocalDateTime timestamp, boolean read) {
     this.type = type;
     this.title = title;
     this.message = message;
-    this.timestamp = LocalDateTime.now();
+    this.timestamp = timestamp == null ? LocalDateTime.now() : timestamp;
+    this.read = read;
   }
 
   /**
@@ -78,6 +94,24 @@ public class NotificationModel {
    */
   public void setMessage(String message) {
     this.message = message;
+  }
+
+  /**
+   * Returns whether this notification is already read.
+   *
+   * @return true when the server marks it as read
+   */
+  public boolean isRead() {
+    return read;
+  }
+
+  /**
+   * Updates the read state.
+   *
+   * @param read new read state
+   */
+  public void setRead(boolean read) {
+    this.read = read;
   }
 
   /**

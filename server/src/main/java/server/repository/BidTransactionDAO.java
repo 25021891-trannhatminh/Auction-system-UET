@@ -45,6 +45,31 @@ public class BidTransactionDAO {
     private static final String SQL_SELECT_HISTORY =
         "SELECT bid_id, auction_id, bidder_id, amount, is_auto_bid, status, bid_time FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time DESC";
 
+    private static final String SQL_SELECT_LATEST_BY_BIDDER = """
+        SELECT bt.bid_id, bt.auction_id, bt.bidder_id, bt.amount AS user_bid,
+               bt.is_auto_bid, bt.status AS bid_status, bt.bid_time,
+               a.current_price, a.status AS auction_status, a.end_time,
+               a.current_winner_id, i.item_id, i.name AS item_name, i.category,
+               COALESCE((
+                   SELECT img.url
+                   FROM item_images img
+                   WHERE img.item_id = i.item_id
+                   ORDER BY img.is_primary DESC, img.sort_order ASC, img.image_id ASC
+                   LIMIT 1
+               ), '') AS image_url
+        FROM bid_transactions bt
+        JOIN (
+            SELECT auction_id, MAX(bid_id) AS latest_bid_id
+            FROM bid_transactions
+            WHERE bidder_id = ?
+            GROUP BY auction_id
+        ) latest ON latest.latest_bid_id = bt.bid_id
+        JOIN auctions a ON a.auction_id = bt.auction_id
+        JOIN items i ON i.item_id = a.item_id
+        WHERE bt.bidder_id = ?
+        ORDER BY bt.bid_time DESC, bt.bid_id DESC
+        """;
+
     private static final String SELECT_DISTINCT_BIDDERS =
         "SELECT DISTINCT bidder_id FROM bid_transactions WHERE auction_id = ?";
 
@@ -191,6 +216,53 @@ public class BidTransactionDAO {
     }
 
     /**
+     * Lấy mỗi auction mà user đã tham gia với bid mới nhất của chính user đó.
+     *
+     * <p>Dữ liệu này phục vụ màn My Bids: so sánh bid gần nhất của user với
+     * current_price và current_winner_id hiện tại của auction.</p>
+     *
+     * @param bidderId ID user đang đăng nhập
+     * @return danh sách row mới nhất theo từng auction, mới nhất lên đầu
+     */
+    public List<UserBidRow> getLatestBidsByBidder(int bidderId) {
+        List<UserBidRow> rows = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_LATEST_BY_BIDDER)) {
+            ps.setInt(1, bidderId);
+            ps.setInt(2, bidderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new UserBidRow(
+                        rs.getInt("bid_id"),
+                        rs.getInt("auction_id"),
+                        rs.getInt("bidder_id"),
+                        rs.getInt("item_id"),
+                        rs.getString("item_name"),
+                        rs.getString("category"),
+                        rs.getBigDecimal("current_price"),
+                        rs.getBigDecimal("user_bid"),
+                        BidStatus.valueOf(rs.getString("bid_status")),
+                        rs.getString("auction_status"),
+                        nullableInteger(rs, "current_winner_id"),
+                        rs.getBoolean("is_auto_bid"),
+                        rs.getTimestamp("bid_time"),
+                        rs.getTimestamp("end_time"),
+                        rs.getString("image_url")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("getLatestBidsByBidder() - DB error for bidderId={}", bidderId, e);
+        }
+        return rows;
+    }
+
+    private Integer nullableInteger(ResultSet rs, String column) throws SQLException {
+        int value = rs.getInt(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    /**
      * Lấy danh sách ID của những người tham gia đấu giá duy nhất.
      */
     public List<Integer> getBiddersByAuctionId(int auctionId) {
@@ -258,4 +330,63 @@ public class BidTransactionDAO {
         // mặc định nạp tx vào phần manualTransaction để bảo toàn dữ liệu lịch sử)
         return new BidResultDTO(tx, null, rs.getBigDecimal("amount"), bidderName);
     }
+
+    /**
+     * Projection row cho màn My Bids của client.
+     */
+    public static final class UserBidRow {
+        private final int bidId;
+        private final int auctionId;
+        private final int bidderId;
+        private final int itemId;
+        private final String itemName;
+        private final String category;
+        private final BigDecimal currentPrice;
+        private final BigDecimal userBid;
+        private final BidStatus bidStatus;
+        private final String auctionStatus;
+        private final Integer currentWinnerId;
+        private final boolean autoBid;
+        private final Timestamp bidTime;
+        private final Timestamp endTime;
+        private final String imageUrl;
+
+        public UserBidRow(int bidId, int auctionId, int bidderId, int itemId,
+            String itemName, String category, BigDecimal currentPrice, BigDecimal userBid,
+            BidStatus bidStatus, String auctionStatus, Integer currentWinnerId,
+            boolean autoBid, Timestamp bidTime, Timestamp endTime, String imageUrl) {
+            this.bidId = bidId;
+            this.auctionId = auctionId;
+            this.bidderId = bidderId;
+            this.itemId = itemId;
+            this.itemName = itemName;
+            this.category = category;
+            this.currentPrice = currentPrice;
+            this.userBid = userBid;
+            this.bidStatus = bidStatus;
+            this.auctionStatus = auctionStatus;
+            this.currentWinnerId = currentWinnerId;
+            this.autoBid = autoBid;
+            this.bidTime = bidTime;
+            this.endTime = endTime;
+            this.imageUrl = imageUrl;
+        }
+
+        public int getBidId() { return bidId; }
+        public int getAuctionId() { return auctionId; }
+        public int getBidderId() { return bidderId; }
+        public int getItemId() { return itemId; }
+        public String getItemName() { return itemName; }
+        public String getCategory() { return category; }
+        public BigDecimal getCurrentPrice() { return currentPrice; }
+        public BigDecimal getUserBid() { return userBid; }
+        public BidStatus getBidStatus() { return bidStatus; }
+        public String getAuctionStatus() { return auctionStatus; }
+        public Integer getCurrentWinnerId() { return currentWinnerId; }
+        public boolean isAutoBid() { return autoBid; }
+        public Timestamp getBidTime() { return bidTime; }
+        public Timestamp getEndTime() { return endTime; }
+        public String getImageUrl() { return imageUrl; }
+    }
+
 }

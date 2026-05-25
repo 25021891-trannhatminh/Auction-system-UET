@@ -26,8 +26,9 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
 // ==== RealTimeObserver implement ====
   @Override
   public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-    notificationService.pushRealtimeOnly(userId, "Outbid Alert!",
-        "Someone bid higher ($" + newPrice + ") on [" + itemName + "].",
+    notificationService.push(userId, "You have been outbid",
+        "A higher bid of " + formatMoney(newPrice) + " was placed on "
+            + safeItemName(itemName) + ". Open the auction to bid again.",
         NotificationType.OUTBID, auctionId);
   }
 
@@ -47,9 +48,10 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
       pushBidUpdateToWatchers(auctionId, amount);
       return;
     }
-    // Nhánh cá nhân: thông báo riêng cho người vừa đặt giá thành công
-    notificationService.pushRealtimeOnly(bidderId, "Bid Successful",
-        "You placed a bid of $" + amount + " on [" + itemName + "].",
+    // Nhánh cá nhân: lưu DB và gửi thông báo riêng cho người vừa đặt giá thành công.
+    notificationService.push(bidderId, "Bid placed",
+        "Your bid of " + formatMoney(amount) + " for " + safeItemName(itemName)
+            + " has been recorded.",
         NotificationType.BID_PLACED, auctionId);
   }
 
@@ -95,10 +97,24 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
 
   @Override
   public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-    notificationService.pushRealtimeOnly(0, "Auction Extended Time",
-        "Auction for [" + itemName + "] has been extended by "
+    notificationService.pushRealtimeOnly(0, "Auction extended",
+        safeItemName(itemName) + " has been extended by "
             + addedSeconds + " seconds.",
         NotificationType.TIME_EXTENDED, auctionId);
+  }
+
+  private String safeItemName(String itemName) {
+    if (itemName == null || itemName.isBlank()) {
+      return "this auction";
+    }
+    return itemName.trim();
+  }
+
+  private String formatMoney(BigDecimal amount) {
+    if (amount == null) {
+      return "0";
+    }
+    return amount.stripTrailingZeros().toPlainString() + " VND";
   }
   
   // ==== BusinessEventListener implement ====

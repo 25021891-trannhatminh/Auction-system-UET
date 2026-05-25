@@ -122,6 +122,9 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<SellerItemData> sellerItems = new ArrayList<>();
   private List<SellerItemData> incomingSellerItems = new ArrayList<>();
   private boolean sellerItemsLoaded;
+  private final List<MyBidData> myBids = new ArrayList<>();
+  private List<MyBidData> incomingMyBids = new ArrayList<>();
+  private boolean myBidsLoaded;
   private final Map<String, Image> imageCache = new LinkedHashMap<String, Image>() {
     @Override
     protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
@@ -177,6 +180,14 @@ public class UserDashboardController extends BaseDashboardController {
         Platform.runLater(() -> processPushNotification(msg));
         return;
       }
+      if (isNotificationHistoryMessage(msg)) {
+        Platform.runLater(() -> handleNotificationHistoryMessage(msg));
+        return;
+      }
+      if (isUserBidMessage(msg)) {
+        Platform.runLater(() -> handleUserBidServerMessage(msg));
+        return;
+      }
       if (isRealtimeBidMessage(msg)) {
         Platform.runLater(() -> handleRealtimeBidMessage(msg));
         return;
@@ -187,6 +198,8 @@ public class UserDashboardController extends BaseDashboardController {
     };
     this.networkManager.addMessageHandler(userNetworkHandler);
     requestUserAuctions();
+    requestUserBids();
+    requestNotificationHistory();
   }
 
   private void setupCreateListingFloatingButton() {
@@ -242,6 +255,29 @@ public class UserDashboardController extends BaseDashboardController {
     if (networkManager != null) {
       networkManager.send("USER_LIST_AUCTIONS");
     }
+  }
+
+  private void requestUserBids() {
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      return;
+    }
+
+    User currentUser = SessionManager.getCurrentUser();
+    if (currentUser != null && currentUser.getUserId() > 0) {
+      networkManager.send("USER_LIST_BIDS " + currentUser.getUserId());
+    } else {
+      networkManager.send("USER_LIST_BIDS");
+    }
+  }
+
+  private boolean isUserBidMessage(String message) {
+    return message != null && (message.equals("USER_BIDS_BEGIN")
+        || message.equals("USER_BIDS_END")
+        || message.startsWith("USER_BID ")
+        || message.startsWith("USER_BIDS_ERROR"));
   }
 
   private boolean isAuctionListMessage(String message) {
@@ -320,6 +356,67 @@ public class UserDashboardController extends BaseDashboardController {
         renderWorkspace(currentSectionKey, activeFilter);
       }
     }
+  }
+
+  private void handleUserBidServerMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.equals("USER_BIDS_BEGIN")) {
+      incomingMyBids = new ArrayList<>();
+      return;
+    }
+
+    if (message.startsWith("USER_BID ")) {
+      MyBidData parsed = parseMyBid(message.substring("USER_BID ".length()));
+      if (parsed != null) {
+        incomingMyBids.add(parsed);
+      }
+      return;
+    }
+
+    if (message.equals("USER_BIDS_END")) {
+      myBids.clear();
+      myBids.addAll(incomingMyBids);
+      myBidsLoaded = true;
+      if ("myBids".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+      }
+      return;
+    }
+
+    if (message.startsWith("USER_BIDS_ERROR")) {
+      myBids.clear();
+      myBidsLoaded = true;
+      if ("myBids".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+      }
+    }
+  }
+
+  private MyBidData parseMyBid(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 14) {
+      return null;
+    }
+
+    return new MyBidData(
+        safeField(fields, 0),
+        safeField(fields, 1),
+        safeField(fields, 2),
+        fallback(safeField(fields, 3), "Auction #" + safeField(fields, 1)),
+        safeField(fields, 4),
+        formatMoney(safeField(fields, 5)),
+        formatMoney(safeField(fields, 6)),
+        safeField(fields, 7),
+        safeField(fields, 8),
+        Boolean.parseBoolean(safeField(fields, 9)),
+        shortTimestamp(safeField(fields, 10)),
+        shortTimestamp(safeField(fields, 11)),
+        safeField(fields, 12),
+        fallback(safeField(fields, 13), AUCTION_IMAGE_FALLBACK)
+    );
   }
 
   private AuctionCardData parseLegacyAdminAuctionCard(String payload) {
@@ -802,10 +899,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     switch (sectionKey) {
       case "auctions" -> renderAuctions(filter);
-      case "myBids" -> renderNoLiveData(
-          "My Bid Tracking",
-          "Chưa có truy vấn DB cho lịch sử bid của user trong màn này, nên không hiển thị dữ liệu ảo."
-      );
+      case "myBids" -> renderMyBids(filter);
       case "autoBids" -> renderNoLiveData(
           "Auto Bid Controls",
           "Chưa có truy vấn DB cho auto-bid của user trong màn này, nên không hiển thị dữ liệu ảo."
@@ -1144,10 +1238,92 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void renderMyBids(String filter) {
-    renderNoLiveData(
-        "My Bid Tracking",
-        "Chưa có truy vấn DB cho lịch sử bid của user trong màn này, nên không hiển thị dữ liệu ảo."
-    );
+    setWorkspaceTitle("My Bids");
+    renderChips(filter, "All", "Winning", "Outbid", "Won", "Lost");
+    addHeader("Auction", "Current Bid", "Your Bid");
+
+    if (!myBidsLoaded) {
+      requestUserBids();
+      addLoadingRow("Loading your bid history...");
+      return;
+    }
+
+    List<UserRow> rows = new ArrayList<>();
+    for (MyBidData bid : myBids) {
+      String status = resolveMyBidStatus(bid);
+      rows.add(row(
+          bid.itemName,
+          buildMyBidMeta(bid),
+          bid.currentPrice,
+          bid.userBid,
+          status,
+          buildMyBidDetailText(bid, status),
+          initialsFor(bid.itemName),
+          isAuctionStillOpen(bid) ? "Open" : "View"
+      ));
+    }
+
+    addFilteredRows(rows, filter);
+  }
+
+  private void addLoadingRow(String message) {
+    GridPane row = createTableGrid("data-row");
+    Label loading = new Label(message);
+    loading.getStyleClass().add("row-meta");
+    loading.setWrapText(true);
+    loading.setMaxWidth(Double.MAX_VALUE);
+    GridPane.setColumnSpan(loading, 5);
+    row.add(loading, 0, 0);
+    workspaceBox.getChildren().add(row);
+  }
+
+  private String buildMyBidMeta(MyBidData bid) {
+    String category = fallback(prettyStatus(bid.category), "Auction");
+    String mode = bid.autoBid ? "Auto bid" : "Manual bid";
+    return category + " • AUC-" + bid.auctionId + " • " + mode + " • " + bid.bidTime;
+  }
+
+  private String buildMyBidDetailText(MyBidData bid, String status) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Auction ID: AUC-").append(bid.auctionId).append('\n');
+    builder.append("Item ID: ITEM-").append(bid.itemId).append('\n');
+    builder.append("Bid ID: BID-").append(bid.bidId).append('\n');
+    builder.append("Category: ").append(prettyStatus(bid.category)).append('\n');
+    builder.append("Current price: ").append(bid.currentPrice).append('\n');
+    builder.append("Your latest bid: ").append(bid.userBid).append('\n');
+    builder.append("Status: ").append(status).append('\n');
+    builder.append("Auction status: ").append(prettyStatus(bid.auctionStatus)).append('\n');
+    builder.append("Bid type: ").append(bid.autoBid ? "Auto bid" : "Manual bid").append('\n');
+    builder.append("Bid time: ").append(bid.bidTime).append('\n');
+    builder.append("End time: ").append(bid.endTime);
+    return builder.toString();
+  }
+
+  private String resolveMyBidStatus(MyBidData bid) {
+    String auctionStatus = normalize(bid.auctionStatus);
+    boolean isWinner = bid.winnerId != null && !bid.winnerId.isBlank()
+        && bid.winnerId.equals(currentUserIdString());
+
+    if (auctionStatus.equals("finished") || auctionStatus.equals("paid")) {
+      return isWinner ? "Won" : "Lost";
+    }
+    if (auctionStatus.equals("canceled")) {
+      return "Canceled";
+    }
+    if (isWinner || normalize(bid.bidStatus).equals("winning")) {
+      return "Winning";
+    }
+    return "Outbid";
+  }
+
+  private boolean isAuctionStillOpen(MyBidData bid) {
+    String auctionStatus = normalize(bid.auctionStatus);
+    return auctionStatus.equals("open") || auctionStatus.equals("running");
+  }
+
+  private String currentUserIdString() {
+    User currentUser = SessionManager.getCurrentUser();
+    return currentUser == null ? "" : String.valueOf(currentUser.getUserId());
   }
 
   private void renderAutoBids(String filter) {
@@ -1696,6 +1872,7 @@ public class UserDashboardController extends BaseDashboardController {
       }
       showBidFeedback("Your bid has been confirmed by the server.", false);
       notifUIHandler.showSuccess("Bid accepted", "The auction price will update in real time.");
+      requestUserBids();
       return;
     }
     if (message.startsWith("BID_FAIL")) {
@@ -1755,6 +1932,10 @@ public class UserDashboardController extends BaseDashboardController {
     String endTime = safeField(fields, 6);
 
     replaceAuctionCardBid(auctionId, amount, totalBids, secondsLeft, endTime);
+    if (myBidsLoaded || "myBids".equals(currentSectionKey)) {
+      requestUserBids();
+    }
+
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionPrice(amount, totalBids);
       showBidFeedback("Current price updated in real time.", false);
@@ -4165,6 +4346,54 @@ public class UserDashboardController extends BaseDashboardController {
       this.attributes = attributes;
       this.snipeWindowSeconds = snipeWindowSeconds;
       this.snipeExtensionSeconds = snipeExtensionSeconds;
+    }
+  }
+
+  private static class MyBidData {
+    private final String bidId;
+    private final String auctionId;
+    private final String itemId;
+    private final String itemName;
+    private final String category;
+    private final String currentPrice;
+    private final String userBid;
+    private final String bidStatus;
+    private final String auctionStatus;
+    private final boolean autoBid;
+    private final String bidTime;
+    private final String endTime;
+    private final String winnerId;
+    private final String imagePath;
+
+    private MyBidData(
+        String bidId,
+        String auctionId,
+        String itemId,
+        String itemName,
+        String category,
+        String currentPrice,
+        String userBid,
+        String bidStatus,
+        String auctionStatus,
+        boolean autoBid,
+        String bidTime,
+        String endTime,
+        String winnerId,
+        String imagePath) {
+      this.bidId = bidId == null ? "" : bidId;
+      this.auctionId = auctionId == null ? "" : auctionId;
+      this.itemId = itemId == null ? "" : itemId;
+      this.itemName = itemName == null ? "Auction" : itemName;
+      this.category = category == null ? "" : category;
+      this.currentPrice = currentPrice == null ? "" : currentPrice;
+      this.userBid = userBid == null ? "" : userBid;
+      this.bidStatus = bidStatus == null ? "" : bidStatus;
+      this.auctionStatus = auctionStatus == null ? "" : auctionStatus;
+      this.autoBid = autoBid;
+      this.bidTime = bidTime == null ? "" : bidTime;
+      this.endTime = endTime == null ? "" : endTime;
+      this.winnerId = winnerId == null ? "" : winnerId;
+      this.imagePath = imagePath == null ? "" : imagePath;
     }
   }
 
