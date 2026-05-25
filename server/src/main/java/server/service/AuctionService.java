@@ -223,6 +223,11 @@ public class AuctionService {
     // Nếu trả null → lỗi hạ tầng (DB/lock), không rollback thêm gì ở đây.
     BidTransactionService txService = new BidTransactionService();
     BidTransaction manualTx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
+    // Nếu persist Auto-Bid thì end không xử lý thêm
+    if (isAutoBid){
+      logger.info("placeBid() – auto-bid for auction {} by user {}", auctionId, userId);
+      return true;
+    }
     if (manualTx == null) {
       logger.error("placeBid() – infrastructure failure for auction {} by user {}", auctionId, userId);
       return false;
@@ -595,21 +600,16 @@ public class AuctionService {
     try (Connection conn = DBConnection.getConnection()) {
       conn.setAutoCommit(false);
       try {
-        int autoBidderId = autoBidTx.getBidderId();
-        bidTransactionDAO.updateAuctionState(conn,
+        // Gọi lại full flow thay vì tự update + insert
+        return this.placeBid(
             auction.getId(),
-            autoBidderId,
+            autoBidTx.getBidderId(),
             autoBidTx.getAmount(),
-            auction.getEndTime());
-
-        bidTransactionDAO.insertBidTransaction(conn, toBidHistoryDTO(autoBidTx));
-        conn.commit();
-        logger.info("Auto-bid persisted for auction {}", auction.getId());
-        return true;
+            true   // isAutoBid = true
+        );
       } catch (Exception e) {
-        conn.rollback();
-        logger.error("Failed to persist auto-bid", e);
-        return false;
+          logger.error("Auto-bid persist failed", e);
+          return false;
       }
     } catch (SQLException e) {
       logger.error("DB connection error when persisting auto-bid", e);

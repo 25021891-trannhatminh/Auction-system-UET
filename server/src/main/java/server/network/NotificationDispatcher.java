@@ -3,6 +3,7 @@ package server.network;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.common.ProtocolConstants;
+import server.common.enums.NotificationType;
 import server.common.model.NotificationEvent;
 
 import java.util.HashSet;
@@ -95,12 +96,8 @@ public class NotificationDispatcher implements Runnable {
       }
 
       // ── Nhánh 2: NotificationEvent thông thường → PUSH_NOTIF ──────────────
-      String type = event.getType() != null ? event.getType().name() : "INFO";
-      String title = event.getTitle() != null ? event.getTitle() : "";
-      String content = event.getMessage() != null ? event.getMessage() : "";
-
       // 2. Format chuỗi theo giao thức (nên tự format để giảm phụ thuộc ClientHandler)
-      String rawProtocolMessage = String.format("PUSH_NOTIF|%s|%s|%s", type, title, content);
+      String rawProtocolMessage = buildProtocolMessage(event);
 
       // 3. Đẩy sang ClientManager
       // Nếu user offline, sendToUser sẽ không tìm thấy handler và bỏ qua (Hợp lý)
@@ -199,6 +196,62 @@ public class NotificationDispatcher implements Runnable {
     }
     logger.debug("Dispatcher – Broadcast auctionId={} → {}/{} watchers reached",
         auctionId, counter, snapshotUserList.size());
+  }
+
+  /**
+   * Xây dựng message theo Protocol một cách rõ ràng, dễ mở rộng
+   */
+  private String buildProtocolMessage(NotificationEvent event) {
+    String type = event.getType() != null ? event.getType().name() : "INFO";
+    String[] infoDetail = event.getTitle().split(" ");
+    String content = event.getMessage() != null ? event.getMessage() : "";
+    Integer relatedId = event.getRelatedId(); // thường là auctionId
+
+    switch (event.getType()) {
+
+      case NotificationType.BID_PLACED:
+        // AUCTION_BID_UPDATE|auctionId|bidderId|itemName|amount
+        return String.format("PUSH_NOTIF|AUCTION_BID_UPDATE|%d|%d|%s|%s",
+            relatedId != null ? relatedId : 0,
+            event.getUserId(),                    // bidderId
+            infoDetail[0],                        // itemName
+            infoDetail[1]                         // amount
+        );
+
+      case NotificationType.TIME_EXTENDED:
+        // TIME_EXTENDED|auctionId|itemName|addSeconds
+        return String.format("PUSH_NOTIF|TIME_EXTENDED|%d|%s|%s",
+            relatedId != null ? relatedId : 0,
+            infoDetail[0],                       // itemName
+            infoDetail[1]                       // addSeconds
+        );
+
+      case NotificationType.OUTBID:
+        // OUTBID|auctionId|bidderId|itemName|newPrice
+        return String.format("PUSH_NOTIF|OUTBID|%d|%d|%s|%s",
+            relatedId != null ? relatedId : 0,
+            event.getUserId(),
+            infoDetail[0],                       // itemName
+            infoDetail[1]                       // newPrice
+        );
+      case NotificationType.AUCTION_WON:
+      case NotificationType.AUCTION_LOST:
+      case NotificationType.AUCTION_STARTED:
+      case NotificationType.AUCTION_ENDED:
+      case NotificationType.PAYMENT_DUE:
+      case NotificationType.PAYMENT_RECEIVED:
+      case NotificationType.ITEM_APPROVED:
+      case NotificationType.ITEM_REJECTED:
+      case NotificationType.SYSTEM:
+      default:
+        // Format mặc định: PUSH_NOTIF|TYPE|RELATED_ID|TITLE|CONTENT
+        return String.format("PUSH_NOTIF|%s|%s|%s|%s",
+            type,
+            relatedId != null ? relatedId : "",
+            event.getTitle(),
+            content
+        );
+    }
   }
   public int getQueueSize() {
     return queue.size();

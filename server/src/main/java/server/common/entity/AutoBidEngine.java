@@ -166,20 +166,31 @@ public class AutoBidEngine {
     /* Xử lý return BidTransaction */
     private PlaceBidResult executeWinnerBidTransaction(Auction auction, AutoBidConfig winner, AutoBidConfig secondWinner) {
         BigDecimal amountBidWinner = calculateWinnerAmount(auction.getCurrentPrice(), winner, secondWinner);
+
         if (amountBidWinner.compareTo(auction.getCurrentPrice()) <= 0) {
             winner.complete();
             return null;
         }
         // Lấy User object để đặt giá
         User winnerBidder = getUser(auction.getId(), winner.getBidderId());
+        User previousWinner = auction.getCurrentLeader() != null ? auction.getCurrentLeader() : winnerBidder;
+        BigDecimal previousPrice = auction.getCurrentPrice();
         if (winnerBidder == null) {
             System.err.printf("[AutoBidEngine] Winner bidder object not found for id=%s%n",
                 winner.getBidderId());
             return null;
         }
         try {
-            // placeBid() giờ trả PlaceBidResult — lấy tx từ đó
-            Auction.PlaceBidResult result = auction.placeBid(winnerBidder, amountBidWinner, true);
+            // placeBid() có trong executePlaceBidFlow rồi
+//            Auction.PlaceBidResult result = auction.placeBid(winnerBidder, amountBidWinner, true);
+            BidTransaction tx = new BidTransaction(
+                auction.getId(), winnerBidder.getId(), winnerBidder.getUsername(), amountBidWinner, true
+            );
+            BidTransaction outBidTx = new BidTransaction(
+                auction.getId(), previousWinner.getId(), previousWinner.getUsername(), previousPrice, false
+            );
+            boolean timeExtend = (auction.getSecondsRemaining() > 0 && auction.getSecondsRemaining() <= auction.getSnipeWindowSeconds());
+            PlaceBidResult result = new PlaceBidResult(tx,outBidTx, timeExtend,previousPrice,previousWinner,auction.getEndTime(),auction.getLastBidTime());
             if (amountBidWinner.compareTo(winner.getMaxBid()) >= 0) winner.complete();
             return result;
 

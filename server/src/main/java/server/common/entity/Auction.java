@@ -219,7 +219,7 @@ public class Auction extends Entity {
         // ── Step 1: Kiểm tra trạng thái — TRƯỚC khi lock ─────────────────────
         // Tối ưu: không cần lock để đọc status (read-only check)
         // Nếu đã FINISHED/CANCELED thì từ chối ngay, không tốn tài nguyên
-        if (status != AuctionStatus.RUNNING) {
+        if (status != AuctionStatus.RUNNING || getSecondsRemaining() <= 0) {
             throw new AuctionClosedException(getId(), status);
         }
 
@@ -237,7 +237,7 @@ public class Auction extends Entity {
 
             // ── Step 3: Kiểm tra lại status SAU khi lock ─────────────────────
             //Vì có thể phiên vừa đóng trong khoảng thời gian giữa Step 1 và Step 2
-            if (status != AuctionStatus.RUNNING) {
+            if (status != AuctionStatus.RUNNING || getSecondsRemaining() <= 0) {
                 throw new AuctionClosedException(getId(), status);
             }
 
