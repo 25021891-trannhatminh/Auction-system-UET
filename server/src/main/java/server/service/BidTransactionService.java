@@ -108,7 +108,12 @@ public class BidTransactionService {
         bidTransactionDAO.insertBidTransaction(conn, txDTO);
 
         conn.commit();
-        auction.notifyBidCommitted(tx, result.timeExtended());
+
+        // ── Bước 7: Notify sau khi DB commit thành công ───────────────────────────────────────
+        // Truyền toàn bộ result để notifyBidCommitted() lấy previousLeader đúng snapshot,
+        // tránh bug gửi onOutbid nhầm cho người vừa thắng.
+        auction.notifyBidCommitted(result);
+
         // Gọi rescheduleClose() trực tiếp từ result — không dùng checkAndResetExtensionFlag()
         // để tránh miss khi nhiều bid anti-snipe đến liên tiếp.
         if (result.timeExtended()) {
