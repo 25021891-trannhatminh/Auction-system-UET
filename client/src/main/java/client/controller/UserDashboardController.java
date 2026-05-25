@@ -1,7 +1,7 @@
 package client.controller;
 
 import client.model.User;
-import client.service.CloudMediaManager;
+import client.service.CloudMediaApiClient;
 import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.io.File;
@@ -122,8 +122,13 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<SellerItemData> sellerItems = new ArrayList<>();
   private List<SellerItemData> incomingSellerItems = new ArrayList<>();
   private boolean sellerItemsLoaded;
-  private final Map<String, Image> imageCache = new HashMap<>();
-  private final CloudMediaManager cloudMediaManager = new CloudMediaManager();
+  private final Map<String, Image> imageCache = new LinkedHashMap<String, Image>() {
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
+      return size() > 50; // Giữ tối đa 50 ảnh trong cache
+    }
+  };
+  private final CloudMediaApiClient cloudMediaApiClient = new CloudMediaApiClient("http://localhost:8080");
   /**
    * Reused connection for the inline Create Listing form.
    *
@@ -2104,12 +2109,15 @@ public class UserDashboardController extends BaseDashboardController {
       return null;
     }
 
-    if (imageCache.containsKey(imagePath)) {
-      return imageCache.get(imagePath);
+    // Tạo URL đã resize (dùng kích thước vừa phải, ví dụ 300x200)
+    String optimizedPath = addResizeParams(imagePath.trim(), 300, 200);
+
+    if (imageCache.containsKey(optimizedPath)) {
+      return imageCache.get(optimizedPath);
     }
 
-    Image image = loadImage(imagePath);
-    imageCache.put(imagePath, image);
+    Image image = loadImage(optimizedPath);
+    imageCache.put(optimizedPath, image);
     return image;
   }
 
@@ -2122,19 +2130,19 @@ public class UserDashboardController extends BaseDashboardController {
       if (normalizedPath.startsWith("file:")
           || normalizedPath.startsWith("http://")
           || normalizedPath.startsWith("https://")) {
-        return new Image(normalizedPath, false);
+        return new Image(normalizedPath, true);
       }
 
       File localFile = new File(normalizedPath);
       if (localFile.exists()) {
-        return new Image(localFile.toURI().toString(), false);
+        return new Image(localFile.toURI().toString(), true);
       }
 
       if (getClass().getResource(normalizedPath) == null) {
         return null;
       }
 
-      return new Image(getClass().getResource(normalizedPath).toExternalForm(), false);
+      return new Image(getClass().getResource(normalizedPath).toExternalForm(), true);
     } catch (IllegalArgumentException exception) {
       return null;
     }
@@ -3217,7 +3225,7 @@ public class UserDashboardController extends BaseDashboardController {
         Path target = uploadRoot.resolve(batch + "_" + index + "_" + safeName);
         Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
 
-        String publicUri = cloudMediaManager.uploadAsset(target.toFile());
+        String publicUri = cloudMediaApiClient.upload(target.toFile());
         if (publicUri == null || publicUri.isBlank()) {
           showCreateMessage(messageLabel,
               "Cannot upload image to cloud storage. Please try again.", true);
@@ -3809,10 +3817,22 @@ public class UserDashboardController extends BaseDashboardController {
     String normalizedPayload = imagePayload.replace("\\n", "\n");
     for (String image : normalizedPayload.split("\\R")) {
       if (image != null && !image.isBlank()) {
-        return image.trim();
+        return addResizeParams(image.trim(), 200, 150);
       }
     }
     return AUCTION_IMAGE_FALLBACK;
+  }
+
+  private String addResizeParams(String url, int width, int height) {
+    if (url == null || url.isBlank()) return url;
+    // Chỉ xử lý URL từ Cloudinary (chứa cloudinary.com)
+    if (url.contains("cloudinary.com")) {
+      // Chèn /w_200,h_150,c_fill/ trước upload path
+      // Ví dụ: https://res.cloudinary.com/.../upload/v123456/image.jpg
+      // -> https://res.cloudinary.com/.../upload/w_200,h_150,c_fill/v123456/image.jpg
+      return url.replaceFirst("/upload/", "/upload/w_" + width + ",h_" + height + ",c_fill/");
+    }
+    return url;
   }
 
   private String formatMoney(String value) {

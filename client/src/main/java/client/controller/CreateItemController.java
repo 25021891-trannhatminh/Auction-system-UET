@@ -2,7 +2,7 @@ package client.controller;
 
 import client.SceneNavigator;
 import client.model.User;
-import client.service.CloudMediaManager;
+import client.service.CloudMediaApiClient;
 import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.io.File;
@@ -76,7 +76,7 @@ public class CreateItemController {
   @FXML private Button submitItemButton;
 
   private final ToggleGroup purchaseTypeGroup = new ToggleGroup();
-  private final CloudMediaManager cloudMediaManager = new CloudMediaManager();
+  private final CloudMediaApiClient cloudMediaApiClient = new CloudMediaApiClient("http://localhost:8080");
   private final List<Path> persistedImagePaths = new ArrayList<>();
   private final List<String> publicImageUris = new ArrayList<>();
   private int currentPreviewImageIndex;
@@ -463,11 +463,16 @@ public class CreateItemController {
     }
 
     for (Path path : localPaths) {
-      String publicUri = cloudMediaManager.uploadAsset(path.toFile());
-      if (publicUri == null || publicUri.isBlank()) {
+      try {
+        String publicUri = cloudMediaApiClient.upload(path.toFile());
+        if (publicUri == null || publicUri.isBlank()) {
+          return uploadedUris;
+        }
+        uploadedUris.add(publicUri);
+      } catch (Exception e) {
+        e.printStackTrace();
         return uploadedUris;
       }
-      uploadedUris.add(publicUri);
     }
     return uploadedUris;
   }
