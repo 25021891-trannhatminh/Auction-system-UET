@@ -45,6 +45,16 @@ public class BidTransactionDAO {
     private static final String SQL_SELECT_HISTORY =
         "SELECT bid_id, auction_id, bidder_id, amount, is_auto_bid, status, bid_time FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time DESC";
 
+    private static final String SQL_SELECT_HISTORY_WITH_BIDDERS = """
+        SELECT bt.bid_id, bt.auction_id, bt.bidder_id,
+               COALESCE(NULLIF(acc.username, ''), CONCAT('User #', bt.bidder_id)) AS bidder_name,
+               bt.amount, bt.is_auto_bid, bt.status, bt.bid_time
+        FROM bid_transactions bt
+        LEFT JOIN accounts acc ON acc.user_id = bt.bidder_id
+        WHERE bt.auction_id = ?
+        ORDER BY bt.bid_time DESC, bt.bid_id DESC
+        """;
+
     private static final String SQL_SELECT_LATEST_BY_BIDDER = """
         SELECT bt.bid_id, bt.auction_id, bt.bidder_id, bt.amount AS user_bid,
                bt.is_auto_bid, bt.status AS bid_status, bt.bid_time,
@@ -216,6 +226,37 @@ public class BidTransactionDAO {
     }
 
     /**
+     * Lấy lịch sử đặt giá kèm tên bidder cho màn seller view.
+     *
+     * @param auctionId ID phiên đấu giá cần xem lịch sử
+     * @return danh sách bid mới nhất lên đầu
+     */
+    public List<AuctionBidHistoryRow> getAuctionBidHistoryRows(int auctionId) {
+        List<AuctionBidHistoryRow> rows = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_HISTORY_WITH_BIDDERS)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(new AuctionBidHistoryRow(
+                        rs.getInt("bid_id"),
+                        rs.getInt("auction_id"),
+                        rs.getInt("bidder_id"),
+                        rs.getString("bidder_name"),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("status"),
+                        rs.getBoolean("is_auto_bid"),
+                        rs.getTimestamp("bid_time")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("getAuctionBidHistoryRows() - DB error for auctionId={}", auctionId, e);
+        }
+        return rows;
+    }
+
+    /**
      * Lấy mỗi auction mà user đã tham gia với bid mới nhất của chính user đó.
      *
      * <p>Dữ liệu này phục vụ màn My Bids: so sánh bid gần nhất của user với
@@ -329,6 +370,42 @@ public class BidTransactionDAO {
         // Trả về DTO tổng hợp (ở đây bọc thủ công hoặc tự động tùy cấu trúc DTO,
         // mặc định nạp tx vào phần manualTransaction để bảo toàn dữ liệu lịch sử)
         return new BidResultDTO(tx, null, rs.getBigDecimal("amount"), bidderName);
+    }
+
+    /**
+     * Projection row cho lịch sử bid trong màn seller view.
+     */
+    public static final class AuctionBidHistoryRow {
+        private final int bidId;
+        private final int auctionId;
+        private final int bidderId;
+        private final String bidderName;
+        private final BigDecimal amount;
+        private final String status;
+        private final boolean autoBid;
+        private final Timestamp bidTime;
+
+        public AuctionBidHistoryRow(int bidId, int auctionId, int bidderId,
+            String bidderName, BigDecimal amount, String status, boolean autoBid,
+            Timestamp bidTime) {
+            this.bidId = bidId;
+            this.auctionId = auctionId;
+            this.bidderId = bidderId;
+            this.bidderName = bidderName;
+            this.amount = amount;
+            this.status = status;
+            this.autoBid = autoBid;
+            this.bidTime = bidTime;
+        }
+
+        public int getBidId() { return bidId; }
+        public int getAuctionId() { return auctionId; }
+        public int getBidderId() { return bidderId; }
+        public String getBidderName() { return bidderName; }
+        public BigDecimal getAmount() { return amount; }
+        public String getStatus() { return status; }
+        public boolean isAutoBid() { return autoBid; }
+        public Timestamp getBidTime() { return bidTime; }
     }
 
     /**

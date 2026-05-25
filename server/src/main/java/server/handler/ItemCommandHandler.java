@@ -323,11 +323,15 @@ public class ItemCommandHandler {
                    i.name, COALESCE(i.description, '') AS description,
                    i.starting_price, i.status, i.created_at,
                    a.auction_id, a.status AS auction_status, a.current_price,
+                   a.current_winner_id, COALESCE(winner.username, '') AS winner_username,
+                   a.start_time, a.end_time,
+                   GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left,
                    COALESCE(bid_counts.bid_count, 0) AS bid_count,
                    COALESCE(imgs.image_urls, '') AS image_urls,
                    COALESCE(attrs.attribute_lines, '') AS attribute_lines
             FROM items i
             LEFT JOIN auctions a ON a.item_id = i.item_id
+            LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
             LEFT JOIN (
                 SELECT auction_id, COUNT(*) AS bid_count
                 FROM bid_transactions
@@ -371,7 +375,12 @@ public class ItemCommandHandler {
                         rs.getBigDecimal("current_price"),
                         rs.getInt("bid_count"),
                         rs.getString("image_urls"),
-                        rs.getString("attribute_lines")
+                        rs.getString("attribute_lines"),
+                        nullableInt(rs, "current_winner_id"),
+                        rs.getString("winner_username"),
+                        rs.getTimestamp("start_time"),
+                        rs.getTimestamp("end_time"),
+                        rs.getLong("seconds_left")
                     ));
                 }
             }

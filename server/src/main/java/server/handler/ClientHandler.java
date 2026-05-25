@@ -77,7 +77,6 @@ public class ClientHandler implements Runnable{
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
     private final AuctionHandler auctionHandler;
-    private final AutoBidHandler autoBidHandler;;
 
     /**
      * CONSTRUCTOR ĐÃ ĐƯỢC CHỈNH SỬA:
@@ -96,7 +95,6 @@ public class ClientHandler implements Runnable{
         this.adminHandler = new AdminHandler(auctionService);
         this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
         this.imageUploadHandler = new ImageUploadHandler();
-        this.autoBidHandler = new AutoBidHandler(auctionService);
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -217,16 +215,6 @@ public class ClientHandler implements Runnable{
                 send(leaveResult);
                 break;
 
-            case ProtocolConstants.AUTOBID_REGISTER:
-                // Format: AUTOBID_REGISTER <auctionID> <bidderID> <maxBidAmount> <increment>
-                String registerAutoBid = autoBidHandler.handleAutoBidRegister(request);
-                send(registerAutoBid);
-
-            case ProtocolConstants.AUTOBID_CANCEL:
-                // Format: AUTOBID_REGISTER <auctionID> <bidderID> <maxBidAmount> <increment>
-                String cancelAutoBid = autoBidHandler.handleAutoBidCancel(request);
-                send(cancelAutoBid);
-
             case "CONFIRM_PAYMENT": {
                 // Format: CONFIRM_PAYMENT <auctionId> <itemName...>
                 //
@@ -323,6 +311,10 @@ public class ClientHandler implements Runnable{
                 sendUserBids(request);
                 break;
 
+            case "SELLER_AUCTION_BIDS":
+                sendSellerAuctionBids(request);
+                break;
+
             case "USER_LIST_NOTIFICATIONS":
                 sendUserNotifications(request);
                 break;
@@ -364,7 +356,7 @@ public class ClientHandler implements Runnable{
                 send(banResult);
                 break;
 
-            case ProtocolConstants.ADMIN_UNBAN_USER:
+            case "ADMIN_UNBAN_USER":
                 if (request.length > 1) {
                     int targetUserId = Integer.parseInt(request[1]);
                     boolean unbanUserSuccess = adminService.unbanUser(this.userId, targetUserId);
@@ -920,6 +912,68 @@ public class ClientHandler implements Runnable{
         }
         int updated = notificationService.markAllRead(targetUserId);
         send("USER_MARK_NOTIFICATIONS_READ_SUCCESS " + fields(updated));
+    }
+
+    /**
+     * Sends bid history for an auction owned by the current seller.
+     *
+     * <p>Protocol payload matches the seller view in UserDashboardController:
+     * auctionId|bidId|bidderId|bidderName|amount|status|isAutoBid|bidTime.</p>
+     */
+    private void sendSellerAuctionBids(String[] request) {
+        int auctionId = request != null && request.length > 1
+            ? parseIntOrDefault(request[1], 0)
+            : 0;
+        send("SELLER_AUCTION_BIDS_BEGIN " + auctionId);
+
+        if (auctionId <= 0 || this.userId <= 0) {
+            send("SELLER_AUCTION_BIDS_ERROR " + fields(auctionId, "NOT_AUTHORIZED"));
+            send("SELLER_AUCTION_BIDS_END " + auctionId);
+            return;
+        }
+        if (!isAuctionOwnedByUser(auctionId, this.userId)) {
+            send("SELLER_AUCTION_BIDS_ERROR " + fields(auctionId, "NOT_OWNER"));
+            send("SELLER_AUCTION_BIDS_END " + auctionId);
+            return;
+        }
+
+        try {
+            List<BidTransactionDAO.AuctionBidHistoryRow> rows =
+                bidTransactionDAO.getAuctionBidHistoryRows(auctionId);
+            for (BidTransactionDAO.AuctionBidHistoryRow row : rows) {
+                send("SELLER_AUCTION_BID " + fields(
+                    auctionId,
+                    row.getBidId(),
+                    row.getBidderId(),
+                    row.getBidderName(),
+                    row.getAmount(),
+                    row.getStatus(),
+                    row.isAutoBid(),
+                    row.getBidTime()
+                ));
+            }
+        } catch (Exception e) {
+            send("SELLER_AUCTION_BIDS_ERROR " + fields(auctionId, e.getMessage()));
+            e.printStackTrace();
+        }
+        send("SELLER_AUCTION_BIDS_END " + auctionId);
+    }
+
+    /**
+     * Checks that the authenticated seller owns the requested auction.
+     */
+    private boolean isAuctionOwnedByUser(int auctionId, int sellerId) {
+        String sql = "SELECT seller_id FROM auctions WHERE auction_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt("seller_id") == sellerId;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     /**
