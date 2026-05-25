@@ -73,15 +73,32 @@ public final class ResponseBuilder {
     public static String bidSuccess(int auctionId, BigDecimal amount) {
         return String.format("%s %d %s", ProtocolConstants.BID_SUCCESS, auctionId, amount);
     }
-    
+
     /**
      * Tạo response đặt giá thất bại.
+     * Payload: "BID_FAIL auctionId reason"
      *
-     * @param reason Lý do thất bại
-     * @return "FAIL reason"
+     * <p>auctionId được đưa vào payload để client biết phiên nào bị lỗi —
+     * cần thiết khi user mở nhiều cửa sổ auction cùng lúc.
+     * Dùng {@code -1} khi auctionId chưa parse được (lỗi format).</p>
+     *
+     * @param auctionId ID phiên đấu giá; -1 nếu chưa xác định được
+     * @param reason    Mã lý do từ {@link ProtocolConstants} BID_REASON_*
+     * @return "BID_FAIL auctionId reason"
+     */
+    public static String bidFail(int auctionId, String reason) {
+        return String.format("%s %d %s", ProtocolConstants.BID_FAIL, auctionId, reason);
+    }
+
+    /**
+     * Overload tiện dụng khi auctionId chưa parse được (lỗi format đầu vào).
+     * Payload: "BID_FAIL -1 reason"
+     *
+     * @param reason Mã lý do từ {@link ProtocolConstants} BID_REASON_*
+     * @return "BID_FAIL -1 reason"
      */
     public static String bidFail(String reason) {
-        return String.format("%s %s", ProtocolConstants.BID_FAIL, reason);
+        return bidFail(-1, reason);
     }
     
     // ==================== LIST ====================

@@ -33,10 +33,24 @@ public final class ProtocolConstants {
     public static final String LEAVE_AUCTION_SUCCESS =  "LEAVE_AUCTION_SUCCESS";
     public static final String LEAVE_AUCTION_FAIL = "LEAVE_AUCTION_FAIL";
 
+    // --- Reason codes cho BID_FAIL (client dùng để hiển thị message đúng) ---
+    public static final String BID_REASON_NOT_LOGGED_IN      = "NOT_LOGGED_IN";
+    public static final String BID_REASON_INVALID_FORMAT     = "INVALID_FORMAT";
+    public static final String BID_REASON_AMOUNT_NOT_POSITIVE = "AMOUNT_NOT_POSITIVE";
+    public static final String BID_REASON_USER_OFFLINE        = "USER_OFFLINE";
+    public static final String BID_REASON_USER_NOT_FOUND      = "USER_NOT_FOUND";
+    public static final String BID_REASON_AUCTION_CLOSED      = "AUCTION_CLOSED";
+    public static final String BID_REASON_AUCTION_NOT_FOUND   = "AUCTION_NOT_FOUND";
+    public static final String BID_REASON_BELOW_MIN_INCREMENT = "BELOW_MIN_INCREMENT";
+    public static final String BID_REASON_BELOW_CURRENT_PRICE = "BELOW_CURRENT_PRICE";
+    public static final String BID_REASON_OWN_AUCTION         = "OWN_AUCTION";
+    public static final String BID_REASON_DB_FAILED            = "DB_PERSIST_FAILED";
+    public static final String BID_REASON_SYSTEM_ERROR         = "SYSTEM_ERROR";
+
     // ========== BID ==========
     public static final String BID = "BID";
     public static final String BID_SUCCESS = "BID_SUCCESS";
-    public static final String BID_FAIL = "FAIL";
+    public static final String BID_FAIL = "BID_FAIL";
     
     // ========== LIST ==========
     public static final String LIST = "LIST";
