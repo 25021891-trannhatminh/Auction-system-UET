@@ -216,11 +216,11 @@ public class PaymentService {
       conn.commit();
 
       // 7. Post-commit notification + wallet update
-      notificationService.push(buyerId, "Hoàn tiền đấu giá",
-          "Bạn đã được hoàn lại " + amount + " từ phiên: " + itemName,
+      notificationService.push(buyerId, "Auction Refund",
+          "You have been refunded " + amount + " from auction: " + itemName,
           NotificationType.SYSTEM, auctionId);
-      notificationService.push(sellerId, "Rút tiền hoàn trả",
-          "Hệ thống đã hoàn trả " + amount + " cho người mua của phiên: " + itemName,
+      notificationService.push(sellerId, "Refund Withdrawal",
+          "The system refunded " + amount + " to the buyer of auction: " + itemName,
           NotificationType.SYSTEM, auctionId);
 
       pushWalletUpdate(buyerId, buyerWallet.getBalance().add(amount));
@@ -280,11 +280,11 @@ public class PaymentService {
 
   /** Gửi thông báo thanh toán thành công cho buyer & seller */
   private void notifyPaymentSuccess(int buyerId, int sellerId, BigDecimal amount, String itemName, int auctionId) {
-    notificationService.push(buyerId, "Thanh toán thành công",
-        "Bạn đã hoàn tất thanh toán " + amount + " cho vật phẩm: " + itemName,
+    notificationService.push(buyerId, "Payment Successful",
+        "You have completed payment of " + amount + " for item: " + itemName,
         NotificationType.SYSTEM, auctionId);
-    notificationService.push(sellerId, "Nhận tiền thanh toán",
-        "Bạn đã nhận được " + amount + " từ phiên đấu giá vật phẩm: " + itemName,
+    notificationService.push(sellerId, "Payment Received",
+        "You have received " + amount + " from auction item: " + itemName,
         NotificationType.PAYMENT_RECEIVED, auctionId);
   }
 

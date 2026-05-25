@@ -167,6 +167,17 @@ public class NotificationDispatcher implements Runnable {
     logger.debug("Dispatcher – Cleared all watchers for auctionId={}", auctionId);
   }
 
+  /**
+   * Đẩy một gói socket raw tới toàn bộ client đang xem một phiên đấu giá.
+   * Dùng cho realtime bid vì UI cần payload có cấu trúc riêng thay vì chỉ PUSH_NOTIF.
+   */
+  public void pushRawToAuctionWatchers(int auctionId, String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+    pushToAuctionWatchers(auctionId, message);
+  }
+
 
   /**
    * Push message đến tất cả userId đang xem phiên auctionId.

@@ -37,8 +37,8 @@ public class AdminService {
     boolean success = accountDAO.banUser(userId);
     if (success) {
       logger.info("Admin {} banned user {} | Reason: {}", adminId, userId, reason);
-      auctionService.notifySystemNotification(userId, "Tài khoản bị khóa",
-          "Tài khoản của bạn đã bị khóa. Lý do: " + reason);
+      auctionService.notifySystemNotification(userId, "Account Suspended",
+          "Your account has been suspended. Reason: " + reason);
     } else logger.info("Admin {} cannot banned user {}", adminId, userId);
     return success;
   }
@@ -49,8 +49,8 @@ public class AdminService {
 
     boolean success = accountDAO.updateStatus(userId, UserStatus.ACTIVE);
     if (success) {
-      auctionService.notifySystemNotification(userId, "Tài khoản được mở khóa",
-          "Tài khoản của bạn đã được mở khóa.");
+      auctionService.notifySystemNotification(userId, "Account Reactivated",
+          "Your account has been reactivated.");
     }
     return success;
   }

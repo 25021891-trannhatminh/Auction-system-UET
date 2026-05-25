@@ -1,24 +1,21 @@
 package server.common.entity;
 
 
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import server.common.ProtocolConstants;
-import server.common.entity.exception.AuctionClosedException;
-import server.common.entity.exception.InvalidBidException;
-import server.common.enums.AuctionStatus;
-import server.common.enums.BidStatus;
-import server.service.AuctionService;
-import server.service.listeners.RealTimeObserver;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
+
+import server.common.ProtocolConstants;
+import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.InvalidBidException;
+import server.common.enums.AuctionStatus;
+import server.common.enums.BidStatus;
+import server.service.listeners.RealTimeObserver;
 
 /*
   ═══════════════════════════════════════════════════════════

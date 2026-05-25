@@ -1,28 +1,29 @@
 package server.service;
 
-import java.time.LocalDateTime;
-import server.common.entity.Auction;
-import server.common.entity.Auction.PlaceBidResult;
-import server.common.entity.BidTransaction;
-import server.common.entity.User;
-import server.common.enums.AuctionStatus;
-import server.common.entity.exception.AuctionClosedException;
-import server.common.entity.exception.InvalidBidException;
-import server.common.entity.manager.AuctionManager;
-import server.common.model.BidHistoryDTO;
-import server.database.DBConnection;
-import server.repository.AccountDAO;
-import server.repository.BidTransactionDAO;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import server.common.entity.Auction;
+import server.common.entity.Auction.PlaceBidResult;
+import server.common.entity.BidTransaction;
+import server.common.entity.User;
+import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.InvalidBidException;
+import server.common.entity.manager.AuctionManager;
+import server.common.enums.AuctionStatus;
+import server.common.model.BidHistoryDTO;
+import server.database.DBConnection;
+import server.network.NotificationDispatcher;
+import server.repository.AccountDAO;
+import server.repository.BidTransactionDAO;
 import server.repository.BidTransactionDAO.AuctionLockInfo;
 
 public class BidTransactionService {
@@ -147,6 +148,50 @@ public class BidTransactionService {
       logger.error("executePlaceBidFlow() - DB network connection error", e);
       return null;
     }
+  }
+
+  /**
+   * Phát payload realtime riêng cho UI đang mở đúng phòng đấu giá.
+   * Gói tin này chỉ được gửi sau khi transaction đã commit thành công xuống DB.
+   */
+  private void publishRealtimeBidUpdate(Auction auction, BidTransaction tx, boolean timeExtended) {
+    String leaderName = auction.getCurrentLeader() != null
+        ? auction.getCurrentLeader().getUsername()
+        : "";
+
+    String bidUpdateMessage = String.format(
+        "BID_UPDATE|%d|%d|%s|%d|%s|%d|%s|%s",
+        auction.getId(),
+        tx.getBidderId(),
+        tx.getAmount().toPlainString(),
+        auction.getTotalBids(),
+        encodeRealtimeField(leaderName),
+        auction.getSecondsRemaining(),
+        auction.getEndTime().toString(),
+        tx.isAutoBid() ? "true" : "false"
+    );
+    NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), bidUpdateMessage);
+
+    if (timeExtended) {
+      String timeExtendedMessage = String.format(
+          "TIME_EXTENDED|%d|%d|%s|%d",
+          auction.getId(),
+          auction.getSecondsRemaining(),
+          auction.getEndTime().toString(),
+          auction.getSnipeExtensionSeconds()
+      );
+      NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), timeExtendedMessage);
+    }
+  }
+
+  private String encodeRealtimeField(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace("\\", "\\\\")
+        .replace("|", "\\p")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r");
   }
 
   /**

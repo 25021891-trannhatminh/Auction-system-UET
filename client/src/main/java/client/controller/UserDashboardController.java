@@ -146,6 +146,12 @@ public class UserDashboardController extends BaseDashboardController {
   private String activeFilter = "Overview";
   private int auctionPage = 1;
   private Timeline auctionDetailCountdownTimeline;
+  private String activeAuctionDetailId;
+  private Label activeAuctionPriceLabel;
+  private Label activeAuctionBidCountLabel;
+  private TextField activeAuctionBidInput;
+  private Button activeAuctionBidButton;
+  private Label activeAuctionBidMessageLabel;
 
 
 
@@ -163,6 +169,10 @@ public class UserDashboardController extends BaseDashboardController {
       }
       if (msg.startsWith("PUSH_NOTIF|")) {
         Platform.runLater(() -> processPushNotification(msg));
+        return;
+      }
+      if (isRealtimeBidMessage(msg)) {
+        Platform.runLater(() -> handleRealtimeBidMessage(msg));
         return;
       }
       if (isAuctionListMessage(msg)) {
@@ -235,6 +245,17 @@ public class UserDashboardController extends BaseDashboardController {
         || message.equals("ADMIN_AUCTIONS_BEGIN")
         || message.equals("ADMIN_AUCTIONS_END")
         || message.startsWith("ADMIN_DATA_ERROR");
+  }
+
+  private boolean isRealtimeBidMessage(String message) {
+    return message.startsWith("AUCTION_SNAPSHOT|")
+        || message.startsWith("BID_UPDATE|")
+        || message.startsWith("TIME_EXTENDED|")
+        || message.startsWith("AUCTION_CLOSED|")
+        || message.startsWith("BID_SUCCESS")
+        || message.startsWith("FAIL ")
+        || message.startsWith("JOIN_AUCTION_FAIL")
+        || message.startsWith("LEAVE_AUCTION_SUCCESS");
   }
 
   private void handleUserAuctionServerMessage(String message) {
@@ -399,6 +420,7 @@ public class UserDashboardController extends BaseDashboardController {
   @Override
   protected void handleLogout() {
     stopAuctionDetailCountdown();
+    leaveActiveAuctionRoom();
     // 1. Dọn dẹp, gỡ bỏ bộ lắng nghe Real-time của User khỏi danh sách tổng
     if (networkManager != null && userNetworkHandler != null) {
       networkManager.removeMessageHandler(userNetworkHandler);
@@ -431,6 +453,7 @@ public class UserDashboardController extends BaseDashboardController {
   @Override
   protected void showSection(String sectionKey) {
     stopAuctionDetailCountdown();
+    leaveActiveAuctionRoom();
     currentSectionKey = sectionKey;
     activeFilter = getDefaultFilter(sectionKey);
     auctionPage = 1;
@@ -473,7 +496,7 @@ public class UserDashboardController extends BaseDashboardController {
     setLabelText(activityLine1, "Auction data loads from database.");
     setLabelText(activityLine2, "No fake auction activity is shown.");
     setLabelText(activityLine3, "Create listings and admin auction rooms to populate this view.");
-    setLabelText(activityLine4, "Place Bid is disabled until bidding flow is wired.");
+    setLabelText(activityLine4, "Manual bidding is wired to the server and updates the auction room in real time.");
   }
 
   private void setCreateListingFloatingButtonVisible(boolean visible) {
@@ -1320,8 +1343,9 @@ public class UserDashboardController extends BaseDashboardController {
     Button bid = new Button("Place Bid");
     bid.setMnemonicParsing(false);
     bid.getStyleClass().add("auction-market-bid-btn");
-    bid.setDisable(true);
+    bid.setDisable(!isAuctionBidEnabled(data));
     bid.setMaxWidth(Double.MAX_VALUE);
+    bid.setOnAction(event -> renderAuctionDetailPage(data));
 
     Button view = new Button("View Auction");
     view.setMnemonicParsing(false);
@@ -1482,31 +1506,355 @@ public class UserDashboardController extends BaseDashboardController {
     HBox bidRow = new HBox(10);
     bidRow.getStyleClass().add("auction-detail-bid-row");
     TextField bidInput = new TextField();
-    bidInput.setPromptText(data.minimumIncrement);
-    bidInput.setDisable(true);
+    bidInput.setPromptText("Enter bid amount");
+    bidInput.setDisable(!isAuctionBidEnabled(data));
     bidInput.getStyleClass().add("auction-detail-bid-input");
     bidInput.setMinWidth(0);
     HBox.setHgrow(bidInput, Priority.ALWAYS);
 
-    Button disabledBid = new Button("Place Bid");
-    disabledBid.setMnemonicParsing(false);
-    disabledBid.getStyleClass().add("auction-market-bid-btn");
-    disabledBid.setDisable(true);
-    lockRegionWidth(disabledBid, 126);
+    Button placeBidButton = new Button("Place Bid");
+    placeBidButton.setMnemonicParsing(false);
+    placeBidButton.getStyleClass().add("auction-market-bid-btn");
+    placeBidButton.setDisable(!isAuctionBidEnabled(data));
+    lockRegionWidth(placeBidButton, 126);
+    placeBidButton.setOnAction(event -> submitManualBid(data, bidInput));
 
-    bidRow.getChildren().addAll(bidInput, disabledBid);
+    bidRow.getChildren().addAll(bidInput, placeBidButton);
+
+    Label bidMessage = new Label(isAuctionBidEnabled(data)
+        ? "Minimum increment: " + data.minimumIncrement
+        : "This auction is not accepting bids right now.");
+    bidMessage.getStyleClass().add("auction-detail-end-note");
+    bidMessage.setWrapText(true);
 
     Label endNote = new Label("This auction will end on " + data.endTime + ".");
     endNote.getStyleClass().add("auction-detail-end-note");
     endNote.setWrapText(true);
 
-    bidPanel.getChildren().addAll(metaRow, priceBox, bidRow, endNote);
+    bidPanel.getChildren().addAll(metaRow, priceBox, bidRow, bidMessage, endNote);
+
+    activeAuctionDetailId = data.auctionId;
+    activeAuctionPriceLabel = price;
+    activeAuctionBidCountLabel = bids;
+    activeAuctionBidInput = bidInput;
+    activeAuctionBidButton = placeBidButton;
+    activeAuctionBidMessageLabel = bidMessage;
 
     infoColumn.getChildren().addAll(countdown, bidPanel);
     detailShell.getChildren().addAll(mediaColumn, infoColumn);
     workspaceBox.getChildren().add(detailShell);
+    joinAuctionRoom(data.auctionId);
   }
 
+
+  private boolean isAuctionBidEnabled(AuctionCardData data) {
+    return data != null && normalize(data.status).equals("running");
+  }
+
+  private void joinAuctionRoom(String auctionId) {
+    if (auctionId == null || auctionId.isBlank()) {
+      return;
+    }
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager != null) {
+      networkManager.send("JOIN_AUCTION " + auctionId.trim());
+    }
+  }
+
+  private void leaveActiveAuctionRoom() {
+    if (activeAuctionDetailId == null || activeAuctionDetailId.isBlank()) {
+      clearActiveAuctionDetailRefs();
+      return;
+    }
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager != null) {
+      networkManager.send("LEAVE_AUCTION " + activeAuctionDetailId);
+    }
+    clearActiveAuctionDetailRefs();
+  }
+
+  private void clearActiveAuctionDetailRefs() {
+    activeAuctionDetailId = null;
+    activeAuctionPriceLabel = null;
+    activeAuctionBidCountLabel = null;
+    activeAuctionBidInput = null;
+    activeAuctionBidButton = null;
+    activeAuctionBidMessageLabel = null;
+  }
+
+  private void submitManualBid(AuctionCardData data, TextField bidInput) {
+    if (data == null || bidInput == null) {
+      return;
+    }
+
+    String amount = normalizeBidAmount(bidInput.getText());
+    if (amount.isBlank()) {
+      showBidFeedback("Nhập số tiền bid hợp lệ.", true);
+      return;
+    }
+
+    try {
+      if (new BigDecimal(amount).compareTo(BigDecimal.ZERO) <= 0) {
+        showBidFeedback("Số tiền bid phải lớn hơn 0.", true);
+        return;
+      }
+    } catch (NumberFormatException exception) {
+      showBidFeedback("Số tiền bid không đúng định dạng.", true);
+      return;
+    }
+
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      showBidFeedback("Chưa kết nối được server.", true);
+      return;
+    }
+
+    if (activeAuctionBidButton != null) {
+      activeAuctionBidButton.setDisable(true);
+    }
+    showBidFeedback("Đang gửi bid lên server...", false);
+    networkManager.send("BID " + data.auctionId + " " + amount);
+  }
+
+  private String normalizeBidAmount(String rawValue) {
+    if (rawValue == null) {
+      return "";
+    }
+    return rawValue.trim()
+        .replace("VND", "")
+        .replace("USD", "")
+        .replace(",", "")
+        .replace(" ", "");
+  }
+
+  private void showBidFeedback(String message, boolean error) {
+    if (activeAuctionBidMessageLabel != null) {
+      activeAuctionBidMessageLabel.setText(message == null ? "" : message);
+      activeAuctionBidMessageLabel.setStyle(error
+          ? "-fx-text-fill: #a34f4f; -fx-font-size: 11px; -fx-font-weight: bold;"
+          : "-fx-text-fill: #738581; -fx-font-size: 11px;");
+    }
+    if (error) {
+      notifUIHandler.showError("Bid failed", message);
+    }
+  }
+
+  private void handleRealtimeBidMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+    if (message.startsWith("AUCTION_SNAPSHOT|")) {
+      handleAuctionSnapshot(message.substring("AUCTION_SNAPSHOT|".length()));
+      return;
+    }
+    if (message.startsWith("BID_UPDATE|")) {
+      handleBidUpdate(message.substring("BID_UPDATE|".length()));
+      return;
+    }
+    if (message.startsWith("TIME_EXTENDED|")) {
+      handleTimeExtended(message.substring("TIME_EXTENDED|".length()));
+      return;
+    }
+    if (message.startsWith("AUCTION_CLOSED|")) {
+      handleAuctionClosed(message.substring("AUCTION_CLOSED|".length()));
+      return;
+    }
+    if (message.startsWith("BID_SUCCESS")) {
+      if (activeAuctionBidInput != null) {
+        activeAuctionBidInput.clear();
+      }
+      if (activeAuctionBidButton != null) {
+        activeAuctionBidButton.setDisable(false);
+      }
+      showBidFeedback("Bid đã được server xác nhận.", false);
+      notifUIHandler.showSuccess("Bid accepted", "Giá của phiên sẽ tự cập nhật theo realtime.");
+      return;
+    }
+    if (message.startsWith("FAIL ") && activeAuctionDetailId != null) {
+      if (activeAuctionBidButton != null) {
+        activeAuctionBidButton.setDisable(false);
+      }
+      showBidFeedback(readableBidFailure(message.substring("FAIL ".length())), true);
+      return;
+    }
+    if (message.startsWith("JOIN_AUCTION_FAIL")) {
+      showBidFeedback(message, true);
+    }
+  }
+
+  private void handleAuctionSnapshot(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 7) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    if (!isActiveAuction(auctionId)) {
+      return;
+    }
+    String currentPrice = safeField(fields, 2);
+    int totalBids = parseIntOrDefault(safeField(fields, 6), 0);
+    updateActiveAuctionPrice(currentPrice, totalBids);
+    replaceAuctionCardBid(auctionId, currentPrice, totalBids, -1L, "");
+  }
+
+  private void handleBidUpdate(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 8) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    String amount = safeField(fields, 2);
+    int totalBids = parseIntOrDefault(safeField(fields, 3), 0);
+    long secondsLeft = parseLongOrDefault(safeField(fields, 5), -1L);
+    String endTime = safeField(fields, 6);
+
+    replaceAuctionCardBid(auctionId, amount, totalBids, secondsLeft, endTime);
+    if (isActiveAuction(auctionId)) {
+      updateActiveAuctionPrice(amount, totalBids);
+      showBidFeedback("Giá hiện tại đã cập nhật realtime.", false);
+    } else if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+      renderWorkspace(currentSectionKey, activeFilter);
+    }
+  }
+
+  private void handleTimeExtended(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 4) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    long secondsLeft = parseLongOrDefault(safeField(fields, 1), -1L);
+    String endTime = safeField(fields, 2);
+    int addedSeconds = parseIntOrDefault(safeField(fields, 3), 0);
+    replaceAuctionCardBid(auctionId, null, -1, secondsLeft, endTime);
+    if (isActiveAuction(auctionId)) {
+      showBidFeedback("Auction được gia hạn thêm " + addedSeconds + " giây.", false);
+    }
+  }
+
+  private void handleAuctionClosed(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 4) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    String finalPrice = safeField(fields, 2);
+    String status = safeField(fields, 3);
+    replaceAuctionCardStatus(auctionId, finalPrice, status);
+    if (isActiveAuction(auctionId)) {
+      if (activeAuctionBidInput != null) {
+        activeAuctionBidInput.setDisable(true);
+      }
+      if (activeAuctionBidButton != null) {
+        activeAuctionBidButton.setDisable(true);
+      }
+      updateActiveAuctionPrice(finalPrice, -1);
+      showBidFeedback("Phiên đã đóng với trạng thái " + status + ".", false);
+    }
+    requestUserAuctions();
+  }
+
+  private boolean isActiveAuction(String auctionId) {
+    return activeAuctionDetailId != null && activeAuctionDetailId.equals(auctionId);
+  }
+
+  private void updateActiveAuctionPrice(String rawAmount, int totalBids) {
+    if (activeAuctionPriceLabel != null && rawAmount != null && !rawAmount.isBlank()) {
+      activeAuctionPriceLabel.setText(formatMoney(rawAmount));
+    }
+    if (activeAuctionBidCountLabel != null && totalBids >= 0) {
+      activeAuctionBidCountLabel.setText(formatBidCount(totalBids));
+    }
+  }
+
+  private void replaceAuctionCardBid(String auctionId, String rawAmount, int totalBids,
+      long secondsLeft, String endTime) {
+    for (int i = 0; i < liveAuctionCards.size(); i++) {
+      AuctionCardData card = liveAuctionCards.get(i);
+      if (!card.auctionId.equals(auctionId)) {
+        continue;
+      }
+      liveAuctionCards.set(i, copyAuctionCard(
+          card,
+          rawAmount == null || rawAmount.isBlank() ? card.price : formatMoney(rawAmount),
+          totalBids < 0 ? card.bidCount : totalBids,
+          secondsLeft < 0 ? card.secondsLeft : secondsLeft,
+          endTime == null || endTime.isBlank() ? card.endTime : shortTimestamp(endTime.replace('T', ' ')),
+          card.status
+      ));
+      return;
+    }
+  }
+
+  private void replaceAuctionCardStatus(String auctionId, String rawAmount, String status) {
+    for (int i = 0; i < liveAuctionCards.size(); i++) {
+      AuctionCardData card = liveAuctionCards.get(i);
+      if (!card.auctionId.equals(auctionId)) {
+        continue;
+      }
+      liveAuctionCards.set(i, copyAuctionCard(
+          card,
+          rawAmount == null || rawAmount.isBlank() ? card.price : formatMoney(rawAmount),
+          card.bidCount,
+          0,
+          card.endTime,
+          status
+      ));
+      return;
+    }
+  }
+
+  private AuctionCardData copyAuctionCard(AuctionCardData card, String price, int bidCount,
+      long secondsLeft, String endTime, String status) {
+    String normalizedStatus = fallback(status, card.status);
+    String badge = secondsLeft > 0 && secondsLeft <= 3600 ? "Ending Soon" : normalizedStatus;
+    return new AuctionCardData(
+        card.auctionId,
+        card.itemId,
+        card.title,
+        card.category,
+        card.description,
+        fallback(price, card.price),
+        card.minimumIncrement,
+        card.reservePrice,
+        bidCount,
+        formatBidCount(bidCount),
+        secondsLeft < 0 ? card.endsIn : formatTimeLeft(secondsLeft),
+        secondsLeft < 0 ? card.secondsLeft : secondsLeft,
+        badge,
+        card.imagePath,
+        card.imagePayload,
+        card.detail,
+        normalizedStatus,
+        card.startTime,
+        fallback(endTime, card.endTime),
+        card.seller,
+        card.winner,
+        card.attributes,
+        card.snipeWindowSeconds,
+        card.snipeExtensionSeconds
+    );
+  }
+
+  private String readableBidFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim();
+    return switch (normalized) {
+      case "NOT_LOGGED_IN" -> "Mày cần đăng nhập trước khi bid.";
+      case "INVALID_FORMAT" -> "Format bid không hợp lệ.";
+      case "AUCTION_CLOSED" -> "Phiên đấu giá đã đóng.";
+      case "USER_CANNOT_BID_ON_THEIR_OWN_AUCTION" -> "Không thể bid vào auction của chính mày.";
+      case "AMOUNT_MUST_BE_POSITIVE" -> "Số tiền bid phải lớn hơn 0.";
+      case "DB_PERSIST_FAILED" -> "Server chưa lưu được bid xuống database.";
+      case "SYSTEM_ERROR" -> "Server gặp lỗi khi xử lý bid.";
+      default -> normalized.isBlank() ? "Bid không thành công." : normalized.replace('_', ' ');
+    };
+  }
 
   private void lockRegionWidth(Region region, double width) {
     region.setMinWidth(width);

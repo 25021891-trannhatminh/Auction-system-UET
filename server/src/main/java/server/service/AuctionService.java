@@ -23,6 +23,7 @@ import server.common.model.BidResultDTO;
 import server.common.model.PaymentDTO;
 import server.database.DBConnection;
 import server.handler.ClientHandler;
+import server.network.NotificationDispatcher;
 import server.repository.*;
 import server.service.listeners.*;
 
@@ -373,7 +374,12 @@ public class AuctionService {
 
     // ── BƯỚC 3: GỬI LỆNH REALTIME CHO UI BIẾT ĐỂ CẬP NHẬT (SOCKET) ─────────────────
     int winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : -1;
-//    auction.notifyRealTimeAuctionClosed(winnerId, itemName, finalPrice);
+    NotificationDispatcher.getInstance().pushRawToAuctionWatchers(
+        auctionId,
+        String.format("AUCTION_CLOSED|%d|%d|%s|%s", auctionId, winnerId,
+            finalPrice.toPlainString(), targetStatus.name())
+    );
+    NotificationDispatcher.getInstance().clearAuction(auctionId);
     notifyAuctionEnded(sellerId, auctionId, itemName, finalPrice);
     logger.info("Realtime: Đã phát tín hiệu kết thúc phiên lên Socket mạng.");
 
