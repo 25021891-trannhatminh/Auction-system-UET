@@ -23,6 +23,8 @@ public class BidTransactionDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(BidTransactionDAO.class);
 
+    public record AuctionLockInfo(String status, LocalDateTime endTime) {}
+
     private static final String SQL_LOCK_AUCTION =
         "SELECT current_price, status, start_time, end_time FROM auctions WHERE auction_id = ? FOR UPDATE";
 
@@ -48,25 +50,62 @@ public class BidTransactionDAO {
 
     private static final String SQL_DELETE_LASTBID =
         "DELETE FROM bid_transactions WHERE bid_id = ( SELECT bid_id FROM bid_transactions WHERE auction_id = ? ORDER BY bid_id DESC LIMIT 1 )";
+
+//    /**
+//     * Thực hiện khóa hàng vật lý bằng câu lệnh SELECT ... FOR UPDATE.
+//     * Trả về thông tin trạng thái (status) thô hiện tại dưới DB để tầng Service ra quyết định.
+//     *
+//     * @param conn Connection đang tham gia Transaction điều phối
+//     * @param auctionId ID phiên đấu giá cần khóa
+//     * @return Chuỗi trạng thái status hiện tại dưới DB, hoặc null nếu không tồn tại bản ghi
+//     * @throws SQLException khi có lỗi kết nối hoặc thực thi truy vấn
+//     */
+//    public String lockAuctionRowAndGetStatus(Connection conn, int auctionId) throws SQLException {
+//        try (PreparedStatement ps = conn.prepareStatement(SQL_LOCK_AUCTION)) {
+//            ps.setInt(1, auctionId);
+//            try (ResultSet rs = ps.executeQuery()) {
+//                if (!rs.next()) {
+//                    logger.warn("lockAuctionRowAndGetStatus() - Auction {} không tồn tại trong DB", auctionId);
+//                    return null;
+//                }
+//                // Trả về dữ liệu thô, không can thiệp logic so sánh thời gian tại đây
+//                return rs.getString("status");
+//            }
+//        }
+//    }
+
     /**
-     * Thực hiện khóa hàng vật lý bằng câu lệnh SELECT ... FOR UPDATE.
-     * Trả về thông tin trạng thái (status) thô hiện tại dưới DB để tầng Service ra quyết định.
+     * @deprecated Dùng {@link #lockAuctionRowAndGetInfo(Connection, int)} để lấy cả endTime.
+     * Giữ lại để không break caller cũ trong thời gian migrate.
+     */
+    @Deprecated
+    public String lockAuctionRowAndGetStatus(Connection conn, int auctionId) throws SQLException {
+        AuctionLockInfo info = lockAuctionRowAndGetInfo(conn, auctionId);
+        return info == null ? null : info.status();
+    }
+
+    /**
+     * Thực hiện khóa hàng vật lý bằng SELECT ... FOR UPDATE.
+     * Trả về AuctionLockInfo chứa cả status lẫn endTime để Service layer
+     * có thể guard đồng thời cả trạng thái lẫn thời gian trong một lần lock.
      *
-     * @param conn Connection đang tham gia Transaction điều phối
+     * @param conn      Connection đang tham gia Transaction điều phối
      * @param auctionId ID phiên đấu giá cần khóa
-     * @return Chuỗi trạng thái status hiện tại dưới DB, hoặc null nếu không tồn tại bản ghi
+     * @return AuctionLockInfo, hoặc null nếu không tồn tại bản ghi
      * @throws SQLException khi có lỗi kết nối hoặc thực thi truy vấn
      */
-    public String lockAuctionRowAndGetStatus(Connection conn, int auctionId) throws SQLException {
+    public AuctionLockInfo lockAuctionRowAndGetInfo(Connection conn, int auctionId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(SQL_LOCK_AUCTION)) {
             ps.setInt(1, auctionId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    logger.warn("lockAuctionRowAndGetStatus() - Auction {} không tồn tại trong DB", auctionId);
+                    logger.warn("lockAuctionRowAndGetInfo() - Auction {} không tồn tại", auctionId);
                     return null;
                 }
-                // Trả về dữ liệu thô, không can thiệp logic so sánh thời gian tại đây
-                return rs.getString("status");
+                return new AuctionLockInfo(
+                    rs.getString("status"),
+                    rs.getTimestamp("end_time").toLocalDateTime()  // đã SELECT sẵn, dùng luôn
+                );
             }
         }
     }

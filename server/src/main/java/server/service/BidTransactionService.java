@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import server.repository.BidTransactionDAO.AuctionLockInfo;
 
 public class BidTransactionService {
 
@@ -61,22 +62,31 @@ public class BidTransactionService {
       BidTransaction tx = null;
       PlaceBidResult result = null;
       try {
-        // Khóa dòng vật lý và lấy trạng thái thực tế dưới Database hạ tầng
-        String dbStatus = bidTransactionDAO.lockAuctionRowAndGetStatus(conn, auctionId);
-        if (dbStatus == null) {
+        // ── Bước 1: Khóa hàng DB và lấy cả status lẫn endTime trong một lần SELECT FOR UPDATE ──
+        AuctionLockInfo lockInfo = bidTransactionDAO.lockAuctionRowAndGetInfo(conn, auctionId);
+        if (lockInfo == null) {
           conn.rollback();
           logger.warn("executePlaceBidFlow() - auction {} not found under DB", auctionId);
           throw new InvalidBidException("Phiên đấu giá không tồn tại dưới Database hạ tầng", amount, auction.getCurrentPrice());
         }
 
-        // Check trạng thái đóng từ DB hạ tầng trước khi nạp cược
-        if ("FINISHED".equals(dbStatus) || "ENDED".equals(dbStatus) || "CANCELED".equals(dbStatus)) {
+        // ── Bước 2: Guard status từ DB ────────────────────────────────────────────────────────
+        if ("FINISHED".equals(lockInfo.status()) || "ENDED".equals(lockInfo.status()) || "CANCELED".equals(lockInfo.status())) {
           conn.rollback();
           throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
         }
 
-        // 1. Thực thi nghiệp vụ đặt giá chính thống trên Core RAM nhằm sinh Entity nguyên bản
-        // Lưu ý: Nếu bước placeBid này ném ra InvalidBidException, nó sẽ trùng khớp với catch phía dưới
+        // ── Bước 3: Guard endTime từ DB — lớp phòng thủ cuối, bắt scheduler trễ ─────────────
+        // Auction.placeBid() cũng check endTime trong RAM (trong lock), nhưng DB là nguồn
+        // sự thật duy nhất: nếu end_time trong DB đã qua thì từ chối ngay, không xuống RAM.
+        if (LocalDateTime.now().isAfter(lockInfo.endTime())) {
+          conn.rollback();
+          logger.warn("executePlaceBidFlow() - auction {} đã quá endTime ({}) nhưng status vẫn RUNNING — scheduler trễ",
+              auctionId, lockInfo.endTime());
+          throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
+        }
+
+        // ── Bước 4: Thực thi nghiệp vụ đặt giá trên RAM ─────────────────────────────────────
         result = auction.placeBid(bidder, amount, isAutoBid);
         tx = result.tx();
         if (tx == null) {
@@ -84,7 +94,7 @@ public class BidTransactionService {
           return null;
         }
 
-        // 2. Đồng bộ các thông số State cốt lõi của Auction xuống bảng 'auctions' dưới DB
+        // ── Bước 5: Đồng bộ state auction xuống DB ───────────────────────────────────────────
         bidTransactionDAO.updateAuctionState(
             conn,
             auctionId,
@@ -93,12 +103,14 @@ public class BidTransactionService {
             auction.getEndTime()
         );
 
-        // 3. Sử dụng cấu trúc DTO độc lập của bạn để ghi vết lịch sử giao dịch vào DB an toàn
+        // ── Bước 6: Ghi lịch sử giao dịch
         BidHistoryDTO txDTO = toDTO(tx);
         bidTransactionDAO.insertBidTransaction(conn, txDTO);
 
         conn.commit();
         auction.notifyBidCommitted(tx, result.timeExtended());
+        // Gọi rescheduleClose() trực tiếp từ result — không dùng checkAndResetExtensionFlag()
+        // để tránh miss khi nhiều bid anti-snipe đến liên tiếp.
         if (result.timeExtended()) {
           AuctionManager.getInstance().rescheduleClose(auction);
         }

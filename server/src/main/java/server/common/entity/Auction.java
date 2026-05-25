@@ -243,6 +243,15 @@ public class Auction extends Entity {
             if (status != AuctionStatus.RUNNING) {
                 throw new AuctionClosedException(getId(), status);
             }
+
+            //Kiểm tra endTime — guard chống scheduler trễ ────────
+            // Dù status vẫn là RUNNING, nếu đã qua endTime thì từ chối bid.
+            // Trường hợp này xảy ra khi GC pause hoặc thread pool bận làm
+            // closeSession() chưa kịp chạy.
+            if (LocalDateTime.now().isAfter(endTime)) {
+                throw new AuctionClosedException(getId(), status);
+            }
+
             BigDecimal previousPrice   = this.currentPrice;
             User previousLeader        = this.currentLeader;
             LocalDateTime previousEnd  = this.endTime;
