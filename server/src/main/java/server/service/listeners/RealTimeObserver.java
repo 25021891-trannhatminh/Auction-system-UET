@@ -13,5 +13,4 @@ public interface RealTimeObserver {
 
   void onTimeExtended(int auctionId, String itemName, int addedSeconds);
 
-//  void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice);
 }
