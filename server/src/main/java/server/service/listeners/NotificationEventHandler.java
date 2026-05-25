@@ -121,58 +121,61 @@ public class NotificationEventHandler implements BusinessEventListener, RealTime
 
   @Override
   public void onAuctionStarted(int userId, int auctionId, String itemName) {
-    notificationService.push(userId, "Auction Started",
-        "The auction for [" + itemName + "] is now LIVE!",
+    notificationService.push(userId, "Auction started",
+        "The auction for " + safeItemName(itemName) + " is now live.",
         NotificationType.AUCTION_STARTED, auctionId);
   }
 
   @Override
   public void onAuctionEnded(int userId, int auctionId, String itemName, BigDecimal finalPrice) {
-    notificationService.push(userId, "Auction Ended",
-        "Auction for [" + itemName + "] has closed at $" + finalPrice + ".",
+    notificationService.push(userId, "Auction closed",
+        "The auction for " + safeItemName(itemName) + " closed at "
+            + formatMoney(finalPrice) + ".",
         NotificationType.AUCTION_ENDED, auctionId);
   }
 
   @Override
   public void onAuctionWon(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
-    notificationService.push(winnerId, "Congratulations!",
-        "You won [" + itemName + "] for $" + finalPrice + "!",
+    notificationService.push(winnerId, "Auction won",
+        "You won " + safeItemName(itemName) + " for " + formatMoney(finalPrice) + ".",
         NotificationType.AUCTION_WON, auctionId);
   }
 
   @Override
   public void onAuctionLost(int loserId, int auctionId, String itemName) {
-    notificationService.push(loserId, "Auction Result",
-        "The auction for [" + itemName + "] ended. Better luck next time!",
+    notificationService.push(loserId, "Auction result",
+        "The auction for " + safeItemName(itemName)
+            + " has ended. Your bid was not the winning bid.",
         NotificationType.AUCTION_LOST, auctionId);
   }
 
   @Override
   public void onPaymentDue(int buyerId, int auctionId, String itemName, BigDecimal amount) {
-    notificationService.push(buyerId, "Payment Required",
-        "Please pay $" + amount + " for your won item: [" + itemName + "].",
-
+    notificationService.push(buyerId, "Payment required",
+        "Please complete payment of " + formatMoney(amount) + " for "
+            + safeItemName(itemName) + ".",
         NotificationType.PAYMENT_DUE, auctionId);
   }
 
   @Override
   public void onPaymentReceived(int sellerId, int auctionId, String itemName, BigDecimal amount) {
-    notificationService.push(sellerId, "Payment Received",
-        "You received $" + amount + " for [" + itemName + "].",
+    notificationService.push(sellerId, "Payment received",
+        "You received " + formatMoney(amount) + " for " + safeItemName(itemName) + ".",
         NotificationType.PAYMENT_RECEIVED, auctionId);
   }
 
   @Override
   public void onItemApproved(int sellerId, int itemId, String itemName) {
-    notificationService.push(sellerId, "Item Approved",
-        "Your item [" + itemName + "] was approved and is ready for auction.",
+    notificationService.push(sellerId, "Item approved",
+        "Your item " + safeItemName(itemName) + " was approved and can be scheduled for auction.",
         NotificationType.ITEM_APPROVED, itemId);
   }
 
   @Override
   public void onItemRejected(int sellerId, int itemId, String itemName) {
-    notificationService.push(sellerId, "Item Rejected",
-        "Your item [" + itemName + "] was not approved. Please check the guidelines.",
+    notificationService.push(sellerId, "Item rejected",
+        "Your item " + safeItemName(itemName)
+            + " was not approved. Please review the submission details.",
         NotificationType.ITEM_REJECTED, itemId);
   }
 

@@ -121,8 +121,9 @@ public class PaymentService {
         paymentDAO.failPaymentInTx(conn, payment.getPaymentId());
         conn.commit();
 
-        notificationService.push(buyerId, "Payment Failed",
-            String.format("Insufficient balance to pay %s for [%s].", amount.toPlainString(), itemName),
+        notificationService.push(buyerId, "Payment failed",
+            String.format("Your wallet balance is not enough to pay %s VND for %s.",
+                amount.stripTrailingZeros().toPlainString(), itemName),
             NotificationType.PAYMENT_DUE, auctionId);
         return false;
       }
@@ -216,11 +217,11 @@ public class PaymentService {
       conn.commit();
 
       // 7. Post-commit notification + wallet update
-      notificationService.push(buyerId, "Auction Refund",
-          "You have been refunded " + amount + " from auction: " + itemName,
+      notificationService.push(buyerId, "Refund processed",
+          "You have been refunded " + formatMoney(amount) + " for " + itemName + ".",
           NotificationType.SYSTEM, auctionId);
-      notificationService.push(sellerId, "Refund Withdrawal",
-          "The system refunded " + amount + " to the buyer of auction: " + itemName,
+      notificationService.push(sellerId, "Refund withdrawn",
+          "The system returned " + formatMoney(amount) + " to the buyer for " + itemName + ".",
           NotificationType.SYSTEM, auctionId);
 
       pushWalletUpdate(buyerId, buyerWallet.getBalance().add(amount));
@@ -280,12 +281,19 @@ public class PaymentService {
 
   /** Gửi thông báo thanh toán thành công cho buyer & seller */
   private void notifyPaymentSuccess(int buyerId, int sellerId, BigDecimal amount, String itemName, int auctionId) {
-    notificationService.push(buyerId, "Payment Successful",
-        "You have completed payment of " + amount + " for item: " + itemName,
+    notificationService.push(buyerId, "Payment successful",
+        "You completed payment of " + formatMoney(amount) + " for " + itemName + ".",
         NotificationType.SYSTEM, auctionId);
-    notificationService.push(sellerId, "Payment Received",
-        "You have received " + amount + " from auction item: " + itemName,
+    notificationService.push(sellerId, "Payment received",
+        "You received " + formatMoney(amount) + " for " + itemName + ".",
         NotificationType.PAYMENT_RECEIVED, auctionId);
+  }
+
+  private String formatMoney(BigDecimal amount) {
+    if (amount == null) {
+      return "0 VND";
+    }
+    return amount.stripTrailingZeros().toPlainString() + " VND";
   }
 
   /** Đồng bộ Auction → PAID (RAM + DB) */

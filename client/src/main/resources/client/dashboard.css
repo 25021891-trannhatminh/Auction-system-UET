@@ -2399,6 +2399,10 @@
     -fx-padding: 12;
 }
 
+.auction-detail-info-row {
+    -fx-alignment: top-left;
+}
+
 .auction-detail-meta-row {
     -fx-padding: 2 0 4 0;
 }

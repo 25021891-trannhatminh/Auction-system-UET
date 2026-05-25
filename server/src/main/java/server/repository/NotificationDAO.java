@@ -40,24 +40,24 @@ public class NotificationDAO {
       SQL_SELECT_BASE + " WHERE notif_id = ?";
 
   private static final String SQL_COUNT_UNREAD =
-      "SELECT COUNT(*) FROM NOTIFICATIONS WHERE user_id = ? AND is_read = FALSE";
+      "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = FALSE";
 
   private static final String SQL_SELECT_BY_TYPE =
       SQL_SELECT_BASE + " WHERE user_id = ? AND type = ? ORDER BY created_at DESC";
 
   private static final String SQL_INSERT = """
-        INSERT INTO NOTIFICATIONS (user_id, type, title, content, is_read, related_id)
+        INSERT INTO notifications (user_id, type, title, content, is_read, related_id)
         VALUES (?, ?, ?, ?, ?, ?)
         """;
 
   private static final String SQL_MARK_AS_READ =
-      "UPDATE NOTIFICATIONS SET is_read = TRUE WHERE notif_id = ?";
+      "UPDATE notifications SET is_read = TRUE WHERE notif_id = ?";
 
   private static final String SQL_DELETE_BY_USER =
-      "DELETE FROM NOTIFICATIONS WHERE user_id = ?";
+      "DELETE FROM notifications WHERE user_id = ?";
 
   private static final String SQL_MARK_ALL_READ =
-      "UPDATE NOTIFICATIONS SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE";
+      "UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE";
   // ============================================================
   // SELECT Methods
   // ============================================================

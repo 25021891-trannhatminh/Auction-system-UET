@@ -70,9 +70,9 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
   private static final double AUCTION_DETAIL_INFO_WIDTH = 300;
   private static final double AUCTION_DETAIL_GAP = 14;
-  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 260;
-  private static final double AUCTION_DETAIL_THUMB_WIDTH = 78;
-  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 58;
+  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 330;
+  private static final double AUCTION_DETAIL_THUMB_WIDTH = 92;
+  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 72;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
   private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
   private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
@@ -380,8 +380,10 @@ public class UserDashboardController extends BaseDashboardController {
       myBids.clear();
       myBids.addAll(incomingMyBids);
       myBidsLoaded = true;
+      applyMyBidStatsIfVisible();
       if ("myBids".equals(currentSectionKey)) {
         renderWorkspace(currentSectionKey, activeFilter);
+        applyMyBidStatsIfVisible();
       }
       return;
     }
@@ -389,8 +391,10 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("USER_BIDS_ERROR")) {
       myBids.clear();
       myBidsLoaded = true;
+      applyMyBidStatsIfVisible();
       if ("myBids".equals(currentSectionKey)) {
         renderWorkspace(currentSectionKey, activeFilter);
+        applyMyBidStatsIfVisible();
       }
     }
   }
@@ -592,8 +596,11 @@ public class UserDashboardController extends BaseDashboardController {
       requestUserAuctions();
       applyUserAuctionStatsIfVisible();
     }
-    if ("myBids".equals(sectionKey) || "autoBids".equals(sectionKey)
-        || "winners".equals(sectionKey)) {
+    if ("myBids".equals(sectionKey)) {
+      requestUserBids();
+      applyMyBidStatsIfVisible();
+    }
+    if ("autoBids".equals(sectionKey) || "winners".equals(sectionKey)) {
       applyEmptyStats("Real DB rows", "Not wired", "Pending", "");
     }
   }
@@ -1624,10 +1631,10 @@ public class UserDashboardController extends BaseDashboardController {
       userActionBar.getChildren().add(buildAuctionBreadcrumb(data));
     }
 
-    HBox detailShell = new HBox(AUCTION_DETAIL_GAP);
+    VBox detailShell = new VBox(14);
     detailShell.getStyleClass().add("auction-detail-shell");
     detailShell.setAlignment(Pos.TOP_LEFT);
-    detailShell.setFillHeight(false);
+    detailShell.setFillWidth(true);
     detailShell.setMinWidth(0);
     detailShell.setMaxWidth(Double.MAX_VALUE);
 
@@ -1678,13 +1685,16 @@ public class UserDashboardController extends BaseDashboardController {
 
     mediaColumn.getChildren().addAll(gallery, descriptionLine);
 
-    VBox infoColumn = new VBox(12);
-    infoColumn.getStyleClass().add("auction-detail-info-column");
-    lockRegionWidth(infoColumn, AUCTION_DETAIL_INFO_WIDTH);
-    HBox.setHgrow(infoColumn, Priority.NEVER);
+    HBox infoRow = new HBox(12);
+    infoRow.getStyleClass().add("auction-detail-info-row");
+    infoRow.setAlignment(Pos.TOP_LEFT);
+    infoRow.setMinWidth(0);
+    infoRow.setMaxWidth(Double.MAX_VALUE);
 
     HBox countdown = buildCountdown(data.secondsLeft);
-    countdown.setMaxWidth(Double.MAX_VALUE);
+    countdown.setMinWidth(255);
+    countdown.setPrefWidth(255);
+    countdown.setMaxWidth(255);
 
     VBox bidPanel = new VBox(14);
     bidPanel.getStyleClass().add("auction-detail-price-panel");
@@ -1738,8 +1748,9 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidButton = placeBidButton;
     activeAuctionBidMessageLabel = bidMessage;
 
-    infoColumn.getChildren().addAll(countdown, bidPanel);
-    detailShell.getChildren().addAll(mediaColumn, infoColumn);
+    HBox.setHgrow(bidPanel, Priority.ALWAYS);
+    infoRow.getChildren().addAll(countdown, bidPanel);
+    detailShell.getChildren().addAll(mediaColumn, infoRow);
     workspaceBox.getChildren().add(detailShell);
     joinAuctionRoom(data.auctionId);
   }
@@ -3895,6 +3906,38 @@ public class UserDashboardController extends BaseDashboardController {
     if (label != null) {
       label.setText(value == null ? "" : value);
     }
+  }
+
+  private void applyMyBidStatsIfVisible() {
+    if (!"myBids".equals(currentSectionKey)) {
+      return;
+    }
+
+    int total = myBids.size();
+    int winning = 0;
+    int outbid = 0;
+    int completed = 0;
+    for (MyBidData bid : myBids) {
+      String status = resolveMyBidStatus(bid);
+      if (normalize(status).equals("winning")) {
+        winning++;
+      } else if (normalize(status).equals("outbid")) {
+        outbid++;
+      }
+      if (normalize(status).equals("won") || normalize(status).equals("lost")
+          || normalize(status).equals("canceled")) {
+        completed++;
+      }
+    }
+
+    setLabelText(statValue1, twoDigit(total));
+    setLabelText(statValue2, twoDigit(winning));
+    setLabelText(statValue3, twoDigit(outbid));
+    setLabelText(statValue4, twoDigit(completed));
+    setLabelText(statLabel1, "Total Bids");
+    setLabelText(statLabel2, "Winning");
+    setLabelText(statLabel3, "Outbid");
+    setLabelText(statLabel4, "Completed");
   }
 
   private void applyUserAuctionStatsIfVisible() {

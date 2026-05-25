@@ -66,6 +66,19 @@ public class NotificationService {
     notificationDAO.markAsRead(notifId);
   }
 
+  /**
+   * Marks every notification of a user as read after the notification center is opened.
+   *
+   * @param userId authenticated user id
+   * @return number of rows updated in the database
+   */
+  public int markAllRead(int userId) {
+    if (userId <= 0) {
+      return 0;
+    }
+    return notificationDAO.markAllAsRead(userId);
+  }
+
   // Xóa thông báo cũ (Nếu cần)
   public void deleteOldNotifications(int userId) {
     notificationDAO.deleteByUserId(userId);

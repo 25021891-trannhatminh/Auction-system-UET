@@ -24,6 +24,7 @@ import java.util.Map;
 import server.common.ProtocolConstants;
 import server.common.entity.Auction;
 import server.common.entity.Item;
+import server.common.entity.Notification;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
@@ -38,6 +39,7 @@ import server.repository.ItemDAO;
 import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
+import server.service.NotificationService;
 import server.service.PaymentService;
 import server.service.ServerAuthService;
 import server.service.listeners.RealTimeObserver;
@@ -65,6 +67,7 @@ public class ClientHandler implements Runnable{
     private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
     private final AuctionDAO auctionDAO = new AuctionDAO();
     private final ItemDAO itemDAO = new ItemDAO();
+    private final NotificationService notificationService = new NotificationService();
 
     // Services
     private final ServerAuthService authService;
@@ -302,6 +305,18 @@ public class ClientHandler implements Runnable{
 
             case "USER_LIST_AUCTIONS":
                 sendUserAuctions();
+                break;
+
+            case "USER_LIST_BIDS":
+                sendUserBids(request);
+                break;
+
+            case "USER_LIST_NOTIFICATIONS":
+                sendUserNotifications(request);
+                break;
+
+            case "USER_MARK_NOTIFICATIONS_READ":
+                markUserNotificationsRead(request);
                 break;
 
             case "ADMIN_CREATE_AUCTION":
@@ -824,6 +839,119 @@ public class ClientHandler implements Runnable{
             e.printStackTrace();
         }
         send("USER_AUCTIONS_END");
+    }
+
+    /**
+     * Resolves a user-scoped request using the authenticated socket user first.
+     *
+     * <p>The fallback argument keeps the existing dashboard flow working after reconnects where
+     * queued read-only requests still include the session user id in their payload.</p>
+     */
+    private int resolveUserScopedRequest(String[] request, int argumentIndex) {
+        if (this.userId > 0) {
+            return this.userId;
+        }
+        if (request != null && request.length > argumentIndex) {
+            try {
+                int parsedUserId = Integer.parseInt(request[argumentIndex]);
+                return parsedUserId > 0 ? parsedUserId : -1;
+            } catch (NumberFormatException ignored) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Sends persisted notification history for the current user.
+     *
+     * <p>Protocol payload:
+     * USER_NOTIFICATION notifId|type|title|content|isRead|createdAt. The client already parses
+     * this structure for the notification center, so the history survives app restarts.</p>
+     */
+    private void sendUserNotifications(String[] request) {
+        int targetUserId = resolveUserScopedRequest(request, 1);
+        send("USER_NOTIFICATIONS_BEGIN");
+        if (targetUserId <= 0) {
+            send("USER_NOTIFICATIONS_END");
+            return;
+        }
+
+        try {
+            List<Notification> notifications = notificationService.getAllForUser(targetUserId);
+            for (Notification notification : notifications) {
+                send("USER_NOTIFICATION " + fields(
+                    notification.getNotifId(),
+                    notification.getType() == null ? NotificationType.SYSTEM.name()
+                        : notification.getType().name(),
+                    notification.getTitle(),
+                    notification.getContent(),
+                    notification.isRead(),
+                    notification.getCreatedAt()
+                ));
+            }
+        } catch (Exception e) {
+            send("USER_NOTIFICATIONS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        send("USER_NOTIFICATIONS_END");
+    }
+
+    /**
+     * Marks all notifications of the current user as read in the database.
+     */
+    private void markUserNotificationsRead(String[] request) {
+        int targetUserId = resolveUserScopedRequest(request, 1);
+        if (targetUserId <= 0) {
+            send("USER_MARK_NOTIFICATIONS_READ_FAIL " + fields("NOT_LOGGED_IN"));
+            return;
+        }
+        int updated = notificationService.markAllRead(targetUserId);
+        send("USER_MARK_NOTIFICATIONS_READ_SUCCESS " + fields(updated));
+    }
+
+    /**
+     * Sends the latest bid row for each auction the current user has joined.
+     *
+     * <p>Protocol payload matches UserDashboardController.parseMyBid():
+     * bidId|auctionId|itemId|itemName|category|currentPrice|userBid|bidStatus|auctionStatus|
+     * isAutoBid|bidTime|endTime|currentWinnerId|imageUrl.</p>
+     */
+    private void sendUserBids(String[] request) {
+        int targetUserId = resolveUserScopedRequest(request, 1);
+        send("USER_BIDS_BEGIN");
+        if (targetUserId <= 0) {
+            send("USER_BIDS_ERROR " + fields("NOT_LOGGED_IN"));
+            send("USER_BIDS_END");
+            return;
+        }
+
+        try {
+            List<BidTransactionDAO.UserBidRow> bidRows =
+                bidTransactionDAO.getLatestBidsByBidder(targetUserId);
+            for (BidTransactionDAO.UserBidRow row : bidRows) {
+                send("USER_BID " + fields(
+                    row.getBidId(),
+                    row.getAuctionId(),
+                    row.getItemId(),
+                    row.getItemName(),
+                    row.getCategory(),
+                    row.getCurrentPrice(),
+                    row.getUserBid(),
+                    row.getBidStatus() == null ? "" : row.getBidStatus().name(),
+                    row.getAuctionStatus(),
+                    row.isAutoBid(),
+                    row.getBidTime(),
+                    row.getEndTime(),
+                    row.getCurrentWinnerId(),
+                    row.getImageUrl()
+                ));
+            }
+        } catch (Exception e) {
+            send("USER_BIDS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        send("USER_BIDS_END");
     }
 
     private Integer nullableInt(ResultSet rs, String column) throws SQLException {
