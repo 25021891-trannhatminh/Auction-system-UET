@@ -47,6 +47,9 @@ public class DBConnection {
                 // Test connection trước khi lấy từ pool
                 config.setConnectionTestQuery("SELECT 1");
 
+                // Giữ NOW(), TIMESTAMPDIFF và DATETIME trả về DB khớp múi giờ app Việt Nam.
+                config.setConnectionInitSql("SET time_zone = '+07:00'");
+
                 dataSource = new HikariDataSource(config);
                 LOGGER.info("Load DB config thành công");
 
