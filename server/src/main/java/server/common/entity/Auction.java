@@ -232,7 +232,7 @@ public class Auction extends Entity {
             validateBid(amount); // False -> throw Exception
 
             // ── Step 5: Cập nhật state ────────────────────────────────────────
-            // Snapshot Auction state trước khi cập nhật
+            // Snapshot Auction state trước khi cập nhật để return
             BigDecimal previousPrice   = this.currentPrice;
             User previousLeader        = this.currentLeader;
             LocalDateTime previousEnd  = this.endTime;
@@ -543,13 +543,11 @@ public class Auction extends Entity {
 
         snapshot.forEach(obs -> {
             try {
-                // 1. Thông báo cho người vừa đặt giá thành công
-                obs.onBidPlacedSuccess(bidderId, auctionId, itemName, amount);
 
-                // 2. Broadcast toàn phòng (userId = NOTIFICATION_AUCTION_USER_ID là sentinel "all")
+                // 1. Broadcast toàn phòng (userId = NOTIFICATION_AUCTION_USER_ID là sentinel "all")
                 obs.onBidPlacedSuccess(ProtocolConstants.NOTIFICATION_AUCTION_USER_ID, auctionId, itemName, amount);
 
-                // 3. Thông báo OUTBID cho người vừa bị vượt qua.
+                // 2. Thông báo OUTBID cho người vừa bị vượt qua.
                 //    Guard: chỉ gửi khi thực sự có người bị vượt VÀ người đó khác người vừa thắng.
                 if (previousLeader != null && previousLeader.getId() != bidderId) {
                     obs.onOutbid(previousLeader.getId(), auctionId, itemName, amount);

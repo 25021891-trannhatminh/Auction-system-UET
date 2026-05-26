@@ -39,7 +39,7 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
     // ─────────────────────────────────────────────────────────────────────────
     public AutoBidConfig(int auctionId, int bidderId,
                          BigDecimal maxBid, BigDecimal increment) {
-        validateConfig();
+        validateConfig(maxBid,increment);
         this.auctionId    = auctionId;
         this.bidderId     = bidderId;
         this.maxBid       = maxBid;
@@ -84,7 +84,7 @@ public class AutoBidConfig implements Comparable<AutoBidConfig> {
     /**
      Kiểm tra config: maxBid , increment hợp lệ
      */
-    private void validateConfig(){
+    private void validateConfig(BigDecimal maxBid, BigDecimal increment){
         if (maxBid.compareTo(BigDecimal.ZERO) <= 0 ||
             increment.compareTo(BigDecimal.ZERO) <= 0 ||
             maxBid.compareTo(increment) < 0) {
