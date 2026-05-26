@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.common.entity.AutoBidConfig;
+import server.common.entity.exception.AutoBidConfigException;
 import server.common.enums.AutoBidStatus;
 
 import java.math.BigDecimal;
@@ -27,7 +28,7 @@ class AutoBidConfigTest {
     @BeforeEach
     void setUp() {
         // Khởi tạo đúng kiểu dữ liệu int cho ID: auctionId = 1001, bidderId = 501
-        config = new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("100"));
+        config = new AutoBidConfig(1001, 501, BigDecimal.valueOf(1000.0), BigDecimal.valueOf(100.0));
     }
 
     // ==================== KHỞI TẠO ====================
@@ -38,29 +39,29 @@ class AutoBidConfigTest {
     @Test
     @DisplayName("maxBid <= 0 → IllegalArgumentException")
     void constructor_negativeMaxBid_shouldThrow() {
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(AutoBidConfigException.class, () ->
                 new AutoBidConfig(1001, 501,
                         new BigDecimal("-10"), new BigDecimal("100"))
         );
     }
 
     /**
-     * increment âm phải ném IllegalArgumentException.
+     * increment âm phải ném AutoBidConfigException.
      */
     @Test
-    @DisplayName("increment <= 0 → IllegalArgumentException")
+    @DisplayName("increment <= 0 → AutoBidConfigException")
     void constructor_negativeIncrement_shouldThrow() {
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(AutoBidConfigException.class, () ->
                 new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("-50")));
     }
 
     /**
-     * maxBid < increment phải ném IllegalArgumentException.
+     * maxBid < increment phải ném AutoBidConfigException.
      */
     @Test
-    @DisplayName("maxBid < increment → IllegalArgumentException")
+    @DisplayName("maxBid < increment → AutoBidConfigException")
     void constructor_maxBidLessThanIncrement_shouldThrow() {
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(AutoBidConfigException.class, () ->
                 new AutoBidConfig(1001, 501, new BigDecimal("1000"), new BigDecimal("-50")));
     }
 
@@ -134,7 +135,7 @@ class AutoBidConfigTest {
     @DisplayName("nextBidAmount(800) → 900 (800 + 100)")
     void nextBidAmount_shouldReturnCurrentPluIncrement() {
         BigDecimal result = config.nextBidAmount(new BigDecimal("800"));
-        assertEquals(new BigDecimal("900"), result);
+        assertEquals(BigDecimal.valueOf(900.0), result);
     }
 
     // ==================== STATUS TRANSITIONS ====================
