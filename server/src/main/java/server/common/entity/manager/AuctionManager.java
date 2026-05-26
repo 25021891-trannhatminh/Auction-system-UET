@@ -324,7 +324,7 @@ public class AuctionManager {
      *
      *      Return false để không lưu vào DB
      */
-    public boolean registerAutoBid(AutoBidConfig config, User bidder) {
+    public void registerAutoBid(AutoBidConfig config, User bidder) {
         Auction auction = getAuctionByID(config.getAuctionId());
 
         if (!auction.isRunning()) {
@@ -335,35 +335,19 @@ public class AuctionManager {
         BigDecimal newMaxBid = config.getMaxBid();
         BigDecimal increment = config.getIncrement();
 
-        if (newMaxBid.compareTo(currentPrice) < 0) {
+        if (newMaxBid.compareTo(currentPrice.add(increment)) < 0) {
             throw new IllegalArgumentException(
                 "Max bid must be at least current price. Current: " + currentPrice
                     + ", Requested: " + newMaxBid);
         }
-        if (newMaxBid.compareTo(increment) < 0) {
-            throw new IllegalArgumentException("Max bid must be >= increment");
-        }
 
-        AutoBidConfig currentWinnerConfig = autoBidEngine.peekWinner(auction.getId());
-        boolean isCurrentLeader = (currentWinnerConfig != null
-            && currentWinnerConfig.getBidderId() == bidder.getId());
 
-        // Bidder đang là leader AutoBidConfig và còn đang là winner của Auction
-        if (isCurrentLeader && currentWinnerConfig.getBidderId() == auction.getCurrentLeader().getId()) {
-            if (newMaxBid.compareTo(currentWinnerConfig.getMaxBid()) <= 0) {
-                // Không cho giảm hoặc giữ nguyên maxBid khi đang là leader
-                return false; // Hoặc throw exception tùy theo yêu cầu UX
-            }
-        }
-
-        // Bidder không phải winner hiện tại → đăng ký bình thường
         bidder.setAutoBid(config);
         autoBidEngine.register(config, bidder);
 
         System.out.printf("[AuctionManager] AutoBid registered: %s on auction %s (max=%.0f, inc=%.0f)%n",
             bidder.getUsername(), config.getAuctionId(),
             config.getMaxBid(), config.getIncrement());
-        return true;
     }
 
     /**
@@ -379,9 +363,6 @@ public class AuctionManager {
             autoBidEngine.unregister(auctionId, bidder.getId());
             return;
         }
-        // Xét winner là autobid trong Engine + winner là người hủy
-        boolean wasWinner = autoBidEngine.peekWinner(auctionId) != null
-            && autoBidEngine.peekWinner(auctionId).getBidderId() == bidder.getId();
 
         bidder.cancelAutoBid(auctionId);
         autoBidEngine.unregister(auctionId, bidder.getId());

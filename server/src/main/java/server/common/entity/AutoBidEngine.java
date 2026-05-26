@@ -231,6 +231,10 @@ public class AutoBidEngine {
 
         // Nếu triggerBidder != null -> Check winner có phải Bidder vừa đặt Bid không?
         if (triggeringBidder != null && winner.getBidderId() == triggeringBidder.getId()) {
+          // Nếu manual Bid của winner lớn hơn maxAutoBid của winner đó -> AutoBidConfig complete
+          if (auction.getCurrentPrice().compareTo(winner.getMaxBid()) >= 0){
+              winner.complete();
+          }
           return null;
         }
 

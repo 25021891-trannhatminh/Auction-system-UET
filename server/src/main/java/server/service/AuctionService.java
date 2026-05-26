@@ -288,13 +288,12 @@ public class AuctionService {
         config.getMaxBid(),
         config.getIncrement()
     );
-    boolean needPersist = auctionManager.registerAutoBid(authenticatedConfig, bidder);
-    if (!needPersist) return false;
+
     boolean persisted = autoBidConfigDAO.upsertActive(authenticatedConfig);
     if (!persisted) {
       return false;
     }
-
+    auctionManager.registerAutoBid(authenticatedConfig, bidder);
 
     triggerAutoBids(auction, auction.getCurrentLeader());
     logger.info("Auto-bid registered for auction {} by user {}", auctionId, bidderId);
@@ -310,12 +309,15 @@ public class AuctionService {
     if (auction == null) {
       throw new IllegalArgumentException("AUCTION_NOT_FOUND");
     }
-
-    auctionManager.cancelAutoBid(auctionId, bidder);
     boolean canceled = autoBidConfigDAO.cancelByAuctionAndBidder(auctionId, bidder.getId());
+    if (!canceled) {
+      return false;
+    }
+    auctionManager.cancelAutoBid(auctionId, bidder);
+
     triggerAutoBids(auction, bidder);
     logger.info("Auto-bid cancel requested for auction {} by user {}", auctionId, bidder.getId());
-    return canceled;
+    return true;
   }
 
   // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================
