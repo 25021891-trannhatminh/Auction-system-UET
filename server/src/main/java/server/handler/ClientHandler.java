@@ -58,7 +58,6 @@ public class ClientHandler implements Runnable{
     private final AutoBidHandler autoBidHandler;
     private final AuthHandler authHandler;
     private final AdminHandler adminHandler;
-    private final ImageUploadHandler imageUploadHandler;
 
     // Infor Account connect với Server
     private String username = "Guest"; // Tên hiển thị mặc định
@@ -96,7 +95,6 @@ public class ClientHandler implements Runnable{
         this.authHandler = new AuthHandler();
         this.adminHandler = new AdminHandler(auctionService);
         this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
-        this.imageUploadHandler = new ImageUploadHandler();
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -267,11 +265,6 @@ public class ClientHandler implements Runnable{
                 }
                 break;
             }
-
-            case "UPLOAD_IMAGE":
-                String uploadResponse = imageUploadHandler.handleUpload(msg);
-                send(uploadResponse);
-                break;
 
             case "CREATE_ITEM":
                 itemCommandHandler.handleCreateItem(msg.length() > "CREATE_ITEM".length()

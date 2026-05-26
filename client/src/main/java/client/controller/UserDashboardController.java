@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
 import javafx.geometry.Pos;
@@ -146,7 +147,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
   };
   private final CloudMediaApiClient cloudMediaApiClient =
-      new CloudMediaApiClient("http://localhost:8080");
+      new CloudMediaApiClient();
   /**
    * Kết nối dùng lại cho form Create Listing đặt trực tiếp trong dashboard.
    *
@@ -820,9 +821,9 @@ public class UserDashboardController extends BaseDashboardController {
       requestCreateListingMetadata();
       applySellerItemStatsIfAvailable();
     }
+    renderWorkspace(sectionKey, activeFilter);  // render ngay khi chưa có data
     if ("dashboard".equals(sectionKey) || "auctions".equals(sectionKey)) {
       requestUserAuctions();
-      applyUserAuctionStatsIfVisible();
     }
     if ("myBids".equals(sectionKey)) {
       requestUserBids();
@@ -2486,8 +2487,8 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (activeAuctionDetailId != null
         && (auctionId.isBlank()
-            || "-1".equals(auctionId)
-            || activeAuctionDetailId.equals(auctionId))) {
+        || "-1".equals(auctionId)
+        || activeAuctionDetailId.equals(auctionId))) {
       if (activeAuctionBidButton != null) {
         activeAuctionBidButton.setDisable(false);
       }
@@ -2952,15 +2953,12 @@ public class UserDashboardController extends BaseDashboardController {
       return null;
     }
 
-    // Tạo URL đã resize (dùng kích thước vừa phải, ví dụ 300x200)
-    String optimizedPath = addResizeParams(imagePath.trim(), 300, 200);
-
-    if (imageCache.containsKey(optimizedPath)) {
-      return imageCache.get(optimizedPath);
+    if (imageCache.containsKey(imagePath)) {
+      return imageCache.get(imagePath);
     }
 
-    Image image = loadImage(optimizedPath);
-    imageCache.put(optimizedPath, image);
+    Image image = loadImage(imagePath);
+    imageCache.put(imagePath, image);
     return image;
   }
 
@@ -2973,19 +2971,19 @@ public class UserDashboardController extends BaseDashboardController {
       if (normalizedPath.startsWith("file:")
           || normalizedPath.startsWith("http://")
           || normalizedPath.startsWith("https://")) {
-        return new Image(normalizedPath, true);
+        return new Image(normalizedPath, false);
       }
 
       File localFile = new File(normalizedPath);
       if (localFile.exists()) {
-        return new Image(localFile.toURI().toString(), true);
+        return new Image(localFile.toURI().toString(), false);
       }
 
       if (getClass().getResource(normalizedPath) == null) {
         return null;
       }
 
-      return new Image(getClass().getResource(normalizedPath).toExternalForm(), true);
+      return new Image(getClass().getResource(normalizedPath).toExternalForm(), false);
     } catch (IllegalArgumentException exception) {
       return null;
     }
@@ -3486,7 +3484,7 @@ public class UserDashboardController extends BaseDashboardController {
     thumbnail.setMaxSize(54, 46);
     thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #d1b15d, " +
         "#8fb1a4); -fx-background-radius: 14; -fx-border-color: rgba(39, 75, 69, 0.16); " +
-            "-fx-border-radius: 14;");
+        "-fx-border-radius: 14;");
 
     Label label = new Label(text == null || text.isBlank() ? "IT" : text);
     label.setStyle("-fx-text-fill: #17352c; -fx-font-size: 12px; -fx-font-weight: bold;");
@@ -4041,13 +4039,10 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void chooseItemImages(
-      Label selectedFileLabel,
-      ImageView previewImage,
-      Label previewPlaceholder,
-      Label imageCounterLabel,
-      Label messageLabel,
-      VBox fileListBox,
-      ScrollPane fileListScroll) {
+      Label selectedFileLabel, ImageView previewImage,
+      Label previewPlaceholder, Label imageCounterLabel,
+      Label messageLabel, VBox fileListBox, ScrollPane fileListScroll) {
+
     int remainingSlots = MAX_CREATE_ITEM_IMAGES - pendingCreateItemUploads.size();
     if (remainingSlots <= 0) {
       showCreateMessage(messageLabel, "Tối đa 5 ảnh cho mỗi listing.", true);
@@ -4059,79 +4054,87 @@ public class UserDashboardController extends BaseDashboardController {
     chooser.getExtensionFilters().add(
         new FileChooser.ExtensionFilter("Image files", "*.png", "*.jpg", "*.jpeg", "*.webp")
     );
+    File home = new File(System.getProperty("user.home"));
+    if (home.exists()) chooser.setInitialDirectory(home);
 
-    File currentDirectory = new File(System.getProperty("user.home"));
-    if (currentDirectory.exists()) {
-      chooser.setInitialDirectory(currentDirectory);
-    }
+    List<File> selected = chooser.showOpenMultipleDialog(workspaceBox.getScene().getWindow());
+    if (selected == null || selected.isEmpty()) return;
 
-    List<File> selectedFiles = chooser.showOpenMultipleDialog(workspaceBox.getScene().getWindow());
-    if (selectedFiles == null || selectedFiles.isEmpty()) {
+    List<File> accepted = selected.size() > remainingSlots
+        ? new ArrayList<>(selected.subList(0, remainingSlots)) : selected;
+
+    // Copy local trước — nhanh, preview ngay
+    List<CreateItemUpload> localUploads = new ArrayList<>();
+    try {
+      Path uploadRoot = Path.of(System.getProperty("user.home"), ".auction-system", "uploads");
+      Files.createDirectories(uploadRoot);
+      long batch = System.currentTimeMillis();
+      for (int i = 0; i < accepted.size(); i++) {
+        File file = accepted.get(i);
+        String safeName = file.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+        Path target = uploadRoot.resolve(batch + "_" + i + "_" + safeName);
+        Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
+        localUploads.add(new CreateItemUpload("", target.toUri().toString(),
+            file.getName(), file.length()));
+      }
+    } catch (IOException e) {
+      showCreateMessage(messageLabel, "Không thể lưu ảnh.", true);
       return;
     }
 
-    try {
-      List<File> acceptedFiles = selectedFiles.size() > remainingSlots
-          ? new ArrayList<>(selectedFiles.subList(0, remainingSlots))
-          : selectedFiles;
-      Path uploadRoot = Path.of(System.getProperty("user.home"), ".auction-system", "uploads");
-      Files.createDirectories(uploadRoot);
+    // Thêm vào list với publicUri rỗng, preview local ngay
+    pendingCreateItemUploads.addAll(localUploads);
+    pendingCreateItemPreviewIndex = Math.max(0, pendingCreateItemUploads.size() - localUploads.size());
+    rebuildCreateFileList(fileListBox, fileListScroll, selectedFileLabel,
+        previewImage, previewPlaceholder, imageCounterLabel);
+    refreshCreatePreviewImage(previewImage, previewPlaceholder, imageCounterLabel);
+    showCreateMessage(messageLabel, "Đang upload ảnh lên cloud...", false);
 
-      long batch = System.currentTimeMillis();
-      int index = 0;
-      int uploadedCount = 0;
-      for (File file : acceptedFiles) {
-        String safeName = file.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
-        Path target = uploadRoot.resolve(batch + "_" + index + "_" + safeName);
-        Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
-
-        String publicUri = cloudMediaApiClient.upload(target.toFile());
-        if (publicUri == null || publicUri.isBlank()) {
-          showCreateMessage(messageLabel,
-              "Cannot upload image to cloud storage. Please try again.", true);
-          index++;
-          continue;
+    Task<List<String>> task = new Task<>() {
+      @Override protected List<String> call() {
+        List<String> uris = new ArrayList<>();
+        for (CreateItemUpload u : localUploads) {
+          String uri = cloudMediaApiClient.upload(new File(java.net.URI.create(u.previewUri)));
+          uris.add(uri != null ? uri : "");
         }
-
-        pendingCreateItemUploads.add(new CreateItemUpload(
-            publicUri,
-            target.toUri().toString(),
-            file.getName(),
-            file.length()
-        ));
-        uploadedCount++;
-        index++;
+        return uris;
       }
+    };
 
-      if (uploadedCount == 0) {
-        return;
+    task.setOnSucceeded(e -> {
+      List<String> uris = task.getValue();
+      int fail = 0;
+      for (int i = 0; i < localUploads.size(); i++) {
+        int idx = pendingCreateItemUploads.indexOf(localUploads.get(i));
+        if (idx < 0) continue;
+        if (uris.get(i).isBlank()) {
+          pendingCreateItemUploads.remove(idx);
+          fail++;
+        } else {
+          pendingCreateItemUploads.set(idx, new CreateItemUpload(
+              uris.get(i), localUploads.get(i).previewUri,
+              localUploads.get(i).fileName, localUploads.get(i).sizeBytes));
+        }
       }
-
-      if (pendingCreateItemPreviewIndex < 0
-          || pendingCreateItemPreviewIndex >= pendingCreateItemUploads.size()) {
-        pendingCreateItemPreviewIndex = 0;
-      }
-      if (pendingCreateItemUploads.size() == acceptedFiles.size()) {
-        pendingCreateItemPreviewIndex = 0;
-      }
-
-      rebuildCreateFileList(
-          fileListBox,
-          fileListScroll,
-          selectedFileLabel,
-          previewImage,
-          previewPlaceholder,
-          imageCounterLabel
-      );
+      pendingCreateItemPreviewIndex = Math.min(pendingCreateItemPreviewIndex,
+          Math.max(0, pendingCreateItemUploads.size() - 1));
+      rebuildCreateFileList(fileListBox, fileListScroll, selectedFileLabel,
+          previewImage, previewPlaceholder, imageCounterLabel);
       refreshCreatePreviewImage(previewImage, previewPlaceholder, imageCounterLabel);
-      showCreateMessage(messageLabel, selectedFiles.size() > remainingSlots
-          ? "Uploaded " + uploadedCount + " image(s) because each listing allows up to 5 images."
-          : "Uploaded " + uploadedCount
-              + " image(s) to cloud storage. Every machine can now load them.", false);
-    } catch (IOException exception) {
-      showCreateMessage(messageLabel, "Không thể lưu ảnh đã chọn.", true);
-      exception.printStackTrace();
-    }
+      int ok = localUploads.size() - fail;
+      showCreateMessage(messageLabel,
+          fail > 0 ? "Upload xong " + ok + "/" + localUploads.size() + " ảnh."
+              : "Upload " + ok + " ảnh thành công.", fail > 0);
+    });
+
+    task.setOnFailed(e -> {
+      pendingCreateItemUploads.removeIf(u -> u.publicUri == null || u.publicUri.isBlank());
+      rebuildCreateFileList(fileListBox, fileListScroll, selectedFileLabel,
+          previewImage, previewPlaceholder, imageCounterLabel);
+      showCreateMessage(messageLabel, "Upload thất bại. Vui lòng thử lại.", true);
+    });
+
+    new Thread(task, "upload-thread").start();
   }
 
   private void rebuildCreateFileList(
@@ -4359,18 +4362,18 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void submitCreateItem(boolean draftMode,
-                  ComboBox<String> categoryBox,
-                  TextField titleField,
-                  TextArea descriptionArea,
-                  TextField priceField,
-                  TextField sizeField,
-                  TextField artistField,
-                  TextField yearCreatedField,
-                  ComboBox<String> currencyBox,
-                  Button saveDraftButton,
-                  Button submitItemButton,
-                  Label messageLabel,
-                  SellerItemData editItem) {
+      ComboBox<String> categoryBox,
+      TextField titleField,
+      TextArea descriptionArea,
+      TextField priceField,
+      TextField sizeField,
+      TextField artistField,
+      TextField yearCreatedField,
+      ComboBox<String> currencyBox,
+      Button saveDraftButton,
+      Button submitItemButton,
+      Label messageLabel,
+      SellerItemData editItem) {
     String title = safeTrim(titleField.getText());
     String category = categoryBox.getValue() == null ? "" : categoryBox.getValue().trim();
     BigDecimal price = parseCreateItemPrice(priceField.getText());
@@ -4432,8 +4435,8 @@ public class UserDashboardController extends BaseDashboardController {
         messageLabel,
         editItem == null
             ? (draftMode
-                ? "Đang lưu draft item..."
-                : "Đang submit item lên Pending Approval...")
+            ? "Đang lưu draft item..."
+            : "Đang submit item lên Pending Approval...")
             : (draftMode
                 ? "Đang cập nhật draft item..."
                 : "Đang submit draft item lên Pending Approval..."),
@@ -4760,23 +4763,12 @@ public class UserDashboardController extends BaseDashboardController {
     String normalizedPayload = imagePayload.replace("\\n", "\n");
     for (String image : normalizedPayload.split("\\R")) {
       if (image != null && !image.isBlank()) {
-        return addResizeParams(image.trim(), 200, 150);
+        return image.trim();
       }
     }
     return AUCTION_IMAGE_FALLBACK;
   }
 
-  private String addResizeParams(String url, int width, int height) {
-    if (url == null || url.isBlank()) return url;
-    // Chỉ xử lý URL từ Cloudinary (chứa cloudinary.com)
-    if (url.contains("cloudinary.com")) {
-      // Chèn /w_200,h_150,c_fill/ trước upload path
-      // Ví dụ: https://res.cloudinary.com/.../upload/v123456/image.jpg
-      // -> https://res.cloudinary.com/.../upload/w_200,h_150,c_fill/v123456/image.jpg
-      return url.replaceFirst("/upload/", "/upload/w_" + width + ",h_" + height + ",c_fill/");
-    }
-    return url;
-  }
 
   private String formatMoney(String value) {
     try {

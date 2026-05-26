@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -76,7 +77,7 @@ public class CreateItemController {
   @FXML private Button submitItemButton;
 
   private final ToggleGroup purchaseTypeGroup = new ToggleGroup();
-  private final CloudMediaApiClient cloudMediaApiClient = new CloudMediaApiClient("http://localhost:8080");
+  private final CloudMediaApiClient cloudMediaApiClient = new CloudMediaApiClient();
   private final List<Path> persistedImagePaths = new ArrayList<>();
   private final List<String> publicImageUris = new ArrayList<>();
   private int currentPreviewImageIndex;
@@ -213,42 +214,65 @@ public class CreateItemController {
 
     Stage stage = (Stage) submitItemButton.getScene().getWindow();
     List<File> files = chooser.showOpenMultipleDialog(stage);
-    if (files == null || files.isEmpty()) {
+    if (files == null || files.isEmpty()) return;
+
+    List<File> limitedFiles = limitSelectedFiles(files);
+    List<Path> localPaths;
+    try {
+      localPaths = persistSelectedFiles(limitedFiles);
+    } catch (IOException e) {
+      showErrorMessage("Không thể lưu ảnh. Vui lòng thử lại.");
       return;
     }
 
-    try {
-      List<File> limitedFiles = limitSelectedFiles(files);
-      List<Path> localPreviewPaths = persistSelectedFiles(limitedFiles);
-      List<String> uploadedUris = uploadPublicImages(localPreviewPaths);
-      if (uploadedUris.size() != localPreviewPaths.size()) {
+    // Preview local ngay, không cần đợi upload
+    persistedImagePaths.clear();
+    persistedImagePaths.addAll(localPaths);
+    publicImageUris.clear();
+    currentPreviewImageIndex = 0;
+    updatePreviewImage(0);
+    updatePreviewNavigation();
+    fileNameLabel.setText(limitedFiles.size() == 1
+        ? limitedFiles.get(0).getName()
+        : limitedFiles.get(0).getName() + " +" + (limitedFiles.size() - 1) + " more");
+
+    // Khoá nút, upload background
+    saveDraftButton.setDisable(true);
+    submitItemButton.setDisable(true);
+    showNeutralMessage("Đang upload ảnh lên cloud...");
+
+    Task<List<String>> task = new Task<>() {
+      @Override protected List<String> call() {
+        return uploadPublicImages(localPaths);
+      }
+    };
+    task.setOnSucceeded(e -> {
+      List<String> uris = task.getValue();
+      if (uris.size() != localPaths.size()) {
         persistedImagePaths.clear();
         publicImageUris.clear();
-        currentPreviewImageIndex = 0;
         previewImageView.setImage(null);
         updatePreviewNavigation();
-        showErrorMessage("Cannot upload all images to cloud storage. Please try again.");
-        return;
+        showErrorMessage("Upload thất bại. Vui lòng thử lại.");
+      } else {
+        publicImageUris.addAll(uris);
+        helperTextLabel.setText("Ảnh đã upload xong, sẵn sàng submit.");
+        showNeutralMessage(files.size() > MAX_IMAGE_COUNT
+            ? "Chỉ lấy 5 ảnh đầu tiên." : "Ảnh đã sẵn sàng.");
       }
-
+      saveDraftButton.setDisable(false);
+      submitItemButton.setDisable(false);
+    });
+    task.setOnFailed(e -> {
       persistedImagePaths.clear();
-      persistedImagePaths.addAll(localPreviewPaths);
       publicImageUris.clear();
-      publicImageUris.addAll(uploadedUris);
-      currentPreviewImageIndex = 0;
-      updatePreviewImage(currentPreviewImageIndex);
-      fileNameLabel.setText(limitedFiles.size() == 1
-          ? limitedFiles.get(0).getName()
-          : limitedFiles.get(0).getName() + " +" + (limitedFiles.size() - 1) + " more");
+      previewImageView.setImage(null);
       updatePreviewNavigation();
-      helperTextLabel.setText("Images uploaded to cloud storage and ready for submit.");
-      showNeutralMessage(files.size() > MAX_IMAGE_COUNT
-          ? "Chỉ lấy 5 ảnh đầu tiên để gửi cùng listing."
-          : "Ảnh item đã sẵn sàng để gửi cùng listing.");
-    } catch (IOException e) {
-      showErrorMessage("Không thể lưu ảnh đã chọn. Vui lòng thử lại.");
-      e.printStackTrace();
-    }
+      showErrorMessage("Upload thất bại. Vui lòng thử lại.");
+      saveDraftButton.setDisable(false);
+      submitItemButton.setDisable(false);
+    });
+    new Thread(task, "upload-thread").start();
   }
 
   @FXML
