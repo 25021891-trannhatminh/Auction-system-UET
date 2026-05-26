@@ -1,21 +1,3 @@
--- ============================================================
--- Create sequences (CACHE 1 = tuần tự, không nhảy)
--- ============================================================
-CREATE SEQUENCE seq_accounts            START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_items               START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_item_images         START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_item_attributes     START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_auctions            START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_bid_transactions    START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_auto_bid_configs    START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_wallets             START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_wallet_transactions START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_payments            START WITH 1 INCREMENT BY 1 CACHE 1;
-CREATE SEQUENCE seq_notifications       START WITH 1 INCREMENT BY 1 CACHE 1;
-
--- ============================================================
--- Create tables
--- ============================================================
 CREATE DATABASE IF NOT EXISTS auctionsystem;
 USE auctionsystem;
 
