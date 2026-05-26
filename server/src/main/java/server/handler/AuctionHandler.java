@@ -129,7 +129,7 @@ public class AuctionHandler {
    *
    * Format:
    *   AUCTION_SNAPSHOT|auctionId|status|currentPrice|leaderId|leaderName
-   *                   |endTime|totalBids|recentBids
+   *                   |endTime|totalBids|secondsLeft|recentBids
    *
    * recentBids: chuỗi CSV, mỗi entry là "amount:bidderId:AUTO|MANUAL"
    *   Ví dụ: "1000000:42:MANUAL,950000:17:AUTO"
@@ -149,7 +149,7 @@ public class AuctionHandler {
       if (i < recentBids.size() - 1) bidsSb.append(",");
     }
 
-    return String.format("AUCTION_SNAPSHOT|%d|%s|%s|%d|%s|%s|%d|%s",
+    return String.format("AUCTION_SNAPSHOT|%d|%s|%s|%d|%s|%s|%d|%d|%s",
         auction.getId(),
         auction.getStatus().name(),
         auction.getCurrentPrice().toPlainString(),
@@ -157,6 +157,7 @@ public class AuctionHandler {
         leaderName,
         auction.getEndTime().toString(),
         auction.getTotalBids(),
+        auction.getSecondsRemaining(),
         bidsSb.toString());
   }
 

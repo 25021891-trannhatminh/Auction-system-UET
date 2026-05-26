@@ -234,11 +234,20 @@ public class ClientHandler implements Runnable{
                         ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
                         : "Auction #" + auctionId;
 
+                    PaymentAuthorization authorization = resolvePaymentAuthorization(auctionId);
+                    if (!authorization.allowed()) {
+                        send("PAYMENT_FAIL " + auctionId + " " + authorization.reason());
+                        break;
+                    }
+
                     boolean paymentSuccess = paymentService.processPayment(auctionId, itemName);
                     if (paymentSuccess) {
                         send("PAYMENT_SUCCESS " + auctionId);
+                        ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
+                        ClientManager.broadcast("USER_AUCTIONS_DIRTY");
                     } else {
-                        send("PAYMENT_FAIL " + auctionId);
+                        send("PAYMENT_FAIL " + auctionId + " PAYMENT_NOT_COMPLETED");
+                        ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
                     }
                 } catch (NumberFormatException e) {
                     send("PAYMENT_FAIL INVALID_FORMAT");
@@ -308,6 +317,10 @@ public class ClientHandler implements Runnable{
 
             case "USER_LIST_AUTOBIDS":
                 sendUserAutoBids(request);
+                break;
+
+            case "USER_LIST_TRANSACTIONS":
+                sendUserTransactions(request);
                 break;
 
             case "SELLER_AUCTION_BIDS":
@@ -965,6 +978,122 @@ public class ClientHandler implements Runnable{
     }
 
     /**
+     * Sends post-auction payment rows visible to the current user.
+     *
+     * <p>The mutation path still goes through PaymentService; this method only exposes the
+     * persisted payments/wallet transaction state to the Transactions screen.</p>
+     */
+    private void sendUserTransactions(String[] request) {
+        int targetUserId = resolveUserScopedRequest(request, 1);
+        send("USER_TRANSACTIONS_BEGIN");
+        if (targetUserId <= 0) {
+            send("USER_TRANSACTIONS_ERROR " + fields("NOT_LOGGED_IN"));
+            send("USER_TRANSACTIONS_END");
+            return;
+        }
+
+        String sql = """
+            SELECT p.payment_id,
+                   p.auction_id,
+                   CASE WHEN p.buyer_id = ? THEN 'BUYER' ELSE 'SELLER' END AS user_role,
+                   COALESCE(i.name, CONCAT('Auction #', p.auction_id)) AS item_name,
+                   CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END AS counterpart_id,
+                   COALESCE(counterpart.username,
+                            CONCAT('User #', CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END))
+                            AS counterpart_name,
+                   p.amount,
+                   p.status AS payment_status,
+                   a.status AS auction_status,
+                   p.created_at,
+                   p.paid_at,
+                   COALESCE(wt.tx_id, 0) AS wallet_tx_id,
+                   COALESCE(wt.type, '') AS wallet_tx_type,
+                   COALESCE(wt.note, '') AS wallet_note
+            FROM payments p
+            JOIN auctions a ON a.auction_id = p.auction_id
+            LEFT JOIN items i ON i.item_id = a.item_id
+            LEFT JOIN accounts counterpart ON counterpart.user_id =
+                CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END
+            LEFT JOIN (
+                SELECT wt1.tx_id, wt1.user_id, wt1.ref_auction_id, wt1.type, wt1.note
+                FROM wallet_transactions wt1
+                JOIN (
+                    SELECT user_id, ref_auction_id, MAX(tx_id) AS latest_tx_id
+                    FROM wallet_transactions
+                    WHERE type IN ('PAYMENT', 'REFUND')
+                    GROUP BY user_id, ref_auction_id
+                ) latest ON latest.latest_tx_id = wt1.tx_id
+            ) wt ON wt.ref_auction_id = p.auction_id AND wt.user_id = ?
+            WHERE p.buyer_id = ? OR p.seller_id = ?
+            ORDER BY p.created_at DESC, p.payment_id DESC
+            """;
+
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            ps.setInt(2, targetUserId);
+            ps.setInt(3, targetUserId);
+            ps.setInt(4, targetUserId);
+            ps.setInt(5, targetUserId);
+            ps.setInt(6, targetUserId);
+            ps.setInt(7, targetUserId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    send("USER_TRANSACTION " + fields(
+                        rs.getInt("payment_id"),
+                        rs.getInt("auction_id"),
+                        rs.getString("user_role"),
+                        rs.getString("item_name"),
+                        rs.getInt("counterpart_id"),
+                        rs.getString("counterpart_name"),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("payment_status"),
+                        rs.getString("auction_status"),
+                        rs.getTimestamp("created_at"),
+                        rs.getTimestamp("paid_at"),
+                        rs.getInt("wallet_tx_id"),
+                        rs.getString("wallet_tx_type"),
+                        rs.getString("wallet_note")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            send("USER_TRANSACTIONS_ERROR " + fields(e.getMessage()));
+            e.printStackTrace();
+        }
+        send("USER_TRANSACTIONS_END");
+    }
+
+    private PaymentAuthorization resolvePaymentAuthorization(int auctionId) {
+        if (this.userId <= 0) {
+            return PaymentAuthorization.reject("NOT_LOGGED_IN");
+        }
+
+        String sql = "SELECT buyer_id, status FROM payments WHERE auction_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return PaymentAuthorization.reject("PAYMENT_NOT_FOUND");
+                }
+                if (rs.getInt("buyer_id") != this.userId) {
+                    return PaymentAuthorization.reject("NOT_BUYER");
+                }
+                String status = rs.getString("status");
+                if (!"PENDING".equalsIgnoreCase(status)) {
+                    return PaymentAuthorization.reject("PAYMENT_" + status);
+                }
+                return PaymentAuthorization.allow();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return PaymentAuthorization.reject("PAYMENT_NOT_FOUND");
+        }
+    }
+
+    /**
      * Sends persisted notification history for the current user.
      *
      * <p>Protocol payload:
@@ -1142,6 +1271,16 @@ public class ClientHandler implements Runnable{
             .replace("\n", "\\n")
             .replace("\r", "\\r");
     }
+    private record PaymentAuthorization(boolean allowed, String reason) {
+        static PaymentAuthorization allow() {
+            return new PaymentAuthorization(true, "");
+        }
+
+        static PaymentAuthorization reject(String reason) {
+            return new PaymentAuthorization(false, reason == null ? "PAYMENT_NOT_COMPLETED" : reason);
+        }
+    }
+
     private static final class CreateAuctionResult {
         private final boolean success;
         private final int auctionId;
