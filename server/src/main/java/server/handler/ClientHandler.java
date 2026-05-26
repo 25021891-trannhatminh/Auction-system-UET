@@ -36,6 +36,7 @@ import server.network.ClientManager;
 import server.repository.AuctionDAO;
 import server.repository.BidTransactionDAO;
 import server.repository.ItemDAO;
+import server.common.model.BidHistoryDTO;
 import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
@@ -204,9 +205,24 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.JOIN_AUCTION:
-                // Format: JOIN_AUCTION <AuctionID>
-                String joinResult = auctionHandler.handleJoin(request, this.userId);
-                send(joinResult);
+                // 1. Thực hiện logic join phòng ban đầu của bạn
+                String joinResponse = auctionHandler.handleJoin(request, this.userId);
+                send(joinResponse);
+
+                // 2. KÍCH HOẠT HÀM BIỂU ĐỒ TẠI ĐÂY
+                // Nếu join phòng thành công (Chuỗi trả về bắt đầu bằng JOIN_SUCCESS)
+                if (joinResponse != null && joinResponse.startsWith(ProtocolConstants.JOIN_AUCTION_SUCCESS)) {
+                    try {
+                        // Trích xuất auctionId từ câu lệnh Client gửi lên (Ví dụ: JOIN_AUCTION 12)
+                        int auctionId = Integer.parseInt(request[1]);
+
+                        // Gọi hàm gửi dữ liệu quá khứ xuống cho Client vẽ biểu đồ
+                        sendChartHistory(auctionId);
+
+                    } catch (Exception e) {
+                        System.err.println("Lỗi tự động kích hoạt biểu đồ: " + e.getMessage());
+                    }
+                }
                 break;
 
             case ProtocolConstants.LEAVE_AUCTION:
@@ -287,14 +303,20 @@ public class ClientHandler implements Runnable{
                 break;
 
             case "ADMIN_LIST_USERS":
+                if (!isActiveAdmin(this.userId)) {
+                    send("ADMIN_DATA_ERROR NOT_ADMIN");
+                    break;
+                }
                 sendAdminUsers();
                 break;
 
             case "ADMIN_LIST_ITEMS":
+                if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break; }
                 itemCommandHandler.sendAdminItems();
                 break;
 
             case "ADMIN_LIST_AUCTIONS":
+                if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break;}
                 sendAdminAuctions();
                 break;
 
@@ -323,10 +345,14 @@ public class ClientHandler implements Runnable{
                 break;
 
             case "ADMIN_CREATE_AUCTION":
-                handleAdminCreateAuction(msg.length() > "ADMIN_CREATE_AUCTION".length()
-                    ? msg.substring("ADMIN_CREATE_AUCTION".length()).trim()
-                    : "");
+                if (!isActiveAdmin(this.userId)) {
+                    send("ADMIN_CREATE_AUCTION_FAIL NOT_ADMIN");
+                    break;
+                }
+                String payload = msg.length() > "ADMIN_CREATE_AUCTION".length() ? msg.substring("ADMIN_CREATE_AUCTION".length()).trim() : "";
+                send(adminHandler.handleAdminCreateAuction(payload, this.userId));
                 break;
+
 
             case "LIST":
                 List<AuctionDTO> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
@@ -344,7 +370,6 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.AUTOBID_REGISTER:
-            case "AUTO_BID_REGISTER":
                 String autoBidRegisterResponse = autoBidHandler.handleAutoBidRegister(request, this.userId);
                 send(autoBidRegisterResponse);
                 if (autoBidRegisterResponse != null
@@ -354,7 +379,6 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.AUTOBID_CANCEL:
-            case "AUTO_BID_CANCEL":
                 String autoBidCancelResponse = autoBidHandler.handleAutoBidCancel(request, this.userId);
                 send(autoBidCancelResponse);
                 if (autoBidCancelResponse != null
@@ -375,186 +399,39 @@ public class ClientHandler implements Runnable{
                 send(banResult);
                 break;
 
-            case "ADMIN_UNBAN_USER":
-                if (request.length > 1) {
-                    int targetUserId = Integer.parseInt(request[1]);
-                    boolean unbanUserSuccess = adminService.unbanUser(this.userId, targetUserId);
-                    send(unbanUserSuccess ? "ADMIN_UNBAN_SUCCESS" : "ADMIN_UNBAN_FAIL");
-                } else {
-                    send("ADMIN_UNBAN_FAIL INVALID_FORMAT");
+            case ProtocolConstants.ADMIN_UNBAN_USER:
+                if (!isActiveAdmin(this.userId)) {
+                    send("ADMIN_UNBAN_FAIL NOT_ADMIN");
+                    break;
                 }
+                send(adminHandler.handleUnbanUser(request, this.userId));
                 break;
 
             case "ADMIN_FORCE_CLOSE":
-                if (request.length > 2) {
-                    int auctionId = Integer.parseInt(request[1]);
-                    String reason = String.join(" ", Arrays.copyOfRange(request, 2, request.length));
-                    boolean forceCloseSuccess = adminService.forceCloseAuction(this.userId, auctionId, reason);
-                    send(forceCloseSuccess ? "ADMIN_CLOSE_SUCCESS" : "ADMIN_CLOSE_FAIL");
+                if (!isActiveAdmin(this.userId)) {
+                    send("ADMIN_CLOSE_FAIL NOT_ADMIN");
+                    break;
                 }
+                send(adminHandler.handleForceClose(request, this.userId));
                 break;
 
             case "ADMIN_APPROVE_ITEM":
+                if (!isActiveAdmin(this.userId)) { send("ADMIN_APPROVE_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.approveItem(request.length > 1 ? request[1] : "", this.userId);
                 break;
 
             case "ADMIN_REJECT_ITEM":
+                if (!isActiveAdmin(this.userId)) { send("ADMIN_REJECT_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.rejectItem(
-                    request.length > 1 ? request[1] : "",
-                    request.length > 2 ? String.join(" ", Arrays.copyOfRange(request, 2, request.length)) : "",
-                    this.userId
+                        request.length > 1 ? request[1] : "",
+                        request.length > 2 ? String.join(" ", Arrays.copyOfRange(request, 2, request.length)) : "",
+                        this.userId
                 );
                 break;
             default:
                 send("UNKNOWN_COMMAND");
                 break;
         }
-    }
-
-    /**
-     * Xử lý command admin tạo auction từ client.
-     *
-     * <p>Handler chỉ parse, validate request và gọi service; phần persist DB, đổi trạng thái item
-     * và load AuctionManager được đẩy xuống AuctionService/AuctionDAO để tránh insert DB rời rạc.</p>
-     *
-     * @param payload chuỗi field đã được client gửi kèm command ADMIN_CREATE_AUCTION
-     */
-    private void handleAdminCreateAuction(String payload) {
-        List<String> fields = splitPayload(payload);
-        if (fields.size() < 8) {
-            send("ADMIN_CREATE_AUCTION_FAIL " + fields("INVALID_PAYLOAD"));
-            return;
-        }
-        if (!isActiveAdmin(this.userId)) {
-            send("ADMIN_CREATE_AUCTION_FAIL " + fields("NOT_ADMIN"));
-            return;
-        }
-
-        int itemId = parseIntOrDefault(safeField(fields, 0), 0);
-        int sellerId = parseIntOrDefault(safeField(fields, 1), 0);
-        LocalDateTime startTime = parseAuctionTime(safeField(fields, 2));
-        LocalDateTime endTime = parseAuctionTime(safeField(fields, 3));
-        BigDecimal minimumBidIncrement = parseBigDecimal(safeField(fields, 4));
-        BigDecimal reservePrice = parseNullableBigDecimal(safeField(fields, 5));
-        int snipeWindowSeconds = parseIntOrDefault(safeField(fields, 6), -1);
-        int snipeExtensionSeconds = parseIntOrDefault(safeField(fields, 7), -1);
-
-        String validationError = validateCreateAuctionRequest(
-            itemId,
-            sellerId,
-            startTime,
-            endTime,
-            minimumBidIncrement,
-            reservePrice,
-            snipeWindowSeconds,
-            snipeExtensionSeconds
-        );
-        if (!validationError.isBlank()) {
-            send("ADMIN_CREATE_AUCTION_FAIL " + fields(validationError));
-            return;
-        }
-
-        CreateAuctionResult result = createAuctionThroughService(
-            itemId,
-            sellerId,
-            startTime,
-            endTime,
-            minimumBidIncrement,
-            reservePrice,
-            snipeWindowSeconds,
-            snipeExtensionSeconds
-        );
-
-        if (result.success) {
-            send("ADMIN_CREATE_AUCTION_SUCCESS " + fields(result.auctionId, itemId));
-            ClientManager.broadcast("ADMIN_ITEMS_DIRTY");
-            ClientManager.broadcast("USER_AUCTIONS_DIRTY");
-            return;
-        }
-        send("ADMIN_CREATE_AUCTION_FAIL " + fields(result.message));
-    }
-
-    /**
-     * Validate dữ liệu tạo auction trước khi gọi service.
-     *
-     * <p>Method này chỉ kiểm tra format và constraint cơ bản từ request. Các kiểm tra cần lock DB
-     * như item tồn tại, đúng seller và còn AVAILABLE sẽ được xử lý tiếp trong service/DAO.</p>
-     *
-     * @return chuỗi rỗng nếu hợp lệ, ngược lại là message lỗi gửi về client
-     */
-    private String validateCreateAuctionRequest(
-        int itemId,
-        int sellerId,
-        LocalDateTime startTime,
-        LocalDateTime endTime,
-        BigDecimal minimumBidIncrement,
-        BigDecimal reservePrice,
-        int snipeWindowSeconds,
-        int snipeExtensionSeconds) {
-        if (itemId <= 0 || sellerId <= 0) {
-            return "item_id hoặc seller_id không hợp lệ";
-        }
-        if (startTime == null || endTime == null) {
-            return "start_time/end_time phải đúng format yyyy-MM-dd HH:mm:ss";
-        }
-        if (!endTime.isAfter(startTime)) {
-            return "end_time phải sau start_time";
-        }
-        if (minimumBidIncrement == null || minimumBidIncrement.compareTo(BigDecimal.ZERO) < 0) {
-            return "min_bid_increment phải là số không âm";
-        }
-        if (reservePrice != null && reservePrice.compareTo(BigDecimal.ZERO) < 0) {
-            return "reserve_price phải để trống hoặc là số không âm";
-        }
-        if (snipeWindowSeconds < 0 || snipeExtensionSeconds < 0) {
-            return "snipe_window_seconds và snipe_extension_seconds phải không âm";
-        }
-        return "";
-    }
-
-    /**
-     * Tạo auction thông qua AuctionService thay vì insert trực tiếp trong ClientHandler.
-     *
-     * <p>Flow này giữ handler mỏng hơn và đảm bảo auction mới được ghi DB, đổi item sang
-     * {@code IN_AUCTION}, rồi load vào AuctionManager để scheduler tiếp tục quản lý.</p>
-     *
-     * @return kết quả tạo auction gồm trạng thái thành công, auction ID hoặc mã lỗi
-     */
-    private CreateAuctionResult createAuctionThroughService(
-        int itemId,
-        int sellerId,
-        LocalDateTime startTime,
-        LocalDateTime endTime,
-        BigDecimal minimumBidIncrement,
-        BigDecimal reservePrice,
-        int snipeWindowSeconds,
-        int snipeExtensionSeconds) {
-        Item item = itemDAO.getById(itemId);
-        if (item == null) {
-            return CreateAuctionResult.fail("ITEM_NOT_FOUND");
-        }
-        if (item.getSellerId() != sellerId) {
-            return CreateAuctionResult.fail("SELLER_MISMATCH");
-        }
-        if (item.getStatus() != ItemStatus.AVAILABLE) {
-            return CreateAuctionResult.fail("ITEM_NOT_AVAILABLE");
-        }
-
-        Auction auction = auctionService.createAuction(
-            item,
-            sellerId,
-            startTime,
-            endTime,
-            minimumBidIncrement,
-            reservePrice,
-            snipeWindowSeconds,
-            snipeExtensionSeconds
-        );
-
-        if (auction == null) {
-            return CreateAuctionResult.fail("SAVE_ERROR");
-        }
-        return CreateAuctionResult.ok(auction.getId());
     }
 
     private boolean isActiveAdmin(int userId) {
@@ -575,32 +452,6 @@ public class ClientHandler implements Runnable{
         }
     }
 
-    private LocalDateTime parseAuctionTime(String value) {
-        try {
-            return value == null || value.isBlank()
-                ? null
-                : LocalDateTime.parse(value.trim(), AUCTION_TIME_FORMATTER);
-        } catch (DateTimeParseException e) {
-            return null;
-        }
-    }
-
-    private BigDecimal parseNullableBigDecimal(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return parseBigDecimal(value);
-    }
-
-    private BigDecimal parseBigDecimal(String value) {
-        try {
-            return value == null || value.isBlank()
-                ? null
-                : new BigDecimal(value.replace(",", "").trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
 
     private int parseIntOrDefault(String value, int fallbackValue) {
         try {
@@ -608,46 +459,6 @@ public class ClientHandler implements Runnable{
         } catch (NumberFormatException e) {
             return fallbackValue;
         }
-    }
-
-    private List<String> splitPayload(String payload) {
-        List<String> fields = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean escaped = false;
-
-        for (int i = 0; i < payload.length(); i++) {
-            char character = payload.charAt(i);
-            if (escaped) {
-                switch (character) {
-                    case 'p' -> current.append('|');
-                    case 'n' -> current.append('\n');
-                    case 'r' -> current.append('\r');
-                    case '\\' -> current.append('\\');
-                    default -> current.append(character);
-                }
-                escaped = false;
-                continue;
-            }
-            if (character == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (character == '|') {
-                fields.add(current.toString());
-                current.setLength(0);
-                continue;
-            }
-            current.append(character);
-        }
-        if (escaped) {
-            current.append('\\');
-        }
-        fields.add(current.toString());
-        return fields;
-    }
-
-    private String safeField(List<String> fields, int index) {
-        return index >= 0 && index < fields.size() ? fields.get(index) : "";
     }
 
     private void sendAdminUsers() {
@@ -1161,18 +972,6 @@ public class ClientHandler implements Runnable{
             return new CreateAuctionResult(false, 0, message == null ? "SAVE_ERROR" : message);
         }
     }
-    public void setUserId(int userId){
-        this.userId = userId;
-    }
-    public void setUsername(String username){
-        this.username = username;
-    }
-    public int getUserId(){
-        return userId;
-    }
-    public String getUsername(){
-        return username;
-    }
 
     // ==================== REALTIME BID EVENTS ====================
     // Implement RealTimeObserver — nhận event từ Auction sau khi DB commit xong.
@@ -1201,39 +1000,38 @@ public class ClientHandler implements Runnable{
 //
 //    }
     /**
-     * Truy vấn dữ liệu lịch sử từ DAO và đẩy tuần tự xuống cho Client qua Socket.
-     * @param out luồng ghi dữ liệu mạng PrintWriter của Client tương ứng
-     * @param auctionId ID phiên đấu giá hiện tại đang tham gia
-     * @param bidDAO lớp hạ tầng lưu trữ dữ liệu nghiệp vụ
+     * Tự động gửi dữ liệu lịch sử giá xuống cho Client vẽ biểu đồ.
+     * Sử dụng trực tiếp tài nguyên nội bộ out và bidTransactionDAO của lớp.
      */
-    public void sendChartHistory(final java.io.PrintWriter out,
-                                 final int auctionId,
-                                 final server.repository.BidTransactionDAO bidDAO) {
+    public void sendChartHistory(int auctionId) {
         try {
-            out.println(server.handler.ResponseBuilder.historyStart());
-
-            final java.util.List<server.common.model.BidHistoryDTO> historyList =
-                    bidDAO.getBidHistory(auctionId);
-            final java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
-
+            out.println(ResponseBuilder.historyStart());
+            List<BidHistoryDTO> historyList = bidTransactionDAO.getBidHistory(auctionId);
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
             if (historyList != null) {
-                for (final server.common.model.BidHistoryDTO bid : historyList) {
-                    // Chuyển đổi mốc giờ thành chuỗi text phẳng
-                    final String formattedTime = sdf.format(bid.getBidTime());
-
-                    // LẤY CHÍNH XÁC ĐỐI TƯỢNG BIGDECIMAL TỪ MODEL RA Ở ĐÂY:
-                    final java.math.BigDecimal amount = bid.getAmount();
-
-                    // 3. Đóng gói chuỗi truyền qua đường ống mạng Socket
-                    out.println(server.handler.ResponseBuilder.historyItem(formattedTime, amount));
+                for (BidHistoryDTO bid : historyList) {
+                    String formattedTime = sdf.format(bid.getBidTime());
+                    out.println(ResponseBuilder.historyItem(formattedTime, bid.getAmount()));
                 }
+
             }
-            // 4. Phát tín hiệu kết thúc đồng bộ dữ liệu quá khứ
             out.println(server.handler.ResponseBuilder.historyEnd());
             out.flush();
         } catch (final Exception e) {
             System.err.println("Lỗi Checkstyle/Đồng bộ luồng dữ liệu biểu đồ: " + e.getMessage());
         }
+    }
+    public void setUserId(int userId){
+        this.userId = userId;
+    }
+    public void setUsername(String username){
+        this.username = username;
+    }
+    public int getUserId(){
+        return userId;
+    }
+    public String getUsername(){
+        return username;
     }
 
 

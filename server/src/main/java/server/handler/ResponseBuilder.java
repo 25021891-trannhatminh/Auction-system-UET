@@ -245,7 +245,7 @@ public final class ResponseBuilder {
      * @return chuỗi lệnh HISTORY_START
      */
     public static String historyStart() {
-        return "HISTORY_START";
+        return ProtocolConstants.HISTORY_START;
     }
 
     /**
@@ -255,7 +255,7 @@ public final class ResponseBuilder {
      * @return chuỗi định dạng phẳng khớp cấu trúc hệ thống
      */
     public static String historyItem(final String bidTimeStr, final java.math.BigDecimal amount) {
-        return String.format("%s %s|%s", "HISTORY_ITEM", bidTimeStr, amount.toPlainString());
+        return String.format("%s %s|%s", ProtocolConstants.HISTORY_ITEM, bidTimeStr, amount.toPlainString());
     }
 
     /**
@@ -263,7 +263,7 @@ public final class ResponseBuilder {
      * @return chuỗi lệnh HISTORY_END
      */
     public static String historyEnd() {
-        return "HISTORY_END";
+        return ProtocolConstants.HISTORY_END;
     }
 
 }
