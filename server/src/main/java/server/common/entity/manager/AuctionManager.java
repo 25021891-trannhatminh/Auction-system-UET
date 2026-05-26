@@ -5,7 +5,8 @@ import server.common.entity.Auction;
 import server.common.entity.AutoBidConfig;
 import server.common.entity.Item;
 import server.common.entity.User;
-import server.common.entity.exception.InvalidBidException;
+import server.common.entity.exception.AuctionStateException;
+import server.common.entity.exception.AutoBidConfigException;
 import server.service.listeners.RealTimeObserver;
 import server.common.enums.AuctionStatus;
 import java.math.BigDecimal;
@@ -21,9 +22,9 @@ import java.util.stream.Collectors;
     Lý do: nếu có 2 instance → auctionMap bị phân mảnh → mỗi instance chỉ biết về một nửa số phiên đấu giá → data inconsistency.
 
     1. Registry toàn bộ Auction (auctionMap)
-    2. Tự động chuyển trạng thái OPEN → RUNNING → FINISHED theo thời gian (sử dụng ScheduledExecutorService)
-    3. Điều phối AutoBidEngine sau mỗi bid thành công
-    4. Quản lý danh sách Users trong memory
+    2. Hỗ trợ chuyển trạng thái OPEN → RUNNING → FINISHED theo thời gian (sử dụng ScheduledExecutorService)
+    3. Điều phối AutoBidEngine hỗ trợ Auto-Bidding
+    4. Quản lý danh sách Users trong memory hỗ trợ Notification
     5. Cung cấp các query method cho UI và Server layer
     => Điều khiển logic Auction, không cho client tham chiếu tới Auction (phải thông qua AuctionManager)
 
@@ -41,11 +42,11 @@ import java.util.stream.Collectors;
         - UI đăng ký observer qua addGlobalObserver() hoặc per-auction addObserver()
  */
 public class AuctionManager {
-
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Singleton
+    // ─────────────────────────────────────────────────────────────────────────
     private static volatile AuctionManager instance;
-    /** Quản lý các Token tác vụ đóng phiên đấu giá thời gian thực để hỗ trợ hủy/lập lịch lại */
-    private final Map<String, ScheduledFuture<?>> endAuctionTasks = new ConcurrentHashMap<>();
-    /*
+    /**
         Double-checked locking Singleton — thread-safe, lazy initialization.
         volatile đảm bảo visibility trên đa CPU core.
      */
@@ -61,22 +62,46 @@ public class AuctionManager {
         return instance;
     }
 
-    // ── Data stores ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Data stores
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /** Registry <AuctionID, Auction> */
+    /** Save User theo pair <AuctionID, Auction> */
     private final Map<Integer, Auction> auctionMap
         = new ConcurrentHashMap<>();
 
-    /** Registry <UserID, User> */
+    /** Save User theo pair <UserID, User> */
     private final Map<Integer, User> userMap
         = new ConcurrentHashMap<>();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Tools
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** AutoBidEngine xử lý auto-bid */
     private final AutoBidEngine autoBidEngine = new AutoBidEngine();
 
+    /** Quản lý các Token tác vụ đóng phiên đấu giá thời gian thực để hỗ trợ hủy/lập lịch lại */
+    private final Map<String, ScheduledFuture<?>> endAuctionTasks = new ConcurrentHashMap<>();
+
+    /**
+     * ScheduledExecutorService quản lý timer tự động đóng/mở phiên.
+     * Dùng ScheduledThreadPool :
+     *  - ScheduledThreadPool dùng nhiều thread → các phiên không block nhau
+     *  - ScheduledThreadPool xử lý exception tốt hơn
+     */
+    private final ScheduledExecutorService scheduler
+        = Executors.newScheduledThreadPool(
+        Math.max(2, Runtime.getRuntime().availableProcessors()),
+        r -> {
+            Thread t = new Thread(r, "AuctionScheduler");
+            t.setDaemon(true); // thread daemon → tự tắt khi JVM tắt
+            return t;
+        }
+    );
+
     /**
      * Service layer callbacks — inject sau khi khởi tạo để tránh circular dependency.
-     *
      * AuctionService gọi setOnAuctionStartedCallback(this::onAuctionStarted)
      * và setOnAuctionClosedCallback(this::onAuctionClosed) trong constructor.
      */
@@ -89,41 +114,57 @@ public class AuctionManager {
         this.onAuctionClosedCallback = callback;
     }
 
-
-    /*
-    Global observers — nhận sự kiện từ MỌI phiên đấu giá.
-      Ví dụ: NotificationService đăng ký ở đây để lưu notification vào DB.
-
-      UI/Server:
-        ServerBroadcaster implements RealTimeObserver và đăng ký ở đây
-        để push update đến toàn bộ client đang connect.
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Observer Management
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Global observers — nhận sự kiện từ MỌI phiên đấu giá.
      */
     private final List<RealTimeObserver> globalObservers
         = new CopyOnWriteArrayList<>();
 
-    /*
-      ScheduledExecutorService quản lý timer tự động đóng/mở phiên.
-
-      Dùng ScheduledThreadPool :
-        - ScheduledThreadPool dùng nhiều thread → các phiên không block nhau
-        - ScheduledThreadPool xử lý exception tốt hơn
+    /**
+     * Thêm global observer — nhận event từ TẤT CẢ phiên.
      */
-    private final ScheduledExecutorService scheduler
-        = Executors.newScheduledThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors()),
-            r -> {
-                Thread t = new Thread(r, "AuctionScheduler");
-                t.setDaemon(true); // thread daemon → tự tắt khi JVM tắt
-                return t;
-            }
-        );
+    public void addGlobalObserver(RealTimeObserver observer) {
+        globalObservers.add(observer);
+    }
+    /**
+     * Xóa global observer ra khỏi list.
+     */
+    public void removeGlobalObserver(RealTimeObserver observer) {
+        globalObservers.remove(observer);
+        auctionMap.values().forEach(a -> a.removeObserver(observer));
+    }
 
+    /**
+     * Thêm observer cho một phiên cụ thể.
+     */
+    public void addObserverToAuction(int auctionId, RealTimeObserver observer) {
+        Auction auction = auctionMap.get(auctionId);
+        if (auction != null) auction.addObserver(observer);
+    }
+
+    /**
+     * Xóa observer cho một phiên cụ thể.
+     */
+    public void removeObserverFromAuction(int auctionId, RealTimeObserver observer) {
+        Auction auction = auctionMap.get(auctionId);
+        if (auction != null) auction.removeObserver(observer);
+    }
+
+
+    public AutoBidEngine getAutoBidEngine() { return autoBidEngine; }
     // ─────────────────────────────────────────────────────────────────────────
-    //  User management
+    //  User Management
 
+    /** Đăng ký người dùng */
     public void registerUser(User user) {
         userMap.put(user.getId(), user);
     }
+    /** Đăng ký người dùng
+     * @return user/null
+     */
     public User registerOrGetUser(User user) {
         return userMap.computeIfAbsent(
             user.getId(),
@@ -131,7 +172,7 @@ public class AuctionManager {
         );
     }
 
-    // Return User hoặc null
+    /** Tìm kiếm người dùng bằng ID */
     public Optional<User> findUserById(int userId) {
         return Optional.ofNullable(userMap.get(userId));
     }
@@ -150,39 +191,34 @@ public class AuctionManager {
     //  Auction CRUD
 
     /**
-      Tạo mới phiên đấu giá và lên lịch tự động mở/đóng.
-
-        Sau khi gọi method này, tầng Service phải:
-          1. AuctionDAO.insert(auction) — lưu vào DB
-          2. ItemDAO.updateStatus(item.getId(), "IN_AUCTION")
-
-      @return Auction vừa được tạo
-     Không tự tạo mới Entity  trên RAM , dùng loadAuction để đồng bộ với DB
+     * Tạo mới phiên đấu giá và lên lịch tự động mở/đóng.
+     * @return Auction trên RAM vừa được tạo
+     *      Không tự tạo mới Entity trên RAM , nên dùng loadAuction để đồng bộ với DB
      */
-//    public Auction createAuction(Item item, int sellerId,
-//                                 LocalDateTime startTime, LocalDateTime endTime,
-//                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
-//                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
-//        Auction auction = new Auction(
-//            item, sellerId, startTime, endTime,
-//            minBidIncrement, reservePrice,
-//            snipeWindowSeconds, snipeExtensionSeconds
-//        );
-//
-//        // Đăng ký global observers vào phiên mới
-//        globalObservers.forEach(auction::addObserver);// Auction add từng Observers vào
-//
-//        auctionMap.put(auction.getId(), auction);
-//
-//        // Lên lịch tự động
-//        scheduleOpen(auction);
-//        scheduleClose(auction);
-//
-//        System.out.printf("[AuctionManager] Created auction %s for '%s'. Start: %s, End: %s%n",
-//            auction.getId(), item.getName(), startTime, endTime);
-//
-//        return auction;
-//    }
+    public Auction createAuction(Item item, int sellerId,
+                                 LocalDateTime startTime, LocalDateTime endTime,
+                                 BigDecimal minBidIncrement, BigDecimal reservePrice,
+                                 int snipeWindowSeconds, int snipeExtensionSeconds) {
+        Auction auction = new Auction(
+            item, sellerId, startTime, endTime,
+            minBidIncrement, reservePrice,
+            snipeWindowSeconds, snipeExtensionSeconds
+        );
+
+        // Đăng ký global observers vào phiên mới
+        globalObservers.forEach(auction::addObserver);// Auction add từng Observers vào
+
+        auctionMap.put(auction.getId(), auction);
+
+        // Lên lịch tự động
+        scheduleOpen(auction);
+        scheduleClose(auction);
+
+        System.out.printf("[AuctionManager] Created auction %s for '%s'. Start: %s, End: %s%n",
+            auction.getId(), item.getName(), startTime, endTime);
+
+        return auction;
+    }
 
     /**
      * Load auction đã có ID thật từ DB vào memory.
@@ -260,87 +296,40 @@ public class AuctionManager {
             .collect(Collectors.toList());
     }
 
-    //  Bid operations
-    //
-    //  QUAN TRỌNG: AuctionManager KHÔNG còn là entrypoint cho bid.
-    //  Flow duy nhất:
-    //    BidHandler → AuctionService.placeBid()
-    //              → BidTransactionService.executePlaceBidFlow()
-    //              → auction.placeBid()   ← gọi tại đây, trong DB lock
-    //
-    //  AuctionManager chỉ expose:
-    //    - getAutoBidEngine()   : để AuctionService trigger auto-bid cascade
-    //    - rescheduleClose()    : để AuctionService cập nhật lịch khi endTime thay đổi
-    //    - registerAutoBid()    : đăng ký auto-bid config
-    //    - cancelAutoBid()      : huỷ auto-bid
-    // ─────────────────────────────────────────────────────────────────────────
+    /** Lấy Auction Object bằng ID */
+    private Auction getAuctionByID(int auctionId) {
+        Auction auction = auctionMap.get(auctionId);
+        if (auction == null)
+            throw new IllegalArgumentException("Auction not found: " + auctionId);
+        return auction;
+    }
 
-    /**
-     * Cập nhật lại lịch đóng phiên khi endTime bị gia hạn (anti-snipe).
-     * Gọi bởi AuctionService sau khi auction.checkAndResetExtensionFlag() trả true.
-     */
-    public void rescheduleClose(Auction auction) {
-        scheduleClose(auction);
+    public int getActiveAuctionCount() {
+        return (int) auctionMap.values().stream().filter(Auction::isRunning).count();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Bid operations
-
-    /**
-      Entry point cho mọi yêu cầu đặt giá từ client.
-     Khi client đặt giá thủ công -> Manager follow flow
-      Flow:
-        1. Tìm auction
-        2. Gọi auction.placeBid(autoBid = false) → xử lý trong vùng lock
-        3. Trigger AutoBidEngine → auction.placeBid(autoBid = true)
-        4.      *   BidDAO.insert(manualTransaction)
-                *   BidDAO.insert(autoBidTransaction) nếu != null
-                *   AuctionDAO.updateState(auction)
-
-      @return BidTransaction của bid thủ công vừa thực hiện
-              (các auto-bid sẽ được notify qua Observer)
-     */
-//    public BidTransaction placeBid(String auctionId, User bidder, BigDecimal amount) {
-//        Auction auction = getAuctionByID(auctionId);
-//
-//        // Đặt giá thủ công
-//        BidTransaction manualTransaction = auction.placeBid(bidder, amount, false);
-//
-//        // Trigger auto-bid cascade (chạy sau khi lock đã release)
-//        BidTransaction autoBidTransaction = autoBidEngine.trigger(auction, bidder);
-//
-//        if (auction.checkAndResetExtensionFlag()) {
-//            this.scheduleClose(auction);
-//        }
-//        return manualTransaction;
-//    }
+    //  Auto-Bid operations
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Đăng ký auto-bid cho một bidder trong một phiên.
-     *   LƯU Ý: nếu bidder đang là winner của Auction + top1 queueConfig -> không cho phép đăng ký maxBid bé hơn currentPrice
-     *   Luôn trigger sau đăng ký, engine tự kiểm tra:
-     *        - Nếu bidder đã là winner current → engine không bid
-     *        - Nếu bidder chưa phải winner → engine bid Jump-to-Winner ngay
-     *
-     *      Return false để không lưu vào DB
      */
     public void registerAutoBid(AutoBidConfig config, User bidder) {
         Auction auction = getAuctionByID(config.getAuctionId());
 
         if (!auction.isRunning()) {
-            throw new IllegalStateException(
-                "Cannot register auto-bid on auction with status: " + auction.getStatus());
+            throw new AuctionStateException(auction.getId(),auction.getStatus());
         }
         BigDecimal currentPrice = auction.getCurrentPrice();
         BigDecimal newMaxBid = config.getMaxBid();
         BigDecimal increment = config.getIncrement();
 
         if (newMaxBid.compareTo(currentPrice.add(increment)) < 0) {
-            throw new IllegalArgumentException(
+            throw new AutoBidConfigException(
                 "Max bid must be at least current price. Current: " + currentPrice
-                    + ", Requested: " + newMaxBid);
+                    + ", Requested: " + newMaxBid,newMaxBid,increment,currentPrice);
         }
-
 
         bidder.setAutoBid(config);
         autoBidEngine.register(config, bidder);
@@ -352,18 +341,14 @@ public class AuctionManager {
 
     /**
      * Hủy auto-bid của một bidder trong một phiên.
-     *
-     * ⚠️  Tầng DAO: AutoBidDAO.updateStatus(auctionId, bidderId, CANCELED)
      */
     public void cancelAutoBid(int auctionId, User bidder) {
         Auction auction = getAuctionByID(auctionId);
         if (!auction.isRunning()){
-            // Nếu Auction chưa running thì hủy không cần trigger
             bidder.cancelAutoBid(auctionId);
             autoBidEngine.unregister(auctionId, bidder.getId());
-            return;
+            throw new AuctionStateException(auction.getId(),auction.getStatus());
         }
-
         bidder.cancelAutoBid(auctionId);
         autoBidEngine.unregister(auctionId, bidder.getId());
 
@@ -372,22 +357,7 @@ public class AuctionManager {
 
     }
 
-    /**
-     * Admin force-close một phiên đấu giá.
-     * Sau khi forceCancel(), fire onAuctionClosedCallback để Service xử lý DB và notify.
-     * Caller (AdminService) KHÔNG cần gọi onAuctionClosed() thủ công nữa.
-     */
-    public void forceCloseAuction(int auctionId, String reason) {
-        Auction auction = auctionMap.get(auctionId);
-        if (auction == null)
-            throw new IllegalArgumentException("Auction not found: " + auctionId);
-        auction.forceCancel(reason);
-        autoBidEngine.cleanupAutoBids(auctionId);
-        // Fire callback — AuctionService sẽ xử lý DB
-        if (onAuctionClosedCallback != null) {
-            onAuctionClosedCallback.accept(auction);
-        }
-    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Scheduler — tự động chuyển trạng thái theo thời gian
@@ -424,7 +394,6 @@ public class AuctionManager {
 
     /**
      * Lên lịch tự động đóng phiên khi đến endTime.
-     *
      * Lưu ý: endTime có thể bị gia hạn bởi anti-sniping.
      * ScheduledTask sẽ check lại thực tế khi chạy — nếu endTime đã đổi
      * thì tự lên lịch lại (reschedule).
@@ -471,40 +440,12 @@ public class AuctionManager {
         }, delaySeconds, TimeUnit.SECONDS);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Observer management
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
-     * Thêm global observer — nhận event từ TẤT CẢ phiên.
-     * Kết nối Server: chỉ ClientHandler/ServerBroadcaster được đăng ký ở đây, không phải NotificationService.
+     * Cập nhật lại lịch đóng phiên khi endTime bị gia hạn (anti-snipe).
+     * Gọi bởi AuctionService sau khi auction.checkAndResetExtensionFlag() trả true.
      */
-    public void addGlobalObserver(RealTimeObserver observer) {
-        globalObservers.add(observer);
-        // Đăng ký vào tất cả auction đang active (theo flow loadAllDatabase add vào rồi)
-//        auctionMap.values().stream()
-//            .filter(a -> a.getStatus() == AuctionStatus.RUNNING
-//                      || a.getStatus() == AuctionStatus.OPEN)
-//            .forEach(a -> a.addObserver(observer));
-    }
-
-    public void removeGlobalObserver(RealTimeObserver observer) {
-        globalObservers.remove(observer);
-        auctionMap.values().forEach(a -> a.removeObserver(observer));
-    }
-
-    /**
-     * Thêm observer cho một phiên cụ thể.
-     * ⚠️  Kết nối UI: Bidder "vào xem" một phiên → addObserver cho phiên đó.
-     */
-    public void addObserverToAuction(int auctionId, RealTimeObserver observer) {
-        Auction auction = auctionMap.get(auctionId);
-        if (auction != null) auction.addObserver(observer);
-    }
-
-    public void removeObserverFromAuction(int auctionId, RealTimeObserver observer) {
-        Auction auction = auctionMap.get(auctionId);
-        if (auction != null) auction.removeObserver(observer);
+    public void rescheduleClose(Auction auction) {
+        scheduleClose(auction);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -528,16 +469,24 @@ public class AuctionManager {
         }
     }
 
-    private Auction getAuctionByID(int auctionId) {
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Admin Control
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Admin force-close một phiên đấu giá.
+     * Sau khi forceCancel(), fire onAuctionClosedCallback để Service xử lý DB và notify.
+     * Caller (AdminService) KHÔNG cần gọi onAuctionClosed() thủ công nữa.
+     */
+    public void forceCloseAuction(int auctionId, String reason) {
         Auction auction = auctionMap.get(auctionId);
         if (auction == null)
             throw new IllegalArgumentException("Auction not found: " + auctionId);
-        return auction;
+        auction.forceCancel(reason);
+        autoBidEngine.cleanupAutoBids(auctionId);
+        // Fire callback — AuctionService sẽ xử lý DB
+        if (onAuctionClosedCallback != null) {
+            onAuctionClosedCallback.accept(auction);
+        }
     }
 
-    public int getActiveAuctionCount() {
-        return (int) auctionMap.values().stream().filter(Auction::isRunning).count();
-    }
-
-    public AutoBidEngine getAutoBidEngine() { return autoBidEngine; }
 }

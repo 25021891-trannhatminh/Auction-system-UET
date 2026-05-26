@@ -134,6 +134,10 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<AutoBidData> autoBids = new ArrayList<>();
   private List<AutoBidData> incomingAutoBids = new ArrayList<>();
   private boolean autoBidsLoaded;
+  private final List<TransactionData> transactions = new ArrayList<>();
+  private List<TransactionData> incomingTransactions = new ArrayList<>();
+  private boolean transactionsLoaded;
+  private final Map<String, Long> auctionSecondsSyncedAtMillis = new HashMap<>();
   private final Map<String, List<BidHistoryData>> sellerBidHistoryByAuction = new HashMap<>();
   private final Map<String, Boolean> sellerBidHistoryLoaded = new HashMap<>();
   private List<BidHistoryData> incomingSellerBidHistory = new ArrayList<>();
@@ -184,6 +188,7 @@ public class UserDashboardController extends BaseDashboardController {
   private Label activeCountdownDayLabel;
   private Label activeCountdownHourLabel;
   private Label activeCountdownMinuteLabel;
+  private Label activeCountdownSecondLabel;
   private long activeAuctionCountdownSeconds = -1L;
 
 
@@ -223,6 +228,10 @@ public class UserDashboardController extends BaseDashboardController {
         Platform.runLater(() -> handleAutoBidListMessage(msg));
         return;
       }
+      if (isTransactionMessage(msg)) {
+        Platform.runLater(() -> handleTransactionServerMessage(msg));
+        return;
+      }
       if (isRealtimeBidMessage(msg)) {
         Platform.runLater(() -> handleRealtimeBidMessage(msg));
         return;
@@ -235,6 +244,7 @@ public class UserDashboardController extends BaseDashboardController {
     requestUserAuctions();
     requestUserBids();
     requestUserAutoBids();
+    requestUserTransactions();
     requestNotificationHistory();
   }
 
@@ -325,6 +335,22 @@ public class UserDashboardController extends BaseDashboardController {
     }
   }
 
+  private void requestUserTransactions() {
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      return;
+    }
+
+    User currentUser = SessionManager.getCurrentUser();
+    if (currentUser != null && currentUser.getUserId() > 0) {
+      networkManager.send("USER_LIST_TRANSACTIONS " + currentUser.getUserId());
+    } else {
+      networkManager.send("USER_LIST_TRANSACTIONS");
+    }
+  }
+
   private void requestSellerBidHistory(String auctionId) {
     if (auctionId == null || auctionId.isBlank()) {
       return;
@@ -362,6 +388,17 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("USER_AUTOBIDS_ERROR"));
   }
 
+  private boolean isTransactionMessage(String message) {
+    return message != null && (message.equals("USER_TRANSACTIONS_BEGIN")
+        || message.equals("USER_TRANSACTIONS_END")
+        || message.equals("USER_TRANSACTIONS_DIRTY")
+        || message.startsWith("USER_TRANSACTION ")
+        || message.startsWith("USER_TRANSACTIONS_ERROR")
+        || message.startsWith("PAYMENT_SUCCESS")
+        || message.startsWith("PAYMENT_FAIL")
+        || message.startsWith("WALLET_UPDATE|"));
+  }
+
   private boolean isAuctionListMessage(String message) {
     return message.startsWith("USER_AUCTION")
         || message.equals("USER_AUCTIONS_DIRTY")
@@ -375,6 +412,7 @@ public class UserDashboardController extends BaseDashboardController {
     return message.startsWith("AUCTION_SNAPSHOT|")
         || message.startsWith("BID_UPDATE|")
         || message.startsWith("TIME_EXTENDED|")
+        || message.startsWith("AUCTION_CLOSED_UPDATE|")
         || message.startsWith("AUCTION_CLOSED|")
         || message.startsWith("BID_SUCCESS")
         || message.startsWith("BID_FAIL")
@@ -588,6 +626,103 @@ public class UserDashboardController extends BaseDashboardController {
     }
   }
 
+  private void handleTransactionServerMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.equals("USER_TRANSACTIONS_DIRTY")) {
+      requestUserTransactions();
+      return;
+    }
+
+    if (message.startsWith("PAYMENT_SUCCESS")) {
+      String[] parts = message.trim().split("\\s+", 3);
+      String auctionId = parts.length > 1 ? parts[1] : "";
+      notifUIHandler.showSuccess(
+          "Payment completed",
+          auctionId.isBlank()
+              ? "Your transaction has been paid successfully."
+              : "Payment completed for auction AUC-" + auctionId + "."
+      );
+      requestUserTransactions();
+      requestUserBids();
+      requestUserAuctions();
+      return;
+    }
+
+    if (message.startsWith("PAYMENT_FAIL")) {
+      String[] parts = message.trim().split("\\s+", 3);
+      String reason = parts.length > 2 ? parts[2] : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
+      notifUIHandler.showError("Payment failed", readablePaymentFailure(reason));
+      requestUserTransactions();
+      return;
+    }
+
+    if (message.startsWith("WALLET_UPDATE|")) {
+      requestUserTransactions();
+      return;
+    }
+
+    if (message.equals("USER_TRANSACTIONS_BEGIN")) {
+      incomingTransactions = new ArrayList<>();
+      return;
+    }
+
+    if (message.startsWith("USER_TRANSACTION ")) {
+      TransactionData parsed = parseTransaction(message.substring("USER_TRANSACTION ".length()));
+      if (parsed != null) {
+        incomingTransactions.add(parsed);
+      }
+      return;
+    }
+
+    if (message.equals("USER_TRANSACTIONS_END")) {
+      transactions.clear();
+      transactions.addAll(incomingTransactions);
+      transactionsLoaded = true;
+      applyTransactionStatsIfVisible();
+      if ("winners".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+        applyTransactionStatsIfVisible();
+      }
+      return;
+    }
+
+    if (message.startsWith("USER_TRANSACTIONS_ERROR")) {
+      transactions.clear();
+      transactionsLoaded = true;
+      applyTransactionStatsIfVisible();
+      if ("winners".equals(currentSectionKey)) {
+        renderWorkspace(currentSectionKey, activeFilter);
+      }
+    }
+  }
+
+  private TransactionData parseTransaction(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 14) {
+      return null;
+    }
+
+    return new TransactionData(
+        safeField(fields, 0),
+        safeField(fields, 1),
+        safeField(fields, 2),
+        fallback(safeField(fields, 3), "Auction #" + safeField(fields, 1)),
+        safeField(fields, 4),
+        fallback(safeField(fields, 5), "User #" + safeField(fields, 4)),
+        formatMoney(safeField(fields, 6)),
+        safeField(fields, 7),
+        safeField(fields, 8),
+        shortTimestamp(safeField(fields, 9)),
+        shortTimestamp(safeField(fields, 10)),
+        safeField(fields, 11),
+        safeField(fields, 12),
+        safeField(fields, 13)
+    );
+  }
+
   private boolean isRenderableAutoBidRule(AutoBidData rule) {
     if (rule == null) {
       return false;
@@ -722,6 +857,7 @@ public class UserDashboardController extends BaseDashboardController {
     String snipeWindow = fallback(safeField(fields, 17), "300");
     String snipeExtension = fallback(safeField(fields, 18), "60");
     String badge = secondsLeft > 0 && secondsLeft <= 3600 ? "Ending Soon" : status;
+    rememberAuctionClock(auctionId, secondsLeft);
 
     return new AuctionCardData(
         auctionId,
@@ -853,7 +989,8 @@ public class UserDashboardController extends BaseDashboardController {
       applyAutoBidStatsIfVisible();
     }
     if ("winners".equals(sectionKey)) {
-      applyEmptyStats("Real DB rows", "Not wired", "Pending", "");
+      requestUserTransactions();
+      applyTransactionStatsIfVisible();
     }
   }
 
@@ -970,11 +1107,7 @@ public class UserDashboardController extends BaseDashboardController {
       case "myBids" -> renderMyBids(filter);
       case "autoBids" -> renderAutoBids(filter);
       case "myItems" -> renderMyItemsLiveSummary(filter);
-      case "winners" -> renderNoLiveData(
-          "Transactions",
-          "Chưa có truy vấn DB cho giao dịch thắng/bán trong màn này, "
-              + "nên không hiển thị dữ liệu ảo."
-      );
+      case "winners" -> renderTransactions(filter);
       case "settings" -> renderSettings(filter);
       default -> renderDashboard(filter);
     }
@@ -1522,12 +1655,217 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void renderTransactions(String filter) {
-    renderNoLiveData(
-        "Transactions",
-        "Chưa có truy vấn DB cho giao dịch thắng/bán trong màn này, "
-            + "nên không hiển thị dữ liệu ảo."
-    );
+    setWorkspaceTitle("Transactions");
+    renderChips(filter, "All", "Payment Due", "Won", "Sold", "Completed", "Failed", "Refunded");
+    addHeader("Auction", "Amount", "Counterparty");
+
+    if (!transactionsLoaded) {
+      requestUserTransactions();
+      addLoadingRow("Loading post-auction transactions from database...");
+      return;
+    }
+
+    int count = 0;
+    for (TransactionData transaction : transactions) {
+      if (matchesTransactionFilter(transaction, filter)) {
+        addTransactionRow(transaction);
+        count++;
+      }
+    }
+
+    if (count == 0) {
+      addEmptyRow(filter);
+    }
   }
+
+  private boolean matchesTransactionFilter(TransactionData transaction, String filter) {
+    if (transaction == null || filter == null || isAllLikeFilter(filter)) {
+      return true;
+    }
+
+    String normalizedFilter = normalize(filter);
+    String status = normalize(resolveTransactionStatus(transaction));
+    String haystack = normalize(String.join(" ",
+        transaction.itemName,
+        transaction.role,
+        transaction.counterpartName,
+        transaction.amount,
+        transaction.paymentStatus,
+        transaction.auctionStatus,
+        transaction.walletTxType,
+        transaction.walletNote,
+        status
+    ));
+
+    return switch (normalizedFilter) {
+      case "payment due" -> transaction.isPayable() || status.contains("payment due");
+      case "won" -> transaction.isBuyer();
+      case "sold" -> transaction.isSeller();
+      case "completed" -> status.contains("completed");
+      case "failed" -> status.contains("failed");
+      case "refunded" -> status.contains("refunded") || haystack.contains("refund");
+      default -> haystack.contains(normalizedFilter);
+    };
+  }
+
+  private void addTransactionRow(TransactionData transaction) {
+    GridPane row = createTableGrid("data-row");
+    String detail = buildTransactionDetailText(transaction);
+    row.setOnMouseClicked(event -> showTemporaryDetail(transaction.itemName, detail));
+
+    HBox mainCell = new HBox(9);
+    mainCell.setAlignment(Pos.CENTER_LEFT);
+    mainCell.setMinWidth(0);
+    mainCell.setMaxWidth(Double.MAX_VALUE);
+    mainCell.getStyleClass().add("row-main-cell");
+    GridPane.setHgrow(mainCell, Priority.ALWAYS);
+
+    StackPane thumbnail = buildThumbnail(initialsFor(transaction.itemName));
+
+    VBox textCell = new VBox(2);
+    textCell.setMinWidth(0);
+    textCell.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(textCell, Priority.ALWAYS);
+
+    Button link = new Button(transaction.itemName);
+    link.setMnemonicParsing(false);
+    link.getStyleClass().add("row-link");
+    link.setMinWidth(0);
+    link.setMaxWidth(Double.MAX_VALUE);
+    link.setTextOverrun(OverrunStyle.ELLIPSIS);
+    link.setOnAction(event -> showTemporaryDetail(transaction.itemName, detail));
+
+    Label meta = new Label(buildTransactionMeta(transaction));
+    meta.getStyleClass().add("row-meta");
+    meta.setWrapText(false);
+    meta.setMinWidth(0);
+    meta.setMaxWidth(Double.MAX_VALUE);
+    meta.setTextOverrun(OverrunStyle.ELLIPSIS);
+
+    textCell.getChildren().addAll(link, meta);
+    mainCell.getChildren().addAll(thumbnail, textCell);
+
+    Label amount = rowMetric(transaction.amount);
+    Label counterpart = rowMetric(transaction.counterpartName);
+    Label status = statusBadge(resolveTransactionStatus(transaction));
+    GridPane actions = transactionActions(transaction, detail);
+
+    row.add(mainCell, 0, 0);
+    row.add(amount, 1, 0);
+    row.add(counterpart, 2, 0);
+    row.add(status, 3, 0);
+    row.add(actions, 4, 0);
+
+    GridPane.setHalignment(amount, HPos.CENTER);
+    GridPane.setHalignment(counterpart, HPos.CENTER);
+    GridPane.setHalignment(status, HPos.CENTER);
+    GridPane.setHalignment(actions, HPos.CENTER);
+
+    workspaceBox.getChildren().add(row);
+  }
+
+  private GridPane transactionActions(TransactionData transaction, String detail) {
+    GridPane actions = new GridPane();
+    actions.setHgap(USER_ACTION_GAP);
+    actions.setAlignment(Pos.CENTER);
+    actions.setMinWidth(0);
+    actions.setMaxWidth(Double.MAX_VALUE);
+    actions.getStyleClass().add("user-row-actions");
+    actions.getColumnConstraints().addAll(
+        fixedColumn(USER_ACTION_PRIMARY_WIDTH),
+        fixedColumn(USER_ACTION_MORE_WIDTH)
+    );
+
+    Button primary = new Button(transaction.isPayable() ? "Pay Now" : "View");
+    primary.setMnemonicParsing(false);
+    primary.getStyleClass().addAll("mini-action-btn", "user-primary-action-btn");
+    primary.setMinWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setPrefWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setMaxWidth(USER_ACTION_PRIMARY_WIDTH);
+    primary.setTextOverrun(OverrunStyle.ELLIPSIS);
+    primary.setOnAction(event -> {
+      if (transaction.isPayable()) {
+        submitTransactionPayment(transaction);
+      } else {
+        showTemporaryDetail(transaction.itemName, detail);
+      }
+    });
+
+    actions.add(primary, 0, 0);
+    GridPane.setHalignment(primary, HPos.CENTER);
+
+    Region placeholder = new Region();
+    placeholder.setMinWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setPrefWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setMaxWidth(USER_ACTION_MORE_WIDTH);
+    placeholder.setOpacity(0);
+    actions.add(placeholder, 1, 0);
+    return actions;
+  }
+
+  private String buildTransactionMeta(TransactionData transaction) {
+    String role = transaction.isBuyer() ? "Won auction" : "Sold auction";
+    String status = prettyStatus(transaction.paymentStatus);
+    String date = transaction.paidAt.isBlank() ? transaction.createdAt : transaction.paidAt;
+    return role + " • AUC-" + transaction.auctionId + " • " + status + " • "
+        + fallback(date, "No timestamp");
+  }
+
+  private String buildTransactionDetailText(TransactionData transaction) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Payment ID: PAY-").append(transaction.paymentId).append('\n');
+    builder.append("Auction ID: AUC-").append(transaction.auctionId).append('\n');
+    builder.append("Role: ").append(transaction.isBuyer() ? "Buyer" : "Seller").append('\n');
+    builder.append("Counterparty: ").append(transaction.counterpartName).append('\n');
+    builder.append("Amount: ").append(transaction.amount).append('\n');
+    builder.append("Payment status: ").append(prettyStatus(transaction.paymentStatus)).append('\n');
+    builder.append("Auction status: ").append(prettyStatus(transaction.auctionStatus)).append('\n');
+    builder.append("Created at: ").append(fallback(transaction.createdAt, "Not available")).append('\n');
+    builder.append("Paid at: ").append(fallback(transaction.paidAt, "Not paid yet"));
+    if (!transaction.walletTxId.isBlank() && !"0".equals(transaction.walletTxId)) {
+      builder.append('\n').append("Wallet transaction: WT-").append(transaction.walletTxId);
+      if (!transaction.walletTxType.isBlank()) {
+        builder.append(" (").append(prettyStatus(transaction.walletTxType)).append(')');
+      }
+    }
+    if (!transaction.walletNote.isBlank()) {
+      builder.append('\n').append("Note: ").append(transaction.walletNote);
+    }
+    return builder.toString();
+  }
+
+  private String resolveTransactionStatus(TransactionData transaction) {
+    String paymentStatus = normalize(transaction.paymentStatus);
+    if (paymentStatus.equals("pending")) {
+      return transaction.isBuyer() ? "Payment Due" : "Awaiting Payment";
+    }
+    if (paymentStatus.equals("completed")) {
+      return "Completed";
+    }
+    if (paymentStatus.equals("failed")) {
+      return "Failed";
+    }
+    if (paymentStatus.equals("refunded")) {
+      return "Refunded";
+    }
+    return prettyStatus(transaction.paymentStatus);
+  }
+
+  private void submitTransactionPayment(TransactionData transaction) {
+    if (transaction == null || !transaction.isPayable()) {
+      showTemporaryDetail("Payment unavailable", "This transaction is not payable in its current state.");
+      return;
+    }
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      notifUIHandler.showError("Payment failed", "Cannot connect to the server.");
+      return;
+    }
+    networkManager.send("CONFIRM_PAYMENT " + transaction.auctionId + " " + transaction.itemName);
+  }
+
 
   private void renderSettings(String filter) {
     setWorkspaceTitle("Settings Groups");
@@ -2281,6 +2619,7 @@ public class UserDashboardController extends BaseDashboardController {
     activeCountdownDayLabel = null;
     activeCountdownHourLabel = null;
     activeCountdownMinuteLabel = null;
+    activeCountdownSecondLabel = null;
     activeAuctionCountdownSeconds = -1L;
   }
 
@@ -2314,8 +2653,16 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    BigDecimal minimumAcceptedBid = moneyValue(latestData.price).add(moneyValue(latestData.minimumIncrement));
-    if (minimumAcceptedBid.compareTo(BigDecimal.ZERO) > 0
+    BigDecimal currentBidValue = moneyValue(latestData.price);
+    if (bidValue.compareTo(currentBidValue) <= 0) {
+      showBidFeedback("Bid must be greater than current price "
+          + formatMoney(currentBidValue.toPlainString()) + ".", true);
+      return;
+    }
+
+    BigDecimal minimumIncrement = moneyValue(latestData.minimumIncrement);
+    BigDecimal minimumAcceptedBid = currentBidValue.add(minimumIncrement);
+    if (minimumIncrement.compareTo(BigDecimal.ZERO) > 0
         && bidValue.compareTo(minimumAcceptedBid) < 0) {
       showBidFeedback("Bid must be at least " + formatMoney(minimumAcceptedBid.toPlainString()) + ".", true);
       return;
@@ -2475,12 +2822,16 @@ public class UserDashboardController extends BaseDashboardController {
       handleTimeExtended(message.substring("TIME_EXTENDED|".length()));
       return;
     }
+    if (message.startsWith("AUCTION_CLOSED_UPDATE|")) {
+      handleAuctionClosedUpdate(message.substring("AUCTION_CLOSED_UPDATE|".length()));
+      return;
+    }
     if (message.startsWith("AUCTION_CLOSED|")) {
       handleAuctionClosed(message.substring("AUCTION_CLOSED|".length()));
       return;
     }
     if (message.startsWith("BID_SUCCESS")) {
-      String[] parts = message.trim().split("\s+", 3);
+      String[] parts = message.trim().split("\\s+", 3);
       String auctionId = parts.length > 1 ? parts[1] : activeAuctionDetailId;
       String amount = parts.length > 2 ? parts[2] : "";
       if (auctionId != null && !auctionId.isBlank()) {
@@ -2588,7 +2939,12 @@ public class UserDashboardController extends BaseDashboardController {
     String leaderName = safeField(fields, 4);
     String endTime = safeField(fields, 5);
     int totalBids = parseIntOrDefault(safeField(fields, 6), 0);
-    long secondsLeft = secondsUntil(endTime, -1L);
+    long secondsLeft = fields.size() >= 8
+        ? parseLongOrDefault(safeField(fields, 7), -1L)
+        : -1L;
+    if (secondsLeft < 0) {
+      secondsLeft = secondsUntil(endTime, -1L);
+    }
 
     replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderName, status);
 
@@ -2658,6 +3014,23 @@ public class UserDashboardController extends BaseDashboardController {
     String finalPrice = safeField(fields, 2);
     String status = safeField(fields, 3);
     replaceAuctionCardStatus(auctionId, finalPrice, status);
+    applyClosedAuctionUiState(auctionId, finalPrice, status);
+  }
+
+  private void handleAuctionClosedUpdate(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 5) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    String status = safeField(fields, 1);
+    String finalPrice = safeField(fields, 2);
+    String winnerName = safeField(fields, 4);
+    replaceAuctionCardBid(auctionId, finalPrice, -1, 0L, "", winnerName, status);
+    applyClosedAuctionUiState(auctionId, finalPrice, status);
+  }
+
+  private void applyClosedAuctionUiState(String auctionId, String finalPrice, String status) {
     if (isActiveAuction(auctionId)) {
       if (activeAuctionBidInput != null) {
         activeAuctionBidInput.setDisable(true);
@@ -2671,6 +3044,9 @@ public class UserDashboardController extends BaseDashboardController {
       showBidFeedback("This auction has closed with status " + status + ".", false);
     }
     requestUserAuctions();
+    requestUserBids();
+    requestUserAutoBids();
+    requestUserTransactions();
   }
 
   private boolean isActiveAuction(String auctionId) {
@@ -2693,11 +3069,13 @@ public class UserDashboardController extends BaseDashboardController {
       if (!card.auctionId.equals(auctionId)) {
         continue;
       }
+      long effectiveSecondsLeft = secondsLeft < 0 ? currentSecondsLeft(card) : secondsLeft;
+      rememberAuctionClock(auctionId, effectiveSecondsLeft);
       liveAuctionCards.set(i, copyAuctionCard(
           card,
           rawAmount == null || rawAmount.isBlank() ? card.price : formatMoney(rawAmount),
           totalBids < 0 ? card.bidCount : totalBids,
-          secondsLeft < 0 ? currentSecondsLeft(card) : secondsLeft,
+          effectiveSecondsLeft,
           endTime == null || endTime.isBlank()
               ? card.endTime
               : shortTimestamp(endTime.replace('T', ' ')),
@@ -2714,6 +3092,7 @@ public class UserDashboardController extends BaseDashboardController {
       if (!card.auctionId.equals(auctionId)) {
         continue;
       }
+      rememberAuctionClock(auctionId, 0L);
       liveAuctionCards.set(i, copyAuctionCard(
           card,
           rawAmount == null || rawAmount.isBlank() ? card.price : formatMoney(rawAmount),
@@ -2968,17 +3347,21 @@ public class UserDashboardController extends BaseDashboardController {
     Label dayNumber = countdownNumberLabel();
     Label hourNumber = countdownNumberLabel();
     Label minuteNumber = countdownNumberLabel();
+    Label secondNumber = countdownNumberLabel();
     activeCountdownDayLabel = dayNumber;
     activeCountdownHourLabel = hourNumber;
     activeCountdownMinuteLabel = minuteNumber;
-    updateCountdownLabels(dayNumber, hourNumber, minuteNumber, activeAuctionCountdownSeconds);
+    activeCountdownSecondLabel = secondNumber;
+    updateCountdownLabels(dayNumber, hourNumber, minuteNumber, secondNumber, activeAuctionCountdownSeconds);
 
     box.getChildren().addAll(
         countdownUnit(dayNumber, "Day"),
         countdownSeparator(),
         countdownUnit(hourNumber, "Hours"),
         countdownSeparator(),
-        countdownUnit(minuteNumber, "Minutes")
+        countdownUnit(minuteNumber, "Minutes"),
+        countdownSeparator(),
+        countdownUnit(secondNumber, "Seconds")
     );
 
     startActiveCountdownTimeline();
@@ -3020,26 +3403,29 @@ public class UserDashboardController extends BaseDashboardController {
     }
     activeAuctionCountdownSeconds = Math.max(0, secondsLeft);
     if (activeCountdownDayLabel != null && activeCountdownHourLabel != null
-        && activeCountdownMinuteLabel != null) {
+        && activeCountdownMinuteLabel != null && activeCountdownSecondLabel != null) {
       updateCountdownLabels(
           activeCountdownDayLabel,
           activeCountdownHourLabel,
           activeCountdownMinuteLabel,
+          activeCountdownSecondLabel,
           activeAuctionCountdownSeconds
       );
     }
   }
 
   private void updateCountdownLabels(Label dayNumber, Label hourNumber, Label minuteNumber,
-      long secondsLeft) {
+      Label secondNumber, long secondsLeft) {
     long safeSeconds = Math.max(0, secondsLeft);
     long days = safeSeconds / 86400;
     long hours = (safeSeconds % 86400) / 3600;
     long minutes = (safeSeconds % 3600) / 60;
+    long seconds = safeSeconds % 60;
 
     dayNumber.setText(String.format("%02d", days));
     hourNumber.setText(String.format("%02d", hours));
     minuteNumber.setText(String.format("%02d", minutes));
+    secondNumber.setText(String.format("%02d", seconds));
   }
 
   private Label countdownNumberLabel() {
@@ -3721,6 +4107,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (normalized.contains("outbid")
         || normalized.contains("payment due")
+        || normalized.contains("awaiting payment")
         || normalized.contains("near limit")
         || normalized.contains("pending")
         || normalized.contains("to ship")
@@ -3730,6 +4117,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (normalized.contains("lost")
+        || normalized.contains("failed")
         || normalized.contains("limit reached")
         || normalized.contains("unsold")) {
       return "status-danger";
@@ -4865,7 +5253,8 @@ public class UserDashboardController extends BaseDashboardController {
       if (normalize(card.status).equals("running")) {
         running++;
       }
-      if (card.secondsLeft > 0 && card.secondsLeft <= 86400) {
+      long currentSeconds = currentSecondsLeft(card);
+      if (currentSeconds > 0 && currentSeconds <= 86400) {
         endingSoon++;
       }
       totalBids += card.bidCount;
@@ -4879,6 +5268,38 @@ public class UserDashboardController extends BaseDashboardController {
     setLabelText(statLabel2, "Running");
     setLabelText(statLabel3, "Ending Soon");
     setLabelText(statLabel4, "Total Bids");
+  }
+
+  private void applyTransactionStatsIfVisible() {
+    if (!"winners".equals(currentSectionKey)) {
+      return;
+    }
+
+    int total = transactions.size();
+    int paymentDue = 0;
+    int sold = 0;
+    int completed = 0;
+    for (TransactionData transaction : transactions) {
+      String status = normalize(resolveTransactionStatus(transaction));
+      if (status.equals("payment due")) {
+        paymentDue++;
+      }
+      if (transaction.isSeller()) {
+        sold++;
+      }
+      if (status.equals("completed") || status.equals("refunded")) {
+        completed++;
+      }
+    }
+
+    setLabelText(statValue1, twoDigit(total));
+    setLabelText(statValue2, twoDigit(paymentDue));
+    setLabelText(statValue3, twoDigit(sold));
+    setLabelText(statValue4, twoDigit(completed));
+    setLabelText(statLabel1, "Transactions");
+    setLabelText(statLabel2, "Payment Due");
+    setLabelText(statLabel3, "Sold");
+    setLabelText(statLabel4, "Completed");
   }
 
   private void applyEmptyStats(String first, String second, String third, String fourth) {
@@ -4977,9 +5398,32 @@ public class UserDashboardController extends BaseDashboardController {
     return bidCount + (bidCount == 1 ? " bid" : " bids");
   }
 
+  private void rememberAuctionClock(String auctionId, long secondsLeft) {
+    if (auctionId == null || auctionId.isBlank() || secondsLeft < 0) {
+      return;
+    }
+    auctionSecondsSyncedAtMillis.put(auctionId, System.currentTimeMillis());
+  }
+
+  private long secondsFromServerClock(AuctionCardData data) {
+    if (data == null || data.auctionId == null || data.auctionId.isBlank() || data.secondsLeft < 0) {
+      return -1L;
+    }
+    Long syncedAt = auctionSecondsSyncedAtMillis.get(data.auctionId);
+    if (syncedAt == null) {
+      return -1L;
+    }
+    long elapsed = Math.max(0L, (System.currentTimeMillis() - syncedAt) / 1000L);
+    return Math.max(0L, data.secondsLeft - elapsed);
+  }
+
   private long currentSecondsLeft(AuctionCardData data) {
     if (data == null) {
       return 0L;
+    }
+    long serverClockSeconds = secondsFromServerClock(data);
+    if (serverClockSeconds >= 0) {
+      return serverClockSeconds;
     }
     return secondsUntil(data.endTime, data.secondsLeft);
   }
@@ -5015,13 +5459,34 @@ public class UserDashboardController extends BaseDashboardController {
     long days = secondsLeft / 86400;
     long hours = (secondsLeft % 86400) / 3600;
     long minutes = (secondsLeft % 3600) / 60;
+    long seconds = secondsLeft % 60;
     if (days > 0) {
       return days + "d " + hours + "h " + minutes + "m";
     }
     if (hours > 0) {
-      return hours + "h " + minutes + "m";
+      return hours + "h " + minutes + "m " + seconds + "s";
     }
-    return Math.max(1, minutes) + "m";
+    if (minutes > 0) {
+      return minutes + "m " + seconds + "s";
+    }
+    return seconds + "s";
+  }
+
+  private String readablePaymentFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim().toUpperCase();
+    return switch (normalized) {
+      case "NOT_LOGGED_IN" -> "Please sign in before paying for a transaction.";
+      case "INVALID_FORMAT" -> "Payment request is missing auction information.";
+      case "PAYMENT_NOT_FOUND" -> "No payable transaction exists for this auction.";
+      case "NOT_BUYER" -> "Only the winning buyer can pay this transaction.";
+      case "PAYMENT_COMPLETED" -> "This transaction has already been paid.";
+      case "PAYMENT_FAILED" -> "This transaction is already marked as failed.";
+      case "PAYMENT_REFUNDED" -> "This transaction has already been refunded.";
+      case "PAYMENT_NOT_COMPLETED" -> "Payment could not be completed. Please check wallet balance and transaction status.";
+      default -> normalized.isBlank()
+          ? "Payment could not be completed."
+          : "Payment could not be completed: " + normalized.replace('_', ' ').toLowerCase() + ".";
+    };
   }
 
   private long parseLongOrDefault(String value, long fallbackValue) {

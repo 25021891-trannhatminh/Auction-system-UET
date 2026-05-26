@@ -145,10 +145,10 @@ final class UserDashboardSections {
                 "Leave Review."
         },
         new String[]{
-            "Transaction rows are hidden until DB queries are added.",
-            "Shipping rows are not mocked.",
-            "Completed transaction rows are not mocked.",
-            "Invoice rows are not mocked."
+            "Transaction rows load from payments joined with auctions, items, and accounts.",
+            "Payment Due rows call the existing CONFIRM_PAYMENT flow.",
+            "Completed, failed, and refunded states come from the payments table.",
+            "Wallet transaction references are shown when the payment flow writes them."
         }
     ));
 
