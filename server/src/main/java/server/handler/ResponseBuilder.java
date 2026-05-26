@@ -239,4 +239,31 @@ public final class ResponseBuilder {
     public static String pong() {
         return ProtocolConstants.PONG;
     }
+
+    /**
+     * Tạo chuỗi thông báo bắt đầu đồng bộ dữ liệu biểu đồ.
+     * @return chuỗi lệnh HISTORY_START
+     */
+    public static String historyStart() {
+        return "HISTORY_START";
+    }
+
+    /**
+     * Tạo chuỗi phẳng gói gọn một điểm tọa độ biểu đồ quá khứ.
+     * @param bidTimeStr chuỗi thời gian định dạng HH:mm:ss
+     * @param amount mức giá tiền cụ thể
+     * @return chuỗi định dạng phẳng khớp cấu trúc hệ thống
+     */
+    public static String historyItem(final String bidTimeStr, final java.math.BigDecimal amount) {
+        return String.format("%s %s|%s", "HISTORY_ITEM", bidTimeStr, amount.toPlainString());
+    }
+
+    /**
+     * Tạo chuỗi thông báo kết thúc luồng truyền dữ liệu biểu đồ.
+     * @return chuỗi lệnh HISTORY_END
+     */
+    public static String historyEnd() {
+        return "HISTORY_END";
+    }
+
 }

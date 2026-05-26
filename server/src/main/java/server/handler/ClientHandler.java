@@ -1200,6 +1200,41 @@ public class ClientHandler implements Runnable{
 //    public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
 //
 //    }
+    /**
+     * Truy vấn dữ liệu lịch sử từ DAO và đẩy tuần tự xuống cho Client qua Socket.
+     * @param out luồng ghi dữ liệu mạng PrintWriter của Client tương ứng
+     * @param auctionId ID phiên đấu giá hiện tại đang tham gia
+     * @param bidDAO lớp hạ tầng lưu trữ dữ liệu nghiệp vụ
+     */
+    public void sendChartHistory(final java.io.PrintWriter out,
+                                 final int auctionId,
+                                 final server.repository.BidTransactionDAO bidDAO) {
+        try {
+            out.println(server.handler.ResponseBuilder.historyStart());
+
+            final java.util.List<server.common.model.BidHistoryDTO> historyList =
+                    bidDAO.getBidHistory(auctionId);
+            final java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
+
+            if (historyList != null) {
+                for (final server.common.model.BidHistoryDTO bid : historyList) {
+                    // Chuyển đổi mốc giờ thành chuỗi text phẳng
+                    final String formattedTime = sdf.format(bid.getBidTime());
+
+                    // LẤY CHÍNH XÁC ĐỐI TƯỢNG BIGDECIMAL TỪ MODEL RA Ở ĐÂY:
+                    final java.math.BigDecimal amount = bid.getAmount();
+
+                    // 3. Đóng gói chuỗi truyền qua đường ống mạng Socket
+                    out.println(server.handler.ResponseBuilder.historyItem(formattedTime, amount));
+                }
+            }
+            // 4. Phát tín hiệu kết thúc đồng bộ dữ liệu quá khứ
+            out.println(server.handler.ResponseBuilder.historyEnd());
+            out.flush();
+        } catch (final Exception e) {
+            System.err.println("Lỗi Checkstyle/Đồng bộ luồng dữ liệu biểu đồ: " + e.getMessage());
+        }
+    }
 
 
 }

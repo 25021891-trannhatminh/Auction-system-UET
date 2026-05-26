@@ -88,4 +88,13 @@ public final class ProtocolConstants {
     // ========== COMMON ==========
     public static final String FAIL_NOT_LOGGED_IN = "NOT_LOGGED_IN";
     public static final String FAIL_INVALID_FORMAT = "INVALID_FORMAT";
+
+    /** Tín hiệu bắt đầu truyền dữ liệu quá khứ cho biểu đồ. */
+    public static final String HISTORY_START = "HISTORY_START";
+
+    /** Từ khóa cấu trúc một điểm tọa độ lịch sử. */
+    public static final String HISTORY_ITEM = "HISTORY_ITEM";
+
+    /** Tín hiệu kết thúc truyền toàn bộ dữ liệu lịch sử. */
+    public static final String HISTORY_END = "HISTORY_END";
 }
