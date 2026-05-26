@@ -15,7 +15,7 @@ import server.common.entity.Auction;
 import server.common.entity.Auction.PlaceBidResult;
 import server.common.entity.BidTransaction;
 import server.common.entity.User;
-import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
@@ -38,7 +38,7 @@ public class BidTransactionService {
    * Đồng bộ hóa và thao tác dữ liệu qua lại sử dụng trực tiếp thực thể gốc BidHistoryDTO.
    */
   public BidTransaction executePlaceBidFlow(int auctionId, int bidderId, BigDecimal amount, boolean isAutoBid
-  ) throws AuctionClosedException, InvalidBidException {
+  ) throws AuctionStateException, InvalidBidException {
 
     // SỬA LỖI: Cập nhật chuẩn xác 3 tham số cho InvalidBidException theo đúng file Exception gốc
     if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -74,7 +74,7 @@ public class BidTransactionService {
         // ── Bước 2: Guard status từ DB ────────────────────────────────────────────────────────
         if ("FINISHED".equals(lockInfo.status()) || "ENDED".equals(lockInfo.status()) || "CANCELED".equals(lockInfo.status())) {
           conn.rollback();
-          throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
+          throw new AuctionStateException(auctionId, AuctionStatus.FINISHED);
         }
 
         // ── Bước 3: Guard endTime từ DB — lớp phòng thủ cuối, bắt scheduler trễ ─────────────
@@ -84,7 +84,7 @@ public class BidTransactionService {
           conn.rollback();
           logger.warn("executePlaceBidFlow() - auction {} đã quá endTime ({}) nhưng status vẫn RUNNING — scheduler trễ",
               auctionId, lockInfo.endTime());
-          throw new AuctionClosedException(auctionId, AuctionStatus.FINISHED);
+          throw new AuctionStateException(auctionId, AuctionStatus.FINISHED);
         }
 
         // ── Bước 4: Thực thi nghiệp vụ đặt giá trên RAM ─────────────────────────────────────
@@ -127,7 +127,7 @@ public class BidTransactionService {
         logger.info("executePlaceBidFlow() - success auctionId={} bidderId={} amount={}", auctionId, bidderId, amount);
         return tx;
 
-      } catch (AuctionClosedException | InvalidBidException e) {
+      } catch (AuctionStateException | InvalidBidException e) {
         conn.rollback();
         throw e;
       } catch (Exception e) {

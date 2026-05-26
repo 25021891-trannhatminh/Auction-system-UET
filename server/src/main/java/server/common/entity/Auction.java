@@ -11,8 +11,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 
 import server.common.ProtocolConstants;
-import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
+import server.common.entity.exception.SelfBidException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 import server.service.listeners.RealTimeObserver;
@@ -21,7 +22,7 @@ import server.service.listeners.RealTimeObserver;
   ═══════════════════════════════════════════════════════════
    Auction — Logic 1 phòng đấu giá.
 
-  Chịu trách nhiệm:
+  Chịu trách nhiệm: Update Auction state trong RAM
     1. Nhận và validate bid (placeBid)
     2. Đảm bảo thread-safety bằng ReentrantLock
     3. Anti-sniping: gia hạn thời gian khi bid vào phút cuối
@@ -29,21 +30,11 @@ import server.service.listeners.RealTimeObserver;
     5. Thông báo tới Observer sau mỗi sự kiện
     6. Lưu toàn bộ lịch sử bid (bidHistory)
 
-   CONCURRENCY — ĐỌC KỸ TRƯỚC KHI SỬA:
-    ReentrantLock bảo vệ toàn bộ vùng critical section trong placeBid().
+   CONCURRENCY:
+    ReentrantLock bảo vệ toàn bộ vùng critical section (validateBid) trong placeBid().
     Quy tắc bắt buộc: LUÔN gọi lock.unlock() trong khối finally.
-    Nếu quên → deadlock toàn bộ phiên đấu giá, không bid được nữa.
+        → Tránh deadlock toàn bộ phiên đấu giá, không bid được nữa.
 
-   Kết nối DB (tầng DAO cần xử lý):
-    - Mỗi lần placeBid() thành công → INSERT vào bảng bids
-    - Mỗi lần state thay đổi → UPDATE bảng auctions
-    - closeSession() → UPDATE status, current_winner_id
-
-   Kết nối UI:
-    - UI đăng ký observer qua addObserver() để nhận realtime update
-    - UI đọc getCurrentPrice(), getCurrentLeader(), getStatus() để render
-    - UI gọi getRecentBids(n) để hiển thị bảng lịch sử bid
-    - UI dùng getBidHistory() để vẽ LineChart giá theo thời gian
  */
 public class Auction extends Entity {
 
@@ -55,21 +46,13 @@ public class Auction extends Entity {
     private final LocalDateTime startTime;
     private       LocalDateTime endTime;
 
-    private transient volatile boolean isTimeExtendedDuringRuntime = false;
-
-    /**
-     * Anti-sniping config:
+    /*  ── Anti-snipping config ───────────────────────────────────────────────────────────
      *   snipeWindowSeconds   — nếu bid trong khoảng này trước endTime → gia hạn
      *   snipeExtensionSeconds — số giây được thêm vào endTime
-     *
-     * Ví dụ: window=30, extension=60
-     *   Nếu còn < 30 giây mà có bid → endTime += 60 giây.
-     *
-     * ⚠️  Kết nối DB: ánh xạ sang auctions.snipe_window_seconds
-     *     và auctions.snipe_extension_seconds
      */
-    private final int snipeWindowSeconds;   // Số giây cuối cùng trong Anti-snipping
-    private final int snipeExtensionSeconds;    // Thêm bao nhiêu giây nếu Anti-snipping
+    private final int snipeWindowSeconds;   // Số giây cuối cùng kích hoạt Anti-snipping
+    private final int snipeExtensionSeconds;    // Thời gian cộng thêm nếu Anti-snipping
+    private transient volatile boolean isTimeExtendedDuringRuntime = false;
 
     // ── Bid config ────────────────────────────────────────────────────────────
     private final BigDecimal startingPrice;     // giá khởi điểm
@@ -94,10 +77,10 @@ public class Auction extends Entity {
      *   - Cho phép tryLock() với timeout (không block vô hạn)
      *   - Hỗ trợ fairness (fair=true → FIFO order cho waiting threads)
      *   - Dễ debug hơn synchronized
-     *
-     * fair=true: đảm bảo không có thread nào bị starvation.
      */
     private final ReentrantLock lock = new ReentrantLock(true);
+
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Constructors
@@ -105,9 +88,6 @@ public class Auction extends Entity {
 
     /**
      * Tạo auction mới ở tầng domain trước khi persist xuống DB.
-     *
-     * <p>{@code reservePrice} được chuẩn hóa về {@link BigDecimal#ZERO} khi client
-     * gửi trống để các bước so sánh giá sau này không bị lỗi {@code null}.</p>
      *
      * @param item item được đem ra đấu giá
      * @param sellerId ID người bán sở hữu item
@@ -193,71 +173,70 @@ public class Auction extends Entity {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  CORE: placeBid
+    //  PLACE BID
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Đặt giá vào phiên đấu giá.
      *
      * Luồng xử lý :
-     *   Step 1 — Kiểm tra trạng thái phiên (không cần lock)
+     *   Step 1 — Kiểm tra trạng thái phiên, trạng thái bidder
      *   Step 2 — Acquire lock (chặn các thread khác)
-     *   Step 3 — Validate giá trong vùng lock
-     *   Step 4 — Cập nhật state
-     *   Step 5 — Anti-sniping check
-     *   Step 6 — Release lock
-     *   Step 7 — Thông báo Observer (ngoài lock để không block thread khác)
+     *   Step 3 — Recheck state
+     *   Step 4 — Validate state giá trong vùng lock
+     *   Step 5 — Cập nhật state
+     *   Step 6 — Anti-sniping check
+     *   Step 7 — Release lock
      *
      * @param bidder    Người đặt giá
      * @param amount    Số tiền muốn đặt
      * @param isAutoBid True nếu đặt tự động bởi AutoBidEngine
      * @return BidTransaction vừa được tạo
-     * @throws AuctionClosedException nếu phiên không ở trạng thái RUNNING
+     * @throws AuctionStateException nếu phiên không ở trạng thái RUNNING
      * @throws InvalidBidException    nếu amount không hợp lệ
      */
     public PlaceBidResult placeBid(User bidder, BigDecimal amount, boolean isAutoBid) {
 
-        // ── Step 1: Kiểm tra trạng thái — TRƯỚC khi lock ─────────────────────
+         // ── Step 1: Kiểm tra trạng thái — TRƯỚC khi lock ─────────────────────
         // Tối ưu: không cần lock để đọc status (read-only check)
         // Nếu đã FINISHED/CANCELED thì từ chối ngay, không tốn tài nguyên
         if (status != AuctionStatus.RUNNING || getSecondsRemaining() <= 0) {
-            throw new AuctionClosedException(getId(), status);
+            throw new AuctionStateException(getId(), status);
         }
 
         // Không cho phép seller tự bid vào phiên của mình
         if (bidder.getId() == sellerId) {
-            throw new InvalidBidException("User cannot bid on their own auction", amount, currentPrice);
+            throw new SelfBidException(sellerId, this.getId());
         }
 
+         // ── Step 2: Acquire lock ──────────────────────────────────────────────
         BidTransaction tx = null;   // output
-        boolean timeExtended = false;   // Anti-snipping = false
+        boolean timeExtended = false;   // Anti-snipping flag = false (default)
 
-        // ── Step 2: Acquire lock ──────────────────────────────────────────────
         lock.lock();
         try {
-
-            // ── Step 3: Kiểm tra lại status SAU khi lock ─────────────────────
-            //Vì có thể phiên vừa đóng trong khoảng thời gian giữa Step 1 và Step 2
+            // ── Step 3: Validate state ──────────────────────────────────────────────
+            // Kiểm tra lại status sau khi lock (có thể phiên vừa đóng trong khoảng thời gian giữa Step 1 và Step 2)
             if (status != AuctionStatus.RUNNING || getSecondsRemaining() <= 0) {
-                throw new AuctionClosedException(getId(), status);
+                throw new AuctionStateException(getId(), status);
             }
 
-            //Kiểm tra endTime — guard chống scheduler trễ ────────
-            // Dù status vẫn là RUNNING, nếu đã qua endTime thì từ chối bid.
-            // Trường hợp này xảy ra khi GC pause hoặc thread pool bận làm
-            // closeSession() chưa kịp chạy.
+            // Kiểm tra endTime — guard chống scheduler trễ
+            // Dù status RUNNING, nếu đã qua endTime thì từ chối bid.
+            // Xử lý khi GC pause hoặc thread pool bận closeSession() chưa kịp chạy.
             if (LocalDateTime.now().isAfter(endTime)) {
-                throw new AuctionClosedException(getId(), status);
+                throw new AuctionStateException(getId(), status);
             }
-
-            BigDecimal previousPrice   = this.currentPrice;
-            User previousLeader        = this.currentLeader;
-            LocalDateTime previousEnd  = this.endTime;
-            LocalDateTime previousLast = this.lastBidTime;
 
             // ── Step 4: Validate amount ───────────────────────────────────────
             validateBid(amount); // False -> throw Exception
 
             // ── Step 5: Cập nhật state ────────────────────────────────────────
+            // Snapshot Auction state trước khi cập nhật
+            BigDecimal previousPrice   = this.currentPrice;
+            User previousLeader        = this.currentLeader;
+            LocalDateTime previousEnd  = this.endTime;
+            LocalDateTime previousLast = this.lastBidTime;
 
             // Đánh dấu bid cũ là OUTBID, giữ lại reference để rollback đúng
             BidTransaction outbidTx = markCurrentWinnerOutbidAndReturn();
@@ -285,58 +264,16 @@ public class Auction extends Entity {
             // ── Step 7: LUÔN LUÔN unlock, dù có exception ────────────────────
             lock.unlock();
         }
-
-
-
-        // ⚠️  Step 8 (notify) ĐÃ BỊ XÓA khỏi đây.
-        //     Service sẽ gọi notifyBidCommitted() sau conn.commit().
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Validation
     // ─────────────────────────────────────────────────────────────────────────
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Result wrapper — tránh trả nhiều giá trị rời rạc
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
-     * Kết quả trả về của placeBid().
-     * Service dùng để notify observer SAU khi DB commit thành công.
-     *
-     * @param tx           BidTransaction vừa được tạo
-     * @param timeExtended true nếu anti-sniping đã kích hoạt và endTime bị kéo dài
-     */
-    public record PlaceBidResult(
-        BidTransaction tx,
-        BidTransaction outbidTx,        // ← bid vừa bị markOutbid(), null nếu không có
-        boolean timeExtended,
-        BigDecimal previousPrice,
-        User previousLeader,
-        LocalDateTime previousEndTime,
-        LocalDateTime previousLastBid
-    ) {}
-
-    /**
-     * Tìm bid OUTBID gần nhất của một bidder.
-     * Dùng bởi AuctionService để lấy outbidTx khi rollback auto-bid.
-     */
-    public BidTransaction findLastOutbidOf(int bidderId) {
-        for (int i = bidHistory.size() - 1; i >= 0; i--) {
-            BidTransaction tx = bidHistory.get(i);
-            if (tx.getBidderId() == bidderId && tx.getStatus() == BidStatus.OUTBID) {
-                return tx;
-            }
-        }
-        return null;
-    }
-
-
-
-
-     /**
      * Validate bid amount.
-     * @return Exception
+     * @param amount    tiền đặt bid
+     * @return InvalidBidException
      */
     private void validateBid(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -357,6 +294,56 @@ public class Auction extends Entity {
             );
         }
     }
+
+    /**
+     * Validate Auction time.
+     * @param start     thời gian bắt đầu
+     * @param end       thời gian kết thúc
+     * @return IllegalArgumentException
+     */
+    private void validateTimes(LocalDateTime start, LocalDateTime end) {
+        if (!end.isAfter(start))
+            throw new IllegalArgumentException("end_time must be after start_time");
+    }
+
+    /**
+     * Validate anti-snipping.
+     * @param snipeExtensionSeconds     thời gian cộng thêm
+     * @param snipeWindowSeconds        thời gian cuối cùng kích hoạt Anti-snipping
+     * @return IllegalArgumentException
+     */
+    private void validateSnippingTimes(int snipeWindowSeconds,int snipeExtensionSeconds){
+        if (snipeWindowSeconds < 0 || snipeExtensionSeconds < 0  ){
+            throw new IllegalArgumentException("snipping_times must be positive");
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Result wrapper — tránh trả nhiều giá trị rời rạc
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Kết quả trả về của placeBid().
+     * Service dùng để notify observer SAU khi DB commit thành công.
+     *
+     * @param tx                BidTransaction vừa được tạo
+     * @param outbidTx          bid vừa bị markOutbid(), null nếu không có
+     * @param timeExtended      true nếu anti-sniping đã kích hoạt và endTime bị kéo dài
+     * @param previousPrice     giá trước khi bid
+     * @param previousLeader    người dẫn đầu trước khi bid
+     * @param previousEndTime   thời gian kết thúc trước khi bid (Check Anti-Snipping)
+     * @param previousLastBid   thời gian đặt bid trước đó
+     */
+    public record PlaceBidResult(
+        BidTransaction tx,
+        BidTransaction outbidTx,        // ←
+        boolean timeExtended,
+        BigDecimal previousPrice,
+        User previousLeader,
+        LocalDateTime previousEndTime,
+        LocalDateTime previousLastBid
+    ) {}
+
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Session lifecycle
@@ -381,20 +368,21 @@ public class Auction extends Entity {
      *   - Nếu có reservePrice và currentPrice < reservePrice → CANCELED
      *   - Còn lại → FINISHED, xác định winner
      *
-     * ⚠️  Tầng DAO phải UPDATE bảng auctions sau khi gọi method này.
      */
     public void closeSession() {
         lock.lock();
         try {
+            // Kiểm tra trạng thái
             if (status != AuctionStatus.RUNNING)
                 throw new IllegalStateException("Can only close a RUNNING auction. Current: " + status);
 
-            // Có bid nào đặt không ?
+            // Check bid đã đặt
             boolean hasBids     = !bidHistory.isEmpty();
 
-            // Có chạm giá sàn (Reserve Price) không ?
+            // Check chạm giá sàn (Reserve Price)
             boolean meetsReserve = (reservePrice.compareTo(BigDecimal.ZERO) == 0) || (currentPrice.compareTo(reservePrice) >= 0);
 
+            // Cập nhật Auction Status
             if (!hasBids || !meetsReserve) {
                 status = AuctionStatus.CANCELED;
                 // Đánh dấu tất cả bid là LOST (nếu có)
@@ -415,15 +403,21 @@ public class Auction extends Entity {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Admin Control
+    // ─────────────────────────────────────────────────────────────────────────
     /**
      * Admin force-cancel phiên bất kỳ lúc nào.
-     * ⚠️  Tầng DAO phải UPDATE bảng auctions sau khi gọi method này.
+     * @param reason    Lý do cancel
      */
     public void forceCancel(String reason) {
         lock.lock();
         try {
+            // Check AuctionStatus
             if (status == AuctionStatus.PAID)
                 throw new IllegalStateException("Cannot cancel a PAID auction");
+
+            // Update AuctionStatus + đánh dấu bid LOST
             status = AuctionStatus.CANCELED;
             bidHistory.forEach(BidTransaction::markLost);
         } finally {
@@ -432,15 +426,7 @@ public class Auction extends Entity {
         System.out.println("[Auction " + getId() + "] Force canceled. Reason: " + reason);
     }
 
-    /**
-     * Đánh dấu phiên đã được thanh toán.
-     * Gọi sau khi Payment được xác nhận.
-     */
-    public void markPaid() {
-        if (status != AuctionStatus.FINISHED)
-            throw new IllegalStateException("Can only mark FINISHED auction as PAID");
-        this.status = AuctionStatus.PAID;
-    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Anti-sniping — gọi trong vùng lock
@@ -591,8 +577,8 @@ public class Auction extends Entity {
     // ─────────────────────────────────────────────────────────────────────────
     //  Helper queries
     // ─────────────────────────────────────────────────────────────────────────
-    /** Đánh dấu bid WINNING hiện tại thành OUTBID. Gọi trong vùng lock. */
-    // Thay thế markCurrentWinnerOutbid()
+
+    /** Đánh dấu bid WINNING hiện tại thành OUTBID.*/
     private BidTransaction markCurrentWinnerOutbidAndReturn() {
         for (int i = bidHistory.size() - 1; i >= 0; i--) {
             BidTransaction tx = bidHistory.get(i);
@@ -601,7 +587,7 @@ public class Auction extends Entity {
                 return tx;  // ← trả về đúng bid vừa bị mark
             }
         }
-        return null;  // không có winner trước đó (bid đầu tiên)
+        return null;  // không có winner trước đó
     }
 
     /** Lấy bid đang ở trạng thái WINNING (chỉ có tối đa 1) */
@@ -624,11 +610,20 @@ public class Auction extends Entity {
         );
     }
 
-    /** Kiểm tra một bidder có đang dẫn đầu không */
+    /**
+     * Đánh dấu phiên đã được thanh toán.
+     * Gọi sau khi Payment được xác nhận.
+     */
+    public void markPaid() {
+        if (status != AuctionStatus.FINISHED)
+            throw new IllegalStateException("Can only mark FINISHED auction as PAID");
+        this.status = AuctionStatus.PAID;
+    }
+
+
     public boolean isLeading(int bidderId) {
         return currentLeader != null && (currentLeader.getId() == bidderId);
     }
-
     public boolean hasStarted()  { return status != AuctionStatus.OPEN; }
     public boolean isRunning()   { return status == AuctionStatus.RUNNING; }
     public boolean isFinished()  {
@@ -657,6 +652,10 @@ public class Auction extends Entity {
     public int              getTotalBids()           { return bidHistory.size(); }
     public List<BidTransaction> getBidHistory()      { return Collections.unmodifiableList(bidHistory); }
     public List<RealTimeObserver> getObservers()     { return new ArrayList<>(observers);}
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Database
+    // ─────────────────────────────────────────────────────────────────────────
     /**
      * Khôi phục lịch sử bid từ DB khi server restart hoặc khi reload auction sau khi tạo.
      *
@@ -699,7 +698,7 @@ public class Auction extends Entity {
             if (failedTx != null) {
                 bidHistory.remove(failedTx);
             } else if (!bidHistory.isEmpty()) {
-                bidHistory.remove(bidHistory.size() - 1);
+                bidHistory.removeLast();
             }
 
             // Khôi phục currentPrice và currentLeader về snapshot trước bid
@@ -716,20 +715,24 @@ public class Auction extends Entity {
             lock.unlock();
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void validateTimes(LocalDateTime start, LocalDateTime end) {
-        if (!end.isAfter(start))
-            throw new IllegalArgumentException("end_time must be after start_time");
-    }
-    private void validateSnippingTimes(int snipeWindowSeconds,int snipeExtensionSeconds){
-        if (snipeWindowSeconds < 0 || snipeExtensionSeconds < 0  ){
-            throw new IllegalArgumentException("snipping_times must be positive");
+    /**
+     * Tìm bid OUTBID gần nhất của một bidder.
+     * Dùng bởi AuctionService để lấy outbidTx khi rollback auto-bid.
+     */
+    public BidTransaction findLastOutbidOf(int bidderId) {
+        for (int i = bidHistory.size() - 1; i >= 0; i--) {
+            BidTransaction tx = bidHistory.get(i);
+            if (tx.getBidderId() == bidderId && tx.getStatus() == BidStatus.OUTBID) {
+                return tx;
+            }
         }
+        return null;
     }
+
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Override
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Override
     public String toString() {

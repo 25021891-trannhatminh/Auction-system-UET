@@ -3,13 +3,16 @@ package server.common.entity.exception;
 import server.common.enums.AuctionStatus;
 
 
-//  Ném ra khi cố đặt giá vào một phiên không ở trạng thái RUNNING.
+/**
+ * Ném ra khi cố chuyển trạng thái Auction không hợp lệ theo vòng đời:
+ *   OPEN → RUNNING → FINISHED/CANCELED → PAID
+ */
 
-public class AuctionClosedException extends RuntimeException {
+public class AuctionStateException extends RuntimeException {
     private final int auctionId;
     private final AuctionStatus currentStatus;
 
-    public AuctionClosedException(int auctionId, AuctionStatus currentStatus) {
+    public AuctionStateException(int auctionId, AuctionStatus currentStatus) {
         super("Auction [" + auctionId + "] is not RUNNING. Current status: " + currentStatus);
         this.auctionId = auctionId;
         this.currentStatus = currentStatus;

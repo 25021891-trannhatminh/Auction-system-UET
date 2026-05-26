@@ -11,7 +11,7 @@ import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.entity.AutoBidConfig;
 import server.common.entity.BidTransaction;
-import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
@@ -35,15 +35,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * AuctionService xử lý business logic cho đấu giá:
  * - Quản lý đặt giá, bắt đầu/kết thúc phiên, auto‑bid.
  * - Điều phối thông báo qua Observer Pattern.
- * - KHÔNG can thiệp vào luồng tài chính (thanh toán do PaymentService đảm nhiệm).
  */
 public class AuctionService {
 
   private static final Logger logger = LoggerFactory.getLogger(AuctionService.class);
 
+  // ─────────────────────────────────────────────────────────────────────────
   // Observer listeners (thread‑safe)
   private final List<BusinessEventListener> listeners = new CopyOnWriteArrayList<>();
 
+  // ─────────────────────────────────────────────────────────────────────────
   // DAOs
   private final AuctionDAO         auctionDAO         = new AuctionDAO();
   private final BidTransactionDAO  bidTransactionDAO  = new BidTransactionDAO();
@@ -51,43 +52,13 @@ public class AuctionService {
   private final ItemDAO            itemDAO            = new ItemDAO();
   private final AccountDAO         accountDAO         = new AccountDAO();
 
+  // ─────────────────────────────────────────────────────────────────────────
   // Domain manager (singleton)
   private final AuctionManager auctionManager = AuctionManager.getInstance();
-  /**
-   * Chuyển đổi AuctionDTO (từ DB) thành Auction domain entity.
-   * Yêu cầu ItemDAO và AccountDAO đã có sẵn.
-   */
-  private Auction toAuctionEntity(AuctionDTO dto) {
-    Item item = itemDAO.getById(dto.getItemId());
-    User winner = (dto.getCurrentWinnerId() != null)
-        ? accountDAO.getUserById(dto.getCurrentWinnerId())
-        : null;
 
-    LocalDateTime lastBidTime = (dto.getLastBidTime() != null)
-        ? dto.getLastBidTime().toLocalDateTime()
-        : null;
 
-    Auction auction = new Auction(
-        dto.getAuctionId(),
-        dto.getCreatedAt().toLocalDateTime(),
-        item,
-        dto.getSellerId(),
-        dto.getStartTime().toLocalDateTime(),
-        dto.getEndTime().toLocalDateTime(),
-        lastBidTime,
-        dto.getCurrentPrice(),
-        dto.getMinBidIncrement(),
-        dto.getReservePrice(),
-        dto.getSnipeWindowSeconds(),
-        dto.getSnipeExtensionSeconds(),
-        dto.getStatus(),
-        winner
-    );
-    // Khôi phục lịch sử bid từ DB (nếu cần)
-    auction.restoreBidHistory(toBidTransactionList(bidTransactionDAO.getBidHistory(dto.getAuctionId())));
-    return auction;
-  }
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // CONSTRUCTOR
   /**
    * Khởi tạo service, gắn callback vòng đời auction vào AuctionManager.
    * Callback giúp đồng bộ trạng thái RAM → DB và kích hoạt thông báo.
@@ -97,6 +68,7 @@ public class AuctionService {
     auctionManager.setOnAuctionClosedCallback(this::onAuctionClosed);
     logger.info("AuctionService initialized – ready to manage auctions.");
   }
+
 
   // ==================== KHỞI ĐỘNG SERVER ====================
 
@@ -206,10 +178,10 @@ public class AuctionService {
    *   3. Persist auto-bid transaction xuống DB nếu engine vừa đặt
    *   4. Notify listener onBidPlaced
    *
-   * Throws AuctionClosedException / InvalidBidException để BidHandler
+   * Throws AuctionStateException / InvalidBidException để BidHandler
    * trả reason cụ thể cho client thay vì BID_FAILED chung chung.
    */
-  public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) throws AuctionClosedException, InvalidBidException {
+  public boolean placeBid(int auctionId, int userId, BigDecimal amount, boolean isAutoBid) throws AuctionStateException, InvalidBidException {
     Auction auction = findAuctionById(auctionId);
     User bidder = findUserById(userId);
 
@@ -320,7 +292,7 @@ public class AuctionService {
     return true;
   }
 
-  // ==================== QUẢN LÝ USER TRONG AUCTION MANAGER ====================
+  // ==================== USER MANAGEMENT ====================
 
   public void registerConnectedUser(User user) {
     auctionManager.registerUser(user);
@@ -338,14 +310,21 @@ public class AuctionService {
     return auctionManager.getAuction(auctionId).orElse(null);
   }
 
-  // ==================== VÒNG ĐỜI AUCTION (CALLBACK TỪ MANAGER) ====================
+  // ==================== AUCTION LIFECYCLE (CALLBACK TỪ MANAGER) ====================
 
   public void onAuctionStarted(Auction auction) {
     int auctionId = auction.getId();
-    auctionDAO.updateStatus(auctionId, AuctionStatus.RUNNING);
     String itemName = auction.getItem() != null ? auction.getItem().getName() : "Unknown";
+
+    // Persist AuctionStatus DB
+    auctionDAO.updateStatus(auctionId, AuctionStatus.RUNNING);
+
+    // Notification: Thông báo Auction RUNNING
     notifyAuctionStarted(auction.getSellerId(), auctionId, itemName);
-    triggerAutoBids(auction, null);   // Trigger khi auction bắt đầu
+
+    // Trigger cho AutoBid đã đăng ký
+    triggerAutoBids(auction, null);
+
     logger.info("Auction {} started – item: {}", auctionId, itemName);
   }
 
@@ -356,19 +335,20 @@ public class AuctionService {
     BigDecimal finalPrice = auction.getCurrentPrice();
     int sellerId = auction.getSellerId();
 
-    // ── BƯỚC 1 + 2: DB PERSIST (ỦY THÁC HOÀN TOÀN CHO CÁC PHƯƠNG THỨC DAO SẴN CÓ) ───
+    // ── BƯỚC 1 + 2: DB PERSIST + ROLLBACK───
     try {
       if (targetStatus == AuctionStatus.FINISHED) {
-        // 1. Ghi nhận trạng thái kết thúc phiên và lưu Winner ID xuống DB (Sử dụng hàm gốc của bạn)
+        // 1. Cập nhật trạng thái FINISHED và lưu Winner ID xuống DB
         Integer winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : null;
         auctionDAO.finishAuction(auctionId, winnerId);
 
-        // 2. Cập nhật trạng thái Vật phẩm sang SOLD (Đã bán)
+        // 2. Cập nhật trạng thái Vật phẩm sang SOLD
         if (auction.getItem() != null) {
           auction.getItem().setStatus(ItemStatus.SOLD);
           itemDAO.updateStatus(auction.getItem().getId(), ItemStatus.SOLD);
         }
-      } else { // Trạng thái CANCELED (Hủy phiên)
+      } else {
+        // Cập nhật trạng thái CANCELED
         auctionDAO.updateStatus(auctionId, AuctionStatus.CANCELED);
 
         // Trả vật phẩm về trạng thái AVAILABLE để có thể tạo phiên đấu giá khác
@@ -378,27 +358,42 @@ public class AuctionService {
         }
       }
 
-      // 3. Hủy/Xóa toàn bộ các cấu hình Auto‑bid liên quan đến phiên này dưới DB (Dùng hàm gốc của bạn)
+      // 3. Xóa toàn bộ cấu hình Auto Bid liên quan đến phiên này dưới DB
       int cancelled = autoBidConfigDAO.cancelAllByAuction(auctionId);
       logger.info("DB: Đóng phiên {} thành công ({}), đã hủy {} auto-bids.", auctionId, targetStatus, cancelled);
 
     } catch (Exception e) {
       logger.error("DB: Lỗi nghiêm trọng khi thực thi đóng phiên {}. Tiến hành HOÀN TÁC RAM về RUNNING.", auctionId, e);
 
-      // 🛠️ CƠ CHẾ CỨU NGUY RAM: Nếu DB fail do nghẽn mạng/rớt kết nối, bắt buộc phải trả trạng thái RAM
-      // từ FINISHED/CANCELED ngược về RUNNING để Scheduler quét lại ở chu kỳ sau, tránh kẹt bộ nhớ.
+      // ROLLBACK RAM: REFLECTION
+      // Nếu DB fail do nghẽn mạng/rớt kết nối, bắt buộc phải trả trạng thái RAM
+      // Từ FINISHED/CANCELED ngược về RUNNING để Scheduler quét lại ở chu kỳ sau, tránh kẹt bộ nhớ.
       try {
+        // Đọc thông tin AuctionStatus từ Auction.class (Class Object)
         Field statusField = Auction.class.getDeclaredField("status");
         statusField.setAccessible(true);
         statusField.set(auction, AuctionStatus.RUNNING);
-      } catch (Exception ex) {
-        logger.error("Không thể hoàn tác trạng thái RAM qua Reflection", ex);
+      } catch (NoSuchFieldException field) {
+        // Field "status" không tồn tại trong class Auction
+        logger.error("Reflection error: field access or existence problem", field);
+
+      } catch (IllegalArgumentException invalidType) {
+        // Không đúng datatype
+        logger.error("Invalid value type for status field", invalidType);
+
+      } catch (NullPointerException npe) {
+        logger.error("Auction object is null", npe);
+
+      } catch (Exception reflection) {
+        logger.error("Không thể hoàn tác trạng thái RAM qua Reflection", reflection);
       }
       return; // NGẮT LUỒNG TUYỆT ĐỐI, không phát bất kỳ sự kiện hay thông báo sai lệch nào ra ngoài!
     }
 
-    // ── BƯỚC 3: GỬI LỆNH REALTIME CHO UI BIẾT ĐỂ CẬP NHẬT (SOCKET) ─────────────────
+    // ── BƯỚC 3: GỬI LỆNH REALTIME CHO UI UPDATE ─────────────────
+    // Lấy ID Winner
     int winnerId = (auction.getCurrentLeader() != null) ? auction.getCurrentLeader().getId() : -1;
+
     NotificationDispatcher.getInstance().pushRawToAuctionWatchers(
         auctionId,
         String.format("AUCTION_CLOSED|%d|%d|%s|%s", auctionId, winnerId,
@@ -447,7 +442,7 @@ public class AuctionService {
     }
   }
 
-  // ==================== ADMIN / CƯỠNG CHẾ ====================
+  // ==================== ADMIN CONTROL ====================
 
   public void forceCloseAuction(int auctionId, String reason) {
     auctionManager.forceCloseAuction(auctionId, reason);
@@ -461,7 +456,7 @@ public class AuctionService {
     notifyItemRejected(sellerId, itemId, itemName);
   }
 
-  // ==================== KIỂM TRA THANH TOÁN (READ-ONLY) ====================
+  // ==================== PAYMENT CHECK ====================
 
   /**
    * Kiểm tra xem auction đã được thanh toán thành công hay chưa.
@@ -475,13 +470,9 @@ public class AuctionService {
     return auctionOpt.map(a -> a.getStatus() == AuctionStatus.PAID).orElse(false);
   }
 
-  // ==================== BROADCAST HỆ THỐNG ====================
 
-  public void broadcastSystemNotif(String title, String message) {
-    notifySystemNotification(-1, title, message);
-  }
 
-  // ==================== OBSERVER PATTERN – NOTIFY METHODS ====================
+  // ==================== OBSERVER PATTERN ====================
 
   public void addListener(BusinessEventListener listener) {
     if (listener != null && !listeners.contains(listener)) {
@@ -502,6 +493,7 @@ public class AuctionService {
   public void removeGlobalObserver(RealTimeObserver observer){
     auctionManager.removeGlobalObserver(observer);
   }
+
 
   // Các phương thức gửi sự kiện đến tất cả listener
   private void dispatchFinishedNotifications(Auction auction, int auctionId,
@@ -549,8 +541,6 @@ public class AuctionService {
       logger.error("Failed to notify seller {} about cancellation", sellerId, e);
     }
   }
-
-  // Helper
 
   /**
    * Helper điều phối thông báo chi tiết độc lập sang duy nhất NotificationEventHandler
@@ -614,6 +604,9 @@ public class AuctionService {
     }
   }
 
+
+
+  // ==================== DATABASE ====================
   /** Persist AutoBid vào DB
    * 1 Update state của Auction sau khi autobid casade xong
    * 2 Lưu thông tin Bid vào DB
@@ -641,6 +634,11 @@ public class AuctionService {
     }
   }
 
+
+  // ==================== HELPERS ====================
+  /**
+   * Chuyển đổi List BidTransaction thành List BidHistoryDTO (từ DB).
+   */
   private List<BidTransaction> toBidTransactionList(List<BidHistoryDTO> dtos) {
     List<BidTransaction> transactions = new ArrayList<>();
     for (BidHistoryDTO dto : dtos) {
@@ -663,7 +661,9 @@ public class AuctionService {
     }
     return transactions;
   }
-
+  /**
+   * Chuyển đổi BidTransaction thành BidHistoryDTO (DB)
+   */
   private BidHistoryDTO toBidHistoryDTO(BidTransaction tx) {
     BidHistoryDTO dto = new BidHistoryDTO();
     dto.setBidId(tx.getId());
@@ -675,15 +675,45 @@ public class AuctionService {
     dto.setBidTime(Timestamp.valueOf(tx.getBidTime()));
     return dto;
   }
+  /**
+   * Chuyển đổi AuctionDTO (từ DB) thành Auction domain entity.
+   * Yêu cầu ItemDAO và AccountDAO đã có sẵn.
+   */
+  private Auction toAuctionEntity(AuctionDTO dto) {
+    Item item = itemDAO.getById(dto.getItemId());
+    User winner = (dto.getCurrentWinnerId() != null)
+        ? accountDAO.getUserById(dto.getCurrentWinnerId())
+        : null;
 
-  // Các hàm notify cụ thể – gọi listener tương ứng
-//  public void notifyBidPlaced(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-//    listeners.forEach(l -> l.onBidPlaced(bidderId, auctionId, itemName, amount));
-//  }
+    LocalDateTime lastBidTime = (dto.getLastBidTime() != null)
+        ? dto.getLastBidTime().toLocalDateTime()
+        : null;
 
-//  public void notifyOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-//    listeners.forEach(l -> l.onOutbid(userId, auctionId, itemName, newPrice));
-//  }
+    Auction auction = new Auction(
+        dto.getAuctionId(),
+        dto.getCreatedAt().toLocalDateTime(),
+        item,
+        dto.getSellerId(),
+        dto.getStartTime().toLocalDateTime(),
+        dto.getEndTime().toLocalDateTime(),
+        lastBidTime,
+        dto.getCurrentPrice(),
+        dto.getMinBidIncrement(),
+        dto.getReservePrice(),
+        dto.getSnipeWindowSeconds(),
+        dto.getSnipeExtensionSeconds(),
+        dto.getStatus(),
+        winner
+    );
+    // Khôi phục lịch sử bid từ DB (nếu cần)
+    auction.restoreBidHistory(toBidTransactionList(bidTransactionDAO.getBidHistory(dto.getAuctionId())));
+    return auction;
+  }
+
+  // ==================== NOTIFY METHODS ====================
+  public void broadcastSystemNotif(String title, String message) {
+    notifySystemNotification(-1, title, message);
+  }
 
   public void notifyAuctionStarted(int userId, int auctionId, String itemName) {
     listeners.forEach(l -> l.onAuctionStarted(userId, auctionId, itemName));

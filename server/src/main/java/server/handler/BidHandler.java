@@ -2,7 +2,7 @@ package server.handler;
 
 import server.common.ProtocolConstants;
 import server.common.entity.User;
-import server.common.entity.exception.AuctionClosedException;
+import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
 import server.network.ClientManager;
 import server.service.AuctionService;
@@ -90,7 +90,7 @@ public class BidHandler {
 
         } catch (NumberFormatException e) {
             return ResponseBuilder.bidFail(auctionId, ProtocolConstants.BID_REASON_INVALID_FORMAT);
-        } catch (AuctionClosedException e) {
+        } catch (AuctionStateException e) {
             return ResponseBuilder.bidFail(auctionId, ProtocolConstants.BID_REASON_AUCTION_CLOSED);
         } catch (InvalidBidException e) {
             // Map exception message sang reason constant đã định nghĩa sẵn.
