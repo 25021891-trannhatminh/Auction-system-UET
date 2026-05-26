@@ -625,8 +625,8 @@ public class AuctionService {
             true   // isAutoBid = true
         );
       } catch (Exception e) {
-          logger.error("Auto-bid persist failed", e);
-          return false;
+        logger.error("Auto-bid persist failed", e);
+        return false;
       }
     } catch (SQLException e) {
       logger.error("DB connection error when persisting auto-bid", e);
