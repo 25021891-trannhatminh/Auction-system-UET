@@ -217,13 +217,17 @@ public abstract class BaseDashboardController {
     }
 
     protected void processPushNotification(String rawMessage) {
-        rememberRealtimeNotification(rawMessage);
+        NotificationModel notification = parseRealtimeNotification(rawMessage);
+        if (notification == null || !shouldDisplayNotification(notification)) {
+            return;
+        }
+
+        rememberRealtimeNotification(notification);
         notifUIHandler.handle(rawMessage);
         handleRealtimeNotification(rawMessage);
     }
 
-    private void rememberRealtimeNotification(String rawMessage) {
-        NotificationModel notification = parseRealtimeNotification(rawMessage);
+    private void rememberRealtimeNotification(NotificationModel notification) {
         if (notification == null) {
             return;
         }
@@ -284,7 +288,7 @@ public abstract class BaseDashboardController {
             NotificationModel notification = parseStoredNotification(
                 message.substring("USER_NOTIFICATION ".length())
             );
-            if (notification != null) {
+            if (notification != null && shouldDisplayNotification(notification)) {
                 notificationInbox.add(notification);
                 if (!notification.isRead()) {
                     incomingHistoryUnreadCount++;
@@ -550,6 +554,10 @@ public abstract class BaseDashboardController {
      */
     protected void handleRealtimeNotification(String rawMessage) {
         // Mặc định không làm gì, lớp con sẽ ghi đè logic
+    }
+
+    protected boolean shouldDisplayNotification(NotificationModel notification) {
+        return true;
     }
 
     /**

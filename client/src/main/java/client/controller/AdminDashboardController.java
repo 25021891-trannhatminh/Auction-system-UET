@@ -3,6 +3,7 @@ package client.controller;
 
 import client.enums.AccountStatus;
 import client.enums.SystemRole;
+import client.model.NotificationModel;
 import client.model.User;
 import client.service.NetworkManager;
 import client.service.SessionManager;
@@ -111,6 +112,18 @@ public class AdminDashboardController extends BaseDashboardController {
     @Override
     protected String getRoleTitle() {
         return "SYSTEM ADMIN";
+    }
+
+    @Override
+    protected boolean shouldDisplayNotification(NotificationModel notification) {
+        if (notification == null || notification.getType() == null) {
+            return false;
+        }
+        String type = notification.getType().trim().toUpperCase();
+        return type.equals("SYSTEM")
+            || type.equals("ADMIN")
+            || type.equals("ADMIN_REVIEW")
+            || type.equals("ADMIN_ACTION");
     }
 
     @Override
