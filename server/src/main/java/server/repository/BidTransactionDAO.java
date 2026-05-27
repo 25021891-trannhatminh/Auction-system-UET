@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +24,9 @@ import java.util.List;
 public class BidTransactionDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(BidTransactionDAO.class);
+
+    private static final DateTimeFormatter BID_POINT_TIME_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public record AuctionLockInfo(String status, LocalDateTime endTime) {}
 
@@ -244,7 +248,7 @@ public class BidTransactionDAO {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     points.add(new BidPointDTO(
-                        rs.getTimestamp("bid_time").toLocalDateTime().toString(), // ISO-8601
+                        rs.getTimestamp("bid_time").toLocalDateTime().format(BID_POINT_TIME_FORMATTER),
                         rs.getBigDecimal("amount")
                     ));
                 }

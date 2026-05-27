@@ -78,6 +78,7 @@ public class ClientHandler implements Runnable{
     private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
     private final AuctionHandler auctionHandler;
+    private final AuctionVisualisationHandler auctionVisualisationHandler;
 
     /**
      * CONSTRUCTOR ĐÃ ĐƯỢC CHỈNH SỬA:
@@ -96,6 +97,7 @@ public class ClientHandler implements Runnable{
         this.authHandler = new AuthHandler();
         this.adminHandler = new AdminHandler(auctionService);
         this.auctionHandler = new AuctionHandler(AuctionManager.getInstance());
+        this.auctionVisualisationHandler = new AuctionVisualisationHandler();
 
         try {
             in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
@@ -362,6 +364,10 @@ public class ClientHandler implements Runnable{
 
             case "SELLER_AUCTION_BIDS":
                 sendSellerAuctionBids(request);
+                break;
+
+            case ProtocolConstants.GET_AUCTION_VISUALISATION:
+                send(auctionVisualisationHandler.handle(request, this.userId));
                 break;
 
             case "USER_LIST_NOTIFICATIONS":

@@ -3441,3 +3441,117 @@
     -fx-background-color: rgba(247, 243, 233, 0.12);
     -fx-background-radius: 999;
 }
+
+
+/* Auction detail: keep Time Left compact inside the side card. */
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown {
+    -fx-padding: 14 12 14 12;
+    -fx-spacing: 6;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-unit {
+    -fx-min-width: 44;
+    -fx-pref-width: 46;
+    -fx-max-width: 48;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-number {
+    -fx-font-size: 24px;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-label {
+    -fx-font-size: 10px;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-separator {
+    -fx-font-size: 18px;
+    -fx-padding: 0 0 14 0;
+}
+
+/* Auction visualisation under the detail view. */
+.user-dashboard-root .auction-visualisation-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(18, 18, 18, 0.96), rgba(8, 8, 8, 0.96));
+    -fx-background-radius: 22;
+    -fx-border-color: rgba(247, 243, 233, 0.13);
+    -fx-border-radius: 22;
+    -fx-padding: 18;
+    -fx-spacing: 12;
+}
+
+.user-dashboard-root .auction-visualisation-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 18px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-visualisation-caption,
+.user-dashboard-root .auction-visualisation-empty {
+    -fx-text-fill: rgba(247, 243, 233, 0.64);
+    -fx-font-size: 12px;
+}
+
+.user-dashboard-root .auction-visualisation-metrics {
+    -fx-spacing: 10;
+}
+
+.user-dashboard-root .auction-visualisation-metric {
+    -fx-background-color: rgba(31, 31, 31, 0.74);
+    -fx-background-radius: 15;
+    -fx-border-color: rgba(247, 243, 233, 0.10);
+    -fx-border-radius: 15;
+    -fx-padding: 10 12 10 12;
+}
+
+.user-dashboard-root .auction-visualisation-chart {
+    -fx-background-color: transparent;
+    -fx-padding: 6 0 0 0;
+}
+
+.user-dashboard-root .auction-visualisation-chart .chart-plot-background {
+    -fx-background-color: rgba(20, 20, 20, 0.72);
+}
+
+.user-dashboard-root .auction-visualisation-chart .chart-vertical-grid-lines,
+.user-dashboard-root .auction-visualisation-chart .chart-horizontal-grid-lines {
+    -fx-stroke: rgba(247, 243, 233, 0.08);
+}
+
+.user-dashboard-root .auction-visualisation-chart .axis {
+    -fx-tick-label-fill: rgba(247, 243, 233, 0.62);
+}
+
+.user-dashboard-root .auction-visualisation-chart .axis-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.70);
+}
+
+.user-dashboard-root .auction-visualisation-chart .default-color0.chart-series-line {
+    -fx-stroke: #d1b15d;
+    -fx-stroke-width: 2.2px;
+}
+
+.user-dashboard-root .auction-visualisation-chart .default-color0.chart-line-symbol {
+    -fx-background-color: #d1b15d, #151515;
+}
+
+.user-dashboard-root .auction-visualisation-rows {
+    -fx-spacing: 6;
+}
+
+.user-dashboard-root .auction-visualisation-row {
+    -fx-background-color: rgba(31, 31, 31, 0.58);
+    -fx-background-radius: 13;
+    -fx-border-color: rgba(247, 243, 233, 0.08);
+    -fx-border-radius: 13;
+    -fx-padding: 8 10 8 10;
+}
+
+.user-dashboard-root .auction-visualisation-time {
+    -fx-text-fill: rgba(247, 243, 233, 0.64);
+    -fx-font-size: 12px;
+}
+
+.user-dashboard-root .auction-visualisation-amount {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}

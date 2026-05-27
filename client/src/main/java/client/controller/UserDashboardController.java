@@ -30,6 +30,10 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
@@ -161,8 +165,13 @@ public class UserDashboardController extends BaseDashboardController {
   private final Map<String, Boolean> sellerBidHistoryLoaded = new HashMap<>();
   private List<BidHistoryData> incomingSellerBidHistory = new ArrayList<>();
   private String incomingSellerBidAuctionId = "";
+  private final Map<String, AuctionVisualisationData> auctionVisualisations = new HashMap<>();
+  private final Map<String, Boolean> auctionVisualisationLoaded = new HashMap<>();
+  private String pendingVisualisationAuctionId = "";
   private SellerItemData activeSellerDetailItem;
   private VBox activeSellerBidHistorySection;
+  private VBox activeAuctionVisualisationSection;
+  private String activeAuctionVisualisationAuctionId = "";
   private final Map<String, Image> imageCache = new LinkedHashMap<String, Image>() {
     @Override
     protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
@@ -241,6 +250,10 @@ public class UserDashboardController extends BaseDashboardController {
       }
       if (isSellerBidHistoryMessage(msg)) {
         Platform.runLater(() -> handleSellerBidHistoryMessage(msg));
+        return;
+      }
+      if (isAuctionVisualisationMessage(msg)) {
+        Platform.runLater(() -> handleAuctionVisualisationMessage(msg));
         return;
       }
       if (isUserBidMessage(msg)) {
@@ -594,6 +607,29 @@ public class UserDashboardController extends BaseDashboardController {
     networkManager.send("SELLER_AUCTION_BIDS " + trimmedAuctionId);
   }
 
+  private void requestAuctionVisualisation(String auctionId) {
+    if (auctionId == null || auctionId.isBlank()) {
+      return;
+    }
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null) {
+      return;
+    }
+
+    String trimmedAuctionId = auctionId.trim();
+    pendingVisualisationAuctionId = trimmedAuctionId;
+    auctionVisualisationLoaded.put(trimmedAuctionId, false);
+    refreshActiveAuctionVisualisationSection(trimmedAuctionId);
+    networkManager.send("GET_AUCTION_VISUALISATION " + trimmedAuctionId);
+  }
+
+  private boolean isAuctionVisualisationMessage(String message) {
+    return message != null && (message.startsWith("AUCTION_VISUALISATION_SUCCESS ")
+        || message.startsWith("AUCTION_VISUALISATION_FAIL"));
+  }
+
   private boolean isSellerBidHistoryMessage(String message) {
     return message != null && (message.startsWith("SELLER_AUCTION_BIDS_BEGIN")
         || message.startsWith("SELLER_AUCTION_BID ")
@@ -753,6 +789,67 @@ public class UserDashboardController extends BaseDashboardController {
         sellerBidHistoryLoaded.put(auctionId, true);
       }
     }
+  }
+
+  private void handleAuctionVisualisationMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.startsWith("AUCTION_VISUALISATION_SUCCESS ")) {
+      AuctionVisualisationData parsed = parseAuctionVisualisation(
+          message.substring("AUCTION_VISUALISATION_SUCCESS ".length())
+      );
+      if (parsed == null) {
+        return;
+      }
+      auctionVisualisations.put(parsed.auctionId, parsed);
+      auctionVisualisationLoaded.put(parsed.auctionId, true);
+      refreshActiveAuctionVisualisationSection(parsed.auctionId);
+      return;
+    }
+
+    if (message.startsWith("AUCTION_VISUALISATION_FAIL")) {
+      String auctionId = pendingVisualisationAuctionId;
+      if (!auctionId.isBlank()) {
+        auctionVisualisationLoaded.put(auctionId, true);
+        refreshActiveAuctionVisualisationSection(auctionId);
+      }
+    }
+  }
+
+  private AuctionVisualisationData parseAuctionVisualisation(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 5) {
+      return null;
+    }
+
+    String auctionId = safeField(fields, 0);
+    List<VisualisationPoint> points = new ArrayList<>();
+    String pointsPayload = safeField(fields, 4);
+    if (pointsPayload != null && !pointsPayload.isBlank()) {
+      for (String token : pointsPayload.split(";")) {
+        if (token == null || token.isBlank()) {
+          continue;
+        }
+        String[] pointFields = token.split(",", 2);
+        if (pointFields.length < 2) {
+          continue;
+        }
+        BigDecimal amount = parseMoneyOrNull(pointFields[1]);
+        if (amount != null) {
+          points.add(new VisualisationPoint(shortTimestamp(pointFields[0]), amount));
+        }
+      }
+    }
+
+    return new AuctionVisualisationData(
+        auctionId,
+        fallback(safeField(fields, 1), "Auction #" + auctionId),
+        formatMoney(safeField(fields, 2)),
+        formatMoney(safeField(fields, 3)),
+        points
+    );
   }
 
   private BidHistoryData parseBidHistory(String payload) {
@@ -3091,10 +3188,12 @@ public class UserDashboardController extends BaseDashboardController {
 
     detailContent.getChildren().addAll(mediaColumn, sidePanel);
     detailShell.getChildren().add(detailContent);
+    detailShell.getChildren().add(buildAuctionVisualisationSection(displayData.auctionId));
     if (sellerView) {
       detailShell.getChildren().add(buildSellerBidHistorySection(displayData.auctionId));
     }
     workspaceBox.getChildren().add(detailShell);
+    requestAuctionVisualisation(displayData.auctionId);
     joinAuctionRoom(displayData.auctionId);
   }
 
@@ -3139,6 +3238,156 @@ public class UserDashboardController extends BaseDashboardController {
     return card;
   }
 
+
+  private VBox buildAuctionVisualisationSection(String auctionId) {
+    VBox section = new VBox(12);
+    section.getStyleClass().add("auction-visualisation-card");
+    section.setMaxWidth(Double.MAX_VALUE);
+    section.setMinWidth(0);
+
+    activeAuctionVisualisationSection = section;
+    activeAuctionVisualisationAuctionId = auctionId == null ? "" : auctionId.trim();
+    populateAuctionVisualisationSection(section, activeAuctionVisualisationAuctionId);
+    return section;
+  }
+
+  private void refreshActiveAuctionVisualisationSection(String auctionId) {
+    if (auctionId == null
+        || activeAuctionVisualisationSection == null
+        || activeAuctionVisualisationAuctionId == null
+        || !activeAuctionVisualisationAuctionId.equals(auctionId.trim())) {
+      return;
+    }
+    populateAuctionVisualisationSection(activeAuctionVisualisationSection, activeAuctionVisualisationAuctionId);
+  }
+
+  private void populateAuctionVisualisationSection(VBox section, String auctionId) {
+    if (section == null) {
+      return;
+    }
+    section.getChildren().clear();
+
+    VBox heading = new VBox(4);
+    Label title = new Label("Bid visualisation");
+    title.getStyleClass().add("auction-visualisation-title");
+    Label caption = new Label("Price movement is loaded from bid_transactions for this auction.");
+    caption.getStyleClass().add("auction-visualisation-caption");
+    caption.setWrapText(true);
+    heading.getChildren().addAll(title, caption);
+    section.getChildren().add(heading);
+
+    Boolean loaded = auctionVisualisationLoaded.get(auctionId);
+    AuctionVisualisationData data = auctionVisualisations.get(auctionId);
+    if (!Boolean.TRUE.equals(loaded) && data == null) {
+      Label loading = new Label("Loading bid chart from database...");
+      loading.getStyleClass().add("auction-visualisation-empty");
+      section.getChildren().add(loading);
+      return;
+    }
+
+    if (data == null) {
+      Label empty = new Label("No visualisation data is available for this auction yet.");
+      empty.getStyleClass().add("auction-visualisation-empty");
+      section.getChildren().add(empty);
+      return;
+    }
+
+    HBox metrics = new HBox(10);
+    metrics.getStyleClass().add("auction-visualisation-metrics");
+    metrics.setAlignment(Pos.CENTER_LEFT);
+    metrics.setMaxWidth(Double.MAX_VALUE);
+    metrics.getChildren().addAll(
+        visualisationMetric("Starting", data.startingPrice),
+        visualisationMetric("Current", data.currentPrice),
+        visualisationMetric("Bid points", String.valueOf(data.points.size())),
+        visualisationMetric("Latest", latestVisualisationTime(data))
+    );
+    section.getChildren().add(metrics);
+
+    if (data.points.isEmpty()) {
+      Label empty = new Label("No bids have been placed yet, so the chart starts when the first bid is stored.");
+      empty.getStyleClass().add("auction-visualisation-empty");
+      empty.setWrapText(true);
+      section.getChildren().add(empty);
+      return;
+    }
+
+    section.getChildren().add(buildAuctionVisualisationChart(data));
+    section.getChildren().add(buildAuctionVisualisationRecentRows(data));
+  }
+
+  private VBox visualisationMetric(String labelText, String valueText) {
+    VBox metric = new VBox(3);
+    metric.getStyleClass().add("auction-visualisation-metric");
+    HBox.setHgrow(metric, Priority.ALWAYS);
+    metric.setMaxWidth(Double.MAX_VALUE);
+
+    Label label = new Label(labelText);
+    label.getStyleClass().add("auction-detail-meta-key");
+    Label value = new Label(fallback(valueText, "Not available"));
+    value.getStyleClass().add("auction-detail-meta-value");
+    value.setWrapText(true);
+    metric.getChildren().addAll(label, value);
+    return metric;
+  }
+
+  private LineChart<String, Number> buildAuctionVisualisationChart(AuctionVisualisationData data) {
+    CategoryAxis xAxis = new CategoryAxis();
+    NumberAxis yAxis = new NumberAxis();
+    xAxis.setLabel("Bid order");
+    yAxis.setLabel("Amount (VND)");
+    xAxis.setTickLabelsVisible(data.points.size() <= 6);
+    xAxis.setTickMarkVisible(data.points.size() <= 6);
+    yAxis.setForceZeroInRange(false);
+
+    LineChart<String, Number> chart = new LineChart<>(xAxis, yAxis);
+    chart.getStyleClass().add("auction-visualisation-chart");
+    chart.setAnimated(false);
+    chart.setLegendVisible(false);
+    chart.setCreateSymbols(data.points.size() <= 18);
+    chart.setMinHeight(220);
+    chart.setPrefHeight(240);
+    chart.setMaxWidth(Double.MAX_VALUE);
+
+    XYChart.Series<String, Number> series = new XYChart.Series<>();
+    for (int index = 0; index < data.points.size(); index++) {
+      VisualisationPoint point = data.points.get(index);
+      String xValue = data.points.size() <= 6 ? point.time : String.valueOf(index + 1);
+      series.getData().add(new XYChart.Data<>(xValue, point.amount));
+    }
+    chart.getData().add(series);
+    return chart;
+  }
+
+  private VBox buildAuctionVisualisationRecentRows(AuctionVisualisationData data) {
+    VBox rows = new VBox(6);
+    rows.getStyleClass().add("auction-visualisation-rows");
+    int start = Math.max(0, data.points.size() - 4);
+    for (int index = start; index < data.points.size(); index++) {
+      VisualisationPoint point = data.points.get(index);
+      HBox row = new HBox(10);
+      row.getStyleClass().add("auction-visualisation-row");
+      row.setAlignment(Pos.CENTER_LEFT);
+
+      Label time = new Label(point.time);
+      time.getStyleClass().add("auction-visualisation-time");
+      time.setMaxWidth(Double.MAX_VALUE);
+      HBox.setHgrow(time, Priority.ALWAYS);
+
+      Label amount = new Label(formatMoney(point.amount.toPlainString()));
+      amount.getStyleClass().add("auction-visualisation-amount");
+      row.getChildren().addAll(time, amount);
+      rows.getChildren().add(row);
+    }
+    return rows;
+  }
+
+  private String latestVisualisationTime(AuctionVisualisationData data) {
+    if (data == null || data.points.isEmpty()) {
+      return "No bids yet";
+    }
+    return data.points.get(data.points.size() - 1).time;
+  }
 
   private VBox buildAutoBidPanel(
       AuctionCardData data,
@@ -3433,6 +3682,8 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionDetailId = null;
     activeSellerDetailItem = null;
     activeSellerBidHistorySection = null;
+    activeAuctionVisualisationSection = null;
+    activeAuctionVisualisationAuctionId = "";
     activeAuctionPriceLabel = null;
     activeAuctionBidCountLabel = null;
     activeAuctionBidInput = null;
@@ -3673,6 +3924,7 @@ public class UserDashboardController extends BaseDashboardController {
       }
       if (auctionId != null && !auctionId.isBlank()) {
         requestFreshAuctionState(auctionId);
+        requestAuctionVisualisation(auctionId);
         updateActiveBidControls(latestAuctionCardById(auctionId));
       }
       showBidFeedback("Your bid has been recorded. Syncing the latest auction price...", false);
@@ -3809,6 +4061,9 @@ public class UserDashboardController extends BaseDashboardController {
         && auctionId.equals(activeSellerDetailItem.auctionId)) {
       requestSellerBidHistory(auctionId);
     }
+    if (isActiveAuction(auctionId)) {
+      requestAuctionVisualisation(auctionId);
+    }
 
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionPrice(amount, totalBids);
@@ -3841,6 +4096,9 @@ public class UserDashboardController extends BaseDashboardController {
     if (activeSellerDetailItem != null
         && auctionId.equals(activeSellerDetailItem.auctionId)) {
       requestSellerBidHistory(auctionId);
+    }
+    if (isActiveAuction(auctionId)) {
+      requestAuctionVisualisation(auctionId);
     }
 
     if (isActiveAuction(auctionId)) {
@@ -4190,8 +4448,11 @@ public class UserDashboardController extends BaseDashboardController {
   private HBox buildCountdown(long secondsLeft) {
     activeAuctionCountdownSeconds = Math.max(0, secondsLeft);
 
-    HBox box = new HBox(10);
+    HBox box = new HBox(6);
     box.getStyleClass().add("auction-detail-countdown");
+    box.setAlignment(Pos.CENTER);
+    box.setMinWidth(0);
+    box.setMaxWidth(Double.MAX_VALUE);
 
     Label dayNumber = countdownNumberLabel();
     Label hourNumber = countdownNumberLabel();
@@ -4280,12 +4541,17 @@ public class UserDashboardController extends BaseDashboardController {
   private Label countdownNumberLabel() {
     Label number = new Label("00");
     number.getStyleClass().add("auction-detail-countdown-number");
+    number.setMinWidth(0);
+    number.setMaxWidth(Double.MAX_VALUE);
     return number;
   }
 
   private VBox countdownUnit(Label number, String labelText) {
     VBox unit = new VBox(2);
     unit.getStyleClass().add("auction-detail-countdown-unit");
+    unit.setAlignment(Pos.CENTER);
+    unit.setMinWidth(0);
+    unit.setMaxWidth(Double.MAX_VALUE);
     Label label = new Label(labelText);
     label.getStyleClass().add("auction-detail-countdown-label");
     unit.getChildren().addAll(number, label);
@@ -6414,6 +6680,15 @@ public class UserDashboardController extends BaseDashboardController {
     };
   }
 
+  private BigDecimal parseMoneyOrNull(String value) {
+    try {
+      String normalized = value == null ? "" : value.replace(",", "").trim();
+      return normalized.isBlank() ? null : new BigDecimal(normalized);
+    } catch (NumberFormatException exception) {
+      return null;
+    }
+  }
+
   private long parseLongOrDefault(String value, long fallbackValue) {
     try {
       return value == null || value.isBlank() ? fallbackValue : Long.parseLong(value.trim());
@@ -6512,6 +6787,33 @@ public class UserDashboardController extends BaseDashboardController {
 
     fields.add(current.toString());
     return fields;
+  }
+
+  private static final class AuctionVisualisationData {
+    final String auctionId;
+    final String itemName;
+    final String startingPrice;
+    final String currentPrice;
+    final List<VisualisationPoint> points;
+
+    AuctionVisualisationData(String auctionId, String itemName, String startingPrice,
+        String currentPrice, List<VisualisationPoint> points) {
+      this.auctionId = auctionId == null ? "" : auctionId;
+      this.itemName = itemName == null ? "" : itemName;
+      this.startingPrice = startingPrice == null ? "" : startingPrice;
+      this.currentPrice = currentPrice == null ? "" : currentPrice;
+      this.points = points == null ? new ArrayList<>() : new ArrayList<>(points);
+    }
+  }
+
+  private static final class VisualisationPoint {
+    final String time;
+    final BigDecimal amount;
+
+    VisualisationPoint(String time, BigDecimal amount) {
+      this.time = time == null ? "" : time;
+      this.amount = amount == null ? BigDecimal.ZERO : amount;
+    }
   }
 
   private int parseIntOrDefault(String value, int fallbackValue) {
