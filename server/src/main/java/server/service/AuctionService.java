@@ -697,7 +697,7 @@ public class AuctionService {
     auction.rollbackLastBid(
         winnerTransaction,
         outbidTxToRestore,
-        previousPrice,
+        previousPrice.subtract(auction.getMinBidIncrement()),
         previousLeader,
         auction.getEndTime(),       // endTime không thay đổi khi cancel
         secondWinnerTransaction.getBidTime()
