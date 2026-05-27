@@ -210,7 +210,7 @@ public class AccountDAO {
     }
 
     public int getUserIdByUsername(String username) {
-        String sql = "SELECT user_id FROM accounts WHERE username = ?";
+        String sql = "SELECT user_id FROM accounts";
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, username);
