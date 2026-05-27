@@ -97,4 +97,7 @@ public final class ProtocolConstants {
 
     /** Tín hiệu kết thúc truyền toàn bộ dữ liệu lịch sử. */
     public static final String HISTORY_END = "HISTORY_END";
+    // =========== PAYMENT ===========
+    public static final String CONFIRM_PAYMENT = "CONFIRM_PAYMENT";
+    public static final String REFUND_PAYMENT = "REFUND_PAYMENT";
 }
