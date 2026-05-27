@@ -245,65 +245,14 @@ public class ClientHandler implements Runnable{
                 break;
 
             case "CONFIRM_PAYMENT": {
-                // Format: CONFIRM_PAYMENT <auctionId> <itemName...>
-                //
-                // PaymentService xử lý toàn bộ trong 1 DB transaction:
-                //   lock wallets → withdraw buyer → deposit seller
-                //   → log wallet_transactions → update payments → COMMIT
-                // Sau commit: push PUSH_NOTIF + WALLET_UPDATE realtime về buyer và seller.
-                //
-                // LƯU Ý: Không gọi auctionService ở đây nữa để đảm bảo Separation of Concerns.
-                if (request.length < 2) {
-                    send("PAYMENT_FAIL INVALID_FORMAT");
-                    break;
-                }
-                try {
-                    int    auctionId = Integer.parseInt(request[1]);
-                    String itemName  = request.length > 2
-                        ? commandSafeText(String.join(" ", Arrays.copyOfRange(request, 2, request.length)))
-                        : "Auction #" + auctionId;
-
-                    PaymentAuthorization authorization = resolvePaymentAuthorization(auctionId);
-                    if (!authorization.allowed()) {
-                        send("PAYMENT_FAIL " + auctionId + " " + authorization.reason());
-                        break;
-                    }
-
-                    boolean paymentSuccess = paymentService.processPayment(auctionId, itemName);
-                    if (paymentSuccess) {
-                        send("PAYMENT_SUCCESS " + auctionId);
-                        ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
-                        ClientManager.broadcast("USER_AUCTIONS_DIRTY");
-                    } else {
-                        send("PAYMENT_FAIL " + auctionId + " " + resolvePaymentCompletionFailure(auctionId));
-                        ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
-                    }
-                } catch (NumberFormatException e) {
-                    send("PAYMENT_FAIL INVALID_FORMAT");
-                }
+                new PaymentCommandHandler(this, paymentService).handleConfirmPayment(request);
                 break;
             }
 
             case "REFUND_PAYMENT": {
-                // Format: REFUND_PAYMENT <auctionId> <itemName...>
-                if (request.length < 2) {
-                    send("REFUND_FAIL INVALID_FORMAT");
-                    break;
-                }
-                try {
-                    int    auctionId = Integer.parseInt(request[1]);
-                    String itemName  = request.length > 2
-                        ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
-                        : "Auction #" + auctionId;
-
-                    boolean refundSuccess = paymentService.refundPayment(auctionId, itemName);
-                    send(refundSuccess ? "REFUND_SUCCESS " + auctionId : "REFUND_FAIL " + auctionId);
-                } catch (NumberFormatException e) {
-                    send("REFUND_FAIL INVALID_FORMAT");
-                }
+                new PaymentCommandHandler(this, paymentService).handleRefundPayment(request);
                 break;
             }
-
             case "CREATE_ITEM":
                 itemCommandHandler.handleCreateItem(msg.length() > "CREATE_ITEM".length()
                     ? msg.substring("CREATE_ITEM".length()).trim()
@@ -1045,7 +994,7 @@ public class ClientHandler implements Runnable{
         };
     }
 
-    private String resolvePaymentCompletionFailure(int auctionId) {
+    public String resolvePaymentCompletionFailure(int auctionId) {
         String sql = """
             SELECT p.status,
                    p.amount,
@@ -1094,11 +1043,11 @@ public class ClientHandler implements Runnable{
         return "PAYMENT_NOT_COMPLETED";
     }
 
-    private String commandSafeText(String value) {
+    public String commandSafeText(String value) {
         return value == null ? "" : value.replaceAll("[\r\n\t]+", " ").trim();
     }
 
-    private PaymentAuthorization resolvePaymentAuthorization(int auctionId) {
+    public PaymentAuthorization resolvePaymentAuthorization(int auctionId) {
         if (this.userId <= 0) {
             return PaymentAuthorization.reject("NOT_LOGGED_IN");
         }
@@ -1304,7 +1253,7 @@ public class ClientHandler implements Runnable{
             .replace("\n", "\\n")
             .replace("\r", "\\r");
     }
-    private record PaymentAuthorization(boolean allowed, String reason) {
+    public record PaymentAuthorization(boolean allowed, String reason) {
         static PaymentAuthorization allow() {
             return new PaymentAuthorization(true, "");
         }
