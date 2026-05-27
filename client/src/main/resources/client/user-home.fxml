@@ -80,7 +80,6 @@
                                         <Button fx:id="autoBidsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auto Bids" />
                                         <Button fx:id="myItemsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="My Items" />
                                         <Button fx:id="winnersBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Transactions" />
-                                        <Button fx:id="settingsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Settings" />
                                     </children>
                                 </VBox>
 
@@ -160,6 +159,16 @@
                 </ScrollPane>
             </children>
         </HBox>
+
+        <Button fx:id="depositFloatingButton"
+                managed="false"
+                mnemonicParsing="false"
+                onAction="#handleOpenDepositDialog"
+                styleClass="floating-create-btn"
+                text="Deposit"
+                visible="false"
+                AnchorPane.bottomAnchor="24.0"
+                AnchorPane.rightAnchor="28.0" />
 
         <Button fx:id="createListingFloatingButton"
                 managed="false"

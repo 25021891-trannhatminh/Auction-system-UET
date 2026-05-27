@@ -68,6 +68,14 @@ final class TransactionData {
         && "FINISHED".equalsIgnoreCase(auctionStatus);
   }
 
+  boolean isWallet() {
+    return "WALLET".equalsIgnoreCase(role);
+  }
+
+  boolean isDeposit() {
+    return isWallet() && "DEPOSIT".equalsIgnoreCase(walletTxType);
+  }
+
   private static String safe(String value) {
     return value == null ? "" : value.trim();
   }

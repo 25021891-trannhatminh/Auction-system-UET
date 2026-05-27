@@ -31,6 +31,8 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -48,8 +50,12 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
+import javafx.stage.StageStyle;
 import javafx.util.Duration;
 
 /**
@@ -65,6 +71,7 @@ public class UserDashboardController extends BaseDashboardController {
   @FXML private Label workspaceTitleLabel;
   @FXML private Button primaryActionButton;
   @FXML private Button createListingFloatingButton;
+  @FXML private Button depositFloatingButton;
 
   private static final int AUCTIONS_PER_PAGE = 6;
   private static final double USER_ACTION_PRIMARY_WIDTH = 84;
@@ -125,18 +132,26 @@ public class UserDashboardController extends BaseDashboardController {
   private final List<AuctionCardData> liveAuctionCards = new ArrayList<>();
   private List<AuctionCardData> incomingAuctionCards = new ArrayList<>();
   private boolean userAuctionsLoaded;
+  private boolean userAuctionsLoading;
   private final List<SellerItemData> sellerItems = new ArrayList<>();
   private List<SellerItemData> incomingSellerItems = new ArrayList<>();
   private boolean sellerItemsLoaded;
+  private boolean sellerItemsLoading;
   private final List<MyBidData> myBids = new ArrayList<>();
   private List<MyBidData> incomingMyBids = new ArrayList<>();
   private boolean myBidsLoaded;
+  private boolean myBidsLoading;
   private final List<AutoBidData> autoBids = new ArrayList<>();
   private List<AutoBidData> incomingAutoBids = new ArrayList<>();
   private boolean autoBidsLoaded;
+  private boolean autoBidsLoading;
   private final List<TransactionData> transactions = new ArrayList<>();
   private List<TransactionData> incomingTransactions = new ArrayList<>();
   private boolean transactionsLoaded;
+  private boolean transactionsLoading;
+  private boolean transactionsReloadPending;
+  private BigDecimal currentWalletBalance = BigDecimal.ZERO;
+  private boolean walletBalanceKnown;
   private final Map<String, Long> auctionSecondsSyncedAtMillis = new HashMap<>();
   private final Map<String, List<BidHistoryData>> sellerBidHistoryByAuction = new HashMap<>();
   private final Map<String, Boolean> sellerBidHistoryLoaded = new HashMap<>();
@@ -199,11 +214,11 @@ public class UserDashboardController extends BaseDashboardController {
   @Override
   @FXML
   protected void initialize() {
+    this.networkManager = NetworkManager.getInstance();
     setupCreateItemNetwork();
     setupCreateListingFloatingButton();
-    super.initialize();
+    setupDepositFloatingButton();
 
-    this.networkManager = NetworkManager.getInstance();
     this.userNetworkHandler = msg -> {
       if (msg == null || msg.isBlank()) {
         return;
@@ -241,10 +256,7 @@ public class UserDashboardController extends BaseDashboardController {
       }
     };
     this.networkManager.addMessageHandler(userNetworkHandler);
-    requestUserAuctions();
-    requestUserBids();
-    requestUserAutoBids();
-    requestUserTransactions();
+    super.initialize();
     requestNotificationHistory();
   }
 
@@ -257,9 +269,172 @@ public class UserDashboardController extends BaseDashboardController {
     createListingFloatingButton.setOnAction(event -> handleOpenCreateListing());
   }
 
+  private void setupDepositFloatingButton() {
+    if (depositFloatingButton == null) {
+      return;
+    }
+    depositFloatingButton.setVisible(false);
+    depositFloatingButton.setManaged(false);
+    depositFloatingButton.setOnAction(event -> handleOpenDepositDialog());
+  }
+
   @FXML
   private void handleOpenCreateListing() {
     renderCreateItemForm();
+  }
+
+  @FXML
+  private void handleOpenDepositDialog() {
+    Dialog<BigDecimal> dialog = new Dialog<>();
+    dialog.initStyle(StageStyle.UNDECORATED);
+    dialog.setHeaderText(null);
+    dialog.setGraphic(null);
+    dialog.setResizable(false);
+
+    DialogPane dialogPane = dialog.getDialogPane();
+    dialogPane.getStyleClass().add("wallet-deposit-dialog-pane");
+    dialogPane.setMinWidth(420);
+    dialogPane.setPrefWidth(420);
+    dialogPane.setMaxWidth(420);
+    String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
+    dialogPane.getStylesheets().add(dashboardCss);
+
+    TextField amountField = new TextField();
+    amountField.setPromptText("Enter amount");
+    amountField.getStyleClass().add("wallet-deposit-input");
+
+    Label errorLabel = new Label("Enter a valid amount greater than 0 VND.");
+    errorLabel.getStyleClass().add("wallet-deposit-error");
+    errorLabel.setVisible(false);
+    errorLabel.setManaged(false);
+    amountField.textProperty().addListener((obs, oldValue, newValue) -> {
+      amountField.getStyleClass().remove("wallet-deposit-input-invalid");
+      errorLabel.setVisible(false);
+      errorLabel.setManaged(false);
+    });
+
+    Button depositButton = new Button("Deposit");
+    depositButton.getStyleClass().add("wallet-deposit-primary-btn");
+    depositButton.setDefaultButton(true);
+
+    Button cancelButton = new Button("Cancel");
+    cancelButton.getStyleClass().add("wallet-deposit-secondary-btn");
+    cancelButton.setCancelButton(true);
+    cancelButton.setDisable(false);
+    cancelButton.setFocusTraversable(true);
+
+    Runnable closeDepositDialog = () -> {
+      dialog.setResult(null);
+      dialog.close();
+    };
+
+    Runnable submitDeposit = () -> {
+      BigDecimal amount = parsePositiveMoney(amountField.getText());
+      if (amount == null) {
+        amountField.getStyleClass().remove("wallet-deposit-input-invalid");
+        amountField.getStyleClass().add("wallet-deposit-input-invalid");
+        errorLabel.setVisible(true);
+        errorLabel.setManaged(true);
+        amountField.requestFocus();
+        return;
+      }
+      dialog.setResult(amount);
+      dialog.close();
+    };
+
+    depositButton.setOnAction(event -> submitDeposit.run());
+    amountField.setOnAction(event -> submitDeposit.run());
+    cancelButton.setOnAction(event -> closeDepositDialog.run());
+    dialogPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+      if (event.getCode() == KeyCode.ESCAPE) {
+        closeDepositDialog.run();
+        event.consume();
+      }
+    });
+
+    dialogPane.setContent(buildDepositDialogContent(
+        amountField,
+        errorLabel,
+        depositButton,
+        cancelButton
+    ));
+
+    dialog.setOnShown(event -> {
+      if (dialogPane.getScene() != null) {
+        dialogPane.getScene().setFill(Color.web("#0f0f0f"));
+      }
+      amountField.requestFocus();
+    });
+
+    dialog.showAndWait().ifPresent(amount -> {
+      if (networkManager == null) {
+        networkManager = NetworkManager.getInstance();
+      }
+      if (networkManager == null) {
+        notifUIHandler.showError("Deposit failed", "Cannot connect to the server.");
+        return;
+      }
+      networkManager.send(buildDepositCommand(amount));
+      notifUIHandler.showSuccess(
+          "Deposit processing",
+          "The server is updating your wallet balance."
+      );
+    });
+  }
+
+  private VBox buildDepositDialogContent(
+      TextField amountField,
+      Label errorLabel,
+      Button depositButton,
+      Button cancelButton
+  ) {
+    VBox card = new VBox(16);
+    card.getStyleClass().add("wallet-deposit-card");
+    card.setMinWidth(380);
+    card.setPrefWidth(420);
+    card.setMaxWidth(420);
+
+    VBox header = new VBox(5);
+    Label eyebrow = new Label("Wallet balance");
+    eyebrow.getStyleClass().add("wallet-deposit-eyebrow");
+    Label balance = new Label(
+        walletBalanceKnown ? formatMoney(currentWalletBalance.toPlainString()) : "Syncing"
+    );
+    balance.getStyleClass().add("wallet-deposit-balance");
+    balance.setMaxWidth(Double.MAX_VALUE);
+    balance.setTextOverrun(OverrunStyle.ELLIPSIS);
+    Label balanceCaption = new Label("Top up your bidding wallet in VND.");
+    balanceCaption.getStyleClass().add("wallet-deposit-caption");
+    header.getChildren().addAll(eyebrow, balance, balanceCaption);
+
+    VBox amountBlock = new VBox(8);
+    HBox amountHeader = new HBox(10);
+    amountHeader.setAlignment(Pos.CENTER_LEFT);
+    Label amountLabel = new Label("Amount");
+    amountLabel.getStyleClass().add("wallet-deposit-field-label");
+    Region labelSpacer = new Region();
+    HBox.setHgrow(labelSpacer, Priority.ALWAYS);
+    Label currencyPill = new Label("VND");
+    currencyPill.getStyleClass().add("wallet-deposit-currency-pill");
+    amountHeader.getChildren().addAll(amountLabel, labelSpacer, currencyPill);
+    amountField.setMaxWidth(Double.MAX_VALUE);
+    amountBlock.getChildren().addAll(amountHeader, amountField);
+
+    HBox buttonRow = new HBox(10);
+    buttonRow.setAlignment(Pos.CENTER_RIGHT);
+    buttonRow.getStyleClass().add("wallet-deposit-action-row");
+    buttonRow.getChildren().addAll(cancelButton, depositButton);
+
+    card.getChildren().addAll(header, amountBlock, errorLabel, buttonRow);
+    return card;
+  }
+
+  private String buildDepositCommand(BigDecimal amount) {
+    User currentUser = SessionManager.getCurrentUser();
+    if (currentUser != null && currentUser.getUserId() > 0) {
+      return "DEPOSIT_WALLET " + currentUser.getUserId() + " " + amount.toPlainString();
+    }
+    return "DEPOSIT_WALLET " + amount.toPlainString();
   }
 
   private void preloadAuctionImages() {
@@ -272,7 +447,6 @@ public class UserDashboardController extends BaseDashboardController {
     createItemNetworkManager = NetworkManager.getInstance();
     createItemHandler = message -> Platform.runLater(() -> handleCreateItemServerMessage(message));
     createItemNetworkManager.addMessageHandler(createItemHandler);
-    requestCreateListingMetadata();
   }
 
   /**
@@ -286,24 +460,35 @@ public class UserDashboardController extends BaseDashboardController {
     if (createItemNetworkManager == null) {
       return;
     }
+    if (sellerItemsLoading) {
+      return;
+    }
 
     User currentUser = SessionManager.getCurrentUser();
     if (currentUser != null && currentUser.getUserId() > 0) {
+      sellerItemsLoading = true;
       createItemNetworkManager.send("USER_ITEM_STATS " + currentUser.getUserId());
       createItemNetworkManager.send("USER_LIST_ITEMS " + currentUser.getUserId());
     }
   }
 
   private void requestUserAuctions() {
+    if (userAuctionsLoading) {
+      return;
+    }
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
     if (networkManager != null) {
+      userAuctionsLoading = true;
       networkManager.send("USER_LIST_AUCTIONS");
     }
   }
 
   private void requestUserBids() {
+    if (myBidsLoading) {
+      return;
+    }
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
@@ -311,6 +496,7 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
+    myBidsLoading = true;
     User currentUser = SessionManager.getCurrentUser();
     if (currentUser != null && currentUser.getUserId() > 0) {
       networkManager.send("USER_LIST_BIDS " + currentUser.getUserId());
@@ -320,6 +506,9 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void requestUserAutoBids() {
+    if (autoBidsLoading) {
+      return;
+    }
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
@@ -327,6 +516,7 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
+    autoBidsLoading = true;
     User currentUser = SessionManager.getCurrentUser();
     if (currentUser != null && currentUser.getUserId() > 0) {
       networkManager.send("USER_LIST_AUTOBIDS " + currentUser.getUserId());
@@ -336,6 +526,9 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void requestUserTransactions() {
+    if (transactionsLoading) {
+      return;
+    }
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
@@ -343,6 +536,7 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
+    transactionsLoading = true;
     User currentUser = SessionManager.getCurrentUser();
     if (currentUser != null && currentUser.getUserId() > 0) {
       networkManager.send("USER_LIST_TRANSACTIONS " + currentUser.getUserId());
@@ -396,6 +590,8 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("USER_TRANSACTIONS_ERROR")
         || message.startsWith("PAYMENT_SUCCESS")
         || message.startsWith("PAYMENT_FAIL")
+        || message.startsWith("DEPOSIT_SUCCESS")
+        || message.startsWith("DEPOSIT_FAIL")
         || message.startsWith("WALLET_UPDATE|"));
   }
 
@@ -434,6 +630,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_AUCTIONS_BEGIN") || message.equals("ADMIN_AUCTIONS_BEGIN")) {
+      userAuctionsLoading = true;
       incomingAuctionCards = new ArrayList<>();
       return;
     }
@@ -457,6 +654,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_AUCTIONS_END") || message.equals("ADMIN_AUCTIONS_END")) {
+      userAuctionsLoading = false;
       liveAuctionCards.clear();
       liveAuctionCards.addAll(incomingAuctionCards);
       userAuctionsLoaded = true;
@@ -470,6 +668,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.startsWith("USER_AUCTIONS_ERROR") || message.startsWith("ADMIN_DATA_ERROR")) {
+      userAuctionsLoading = false;
       liveAuctionCards.clear();
       userAuctionsLoaded = true;
       applyUserAuctionStatsIfVisible();
@@ -546,6 +745,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_BIDS_BEGIN")) {
+      myBidsLoading = true;
       incomingMyBids = new ArrayList<>();
       return;
     }
@@ -559,6 +759,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_BIDS_END")) {
+      myBidsLoading = false;
       myBids.clear();
       myBids.addAll(incomingMyBids);
       myBidsLoaded = true;
@@ -571,6 +772,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.startsWith("USER_BIDS_ERROR")) {
+      myBidsLoading = false;
       myBids.clear();
       myBidsLoaded = true;
       applyMyBidStatsIfVisible();
@@ -587,6 +789,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_AUTOBIDS_BEGIN")) {
+      autoBidsLoading = true;
       incomingAutoBids = new ArrayList<>();
       return;
     }
@@ -600,6 +803,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_AUTOBIDS_END")) {
+      autoBidsLoading = false;
       autoBids.clear();
       for (AutoBidData rule : incomingAutoBids) {
         if (isRenderableAutoBidRule(rule)) {
@@ -616,6 +820,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.startsWith("USER_AUTOBIDS_ERROR")) {
+      autoBidsLoading = false;
       autoBids.clear();
       autoBidsLoaded = true;
       applyAutoBidStatsIfVisible();
@@ -632,7 +837,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_TRANSACTIONS_DIRTY")) {
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       return;
     }
 
@@ -645,7 +850,7 @@ public class UserDashboardController extends BaseDashboardController {
               ? "Your transaction has been paid successfully."
               : "Payment completed for auction AUC-" + auctionId + "."
       );
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       requestUserBids();
       requestUserAuctions();
       return;
@@ -653,18 +858,46 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("PAYMENT_FAIL")) {
       String[] parts = message.trim().split("\\s+", 3);
-      String reason = parts.length > 2 ? parts[2] : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
+      String reason = parts.length > 2
+          ? parts[2]
+          : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
       notifUIHandler.showError("Payment failed", readablePaymentFailure(reason));
-      requestUserTransactions();
+      reloadTransactionsFromServer();
+      return;
+    }
+
+    if (message.startsWith("DEPOSIT_SUCCESS")) {
+      List<String> fields = splitPayload(message.substring("DEPOSIT_SUCCESS".length()).trim());
+      String amount = fields.isEmpty() ? "" : formatMoney(fields.get(0));
+      String balance = fields.size() > 1 ? formatMoney(fields.get(1)) : "";
+      if (fields.size() > 1) {
+        updateKnownWalletBalance(fields.get(1));
+      }
+      notifUIHandler.showSuccess(
+          "Deposit completed",
+          balance.isBlank()
+              ? "Your wallet was topped up successfully."
+              : "Added " + amount + ". New balance: " + balance + "."
+      );
+      reloadTransactionsFromServer();
+      return;
+    }
+
+    if (message.startsWith("DEPOSIT_FAIL")) {
+      String reason = message.substring("DEPOSIT_FAIL".length()).trim();
+      notifUIHandler.showError("Deposit failed", readablePaymentFailure(reason));
+      reloadTransactionsFromServer();
       return;
     }
 
     if (message.startsWith("WALLET_UPDATE|")) {
-      requestUserTransactions();
+      updateKnownWalletBalanceFromMessage(message);
+      refreshTransactionWorkspaceIfVisible();
       return;
     }
 
     if (message.equals("USER_TRANSACTIONS_BEGIN")) {
+      transactionsLoading = true;
       incomingTransactions = new ArrayList<>();
       return;
     }
@@ -678,6 +911,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_TRANSACTIONS_END")) {
+      transactionsLoading = false;
       transactions.clear();
       transactions.addAll(incomingTransactions);
       transactionsLoaded = true;
@@ -686,16 +920,19 @@ public class UserDashboardController extends BaseDashboardController {
         renderWorkspace(currentSectionKey, activeFilter);
         applyTransactionStatsIfVisible();
       }
+      requestPendingTransactionReloadIfNeeded();
       return;
     }
 
     if (message.startsWith("USER_TRANSACTIONS_ERROR")) {
+      transactionsLoading = false;
       transactions.clear();
       transactionsLoaded = true;
       applyTransactionStatsIfVisible();
       if ("winners".equals(currentSectionKey)) {
         renderWorkspace(currentSectionKey, activeFilter);
       }
+      requestPendingTransactionReloadIfNeeded();
     }
   }
 
@@ -969,29 +1206,36 @@ public class UserDashboardController extends BaseDashboardController {
     hidePageDescriptions();
     resetActivityLinesToLiveDataState();
     updatePrimaryAction(sectionKey);
-    renderWorkspace(sectionKey, activeFilter);
     setCreateListingFloatingButtonVisible("myItems".equals(sectionKey));
+    setDepositFloatingButtonVisible("winners".equals(sectionKey));
+
     if ("myItems".equals(sectionKey)) {
       applyEmptyStats("Items", "Drafts", "Active Sales", "Sold");
-      requestCreateListingMetadata();
+      if (!sellerItemsLoaded && !sellerItemsLoading) {
+        requestCreateListingMetadata();
+      }
       applySellerItemStatsIfAvailable();
-    }
-    renderWorkspace(sectionKey, activeFilter);  // render ngay khi chưa có data
-    if ("dashboard".equals(sectionKey) || "auctions".equals(sectionKey)) {
+    } else if (("dashboard".equals(sectionKey) || "auctions".equals(sectionKey))
+        && !userAuctionsLoaded && !userAuctionsLoading) {
       requestUserAuctions();
-    }
-    if ("myBids".equals(sectionKey)) {
-      requestUserBids();
+    } else if ("myBids".equals(sectionKey)) {
+      if (!myBidsLoaded && !myBidsLoading) {
+        requestUserBids();
+      }
       applyMyBidStatsIfVisible();
-    }
-    if ("autoBids".equals(sectionKey)) {
-      requestUserAutoBids();
+    } else if ("autoBids".equals(sectionKey)) {
+      if (!autoBidsLoaded && !autoBidsLoading) {
+        requestUserAutoBids();
+      }
       applyAutoBidStatsIfVisible();
-    }
-    if ("winners".equals(sectionKey)) {
-      requestUserTransactions();
+    } else if ("winners".equals(sectionKey)) {
+      if (!transactionsLoaded && !transactionsLoading) {
+        requestUserTransactions();
+      }
       applyTransactionStatsIfVisible();
     }
+
+    renderWorkspace(sectionKey, activeFilter);
   }
 
   private void resetActivityLinesToLiveDataState() {
@@ -1010,6 +1254,14 @@ public class UserDashboardController extends BaseDashboardController {
     }
     createListingFloatingButton.setVisible(visible);
     createListingFloatingButton.setManaged(visible);
+  }
+
+  private void setDepositFloatingButtonVisible(boolean visible) {
+    if (depositFloatingButton == null) {
+      return;
+    }
+    depositFloatingButton.setVisible(visible);
+    depositFloatingButton.setManaged(visible);
   }
 
   private List<CategoryData> buildCategories() {
@@ -1065,7 +1317,6 @@ public class UserDashboardController extends BaseDashboardController {
   private String getDefaultFilter(String sectionKey) {
     return switch (sectionKey) {
       case "dashboard" -> "Overview";
-      case "settings" -> "Account";
       default -> "All";
     };
   }
@@ -1108,7 +1359,6 @@ public class UserDashboardController extends BaseDashboardController {
       case "autoBids" -> renderAutoBids(filter);
       case "myItems" -> renderMyItemsLiveSummary(filter);
       case "winners" -> renderTransactions(filter);
-      case "settings" -> renderSettings(filter);
       default -> renderDashboard(filter);
     }
   }
@@ -1656,7 +1906,8 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void renderTransactions(String filter) {
     setWorkspaceTitle("Transactions");
-    renderChips(filter, "All", "Payment Due", "Won", "Sold", "Completed", "Failed", "Refunded");
+    renderChips(filter, "All", "Payment Due", "Won", "Sold", "Wallet", "Deposit", "Completed", "Failed", "Refunded");
+    addTransactionOverviewCard();
     addHeader("Auction", "Amount", "Counterparty");
 
     if (!transactionsLoaded) {
@@ -1675,6 +1926,150 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (count == 0) {
       addEmptyRow(filter);
+    }
+  }
+
+  private void addTransactionOverviewCard() {
+    BigDecimal totalDeposits = BigDecimal.ZERO;
+    BigDecimal completedPayments = BigDecimal.ZERO;
+    BigDecimal pendingDue = BigDecimal.ZERO;
+    int walletLogs = 0;
+
+    for (TransactionData transaction : transactions) {
+      if (transaction == null) {
+        continue;
+      }
+      BigDecimal amount = moneyValue(transaction.amount);
+      if (transaction.isDeposit()) {
+        totalDeposits = totalDeposits.add(amount);
+      }
+      if (transaction.isWallet()) {
+        walletLogs++;
+      } else if (transaction.isPayable()) {
+        pendingDue = pendingDue.add(amount);
+      } else {
+        String status = normalize(resolveTransactionStatus(transaction));
+        if (status.equals("completed") || status.equals("refunded")) {
+          completedPayments = completedPayments.add(amount);
+        }
+      }
+    }
+
+    HBox card = new HBox(18);
+    card.setAlignment(Pos.CENTER_LEFT);
+    card.setMaxWidth(Double.MAX_VALUE);
+    card.getStyleClass().add("transaction-wallet-card");
+
+    VBox main = new VBox(14);
+    main.setMinWidth(0);
+    main.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(main, Priority.ALWAYS);
+
+    HBox titleRow = new HBox(10);
+    titleRow.setAlignment(Pos.CENTER_LEFT);
+    Label title = new Label("Wallet");
+    title.getStyleClass().add("transaction-wallet-title");
+    Label icon = new Label("✦");
+    icon.getStyleClass().add("transaction-wallet-icon");
+    titleRow.getChildren().addAll(title, icon);
+
+    HBox amountRow = new HBox(12);
+    amountRow.setAlignment(Pos.CENTER_LEFT);
+    Label total = new Label(formatMoney(totalDeposits.toPlainString()));
+    total.getStyleClass().add("transaction-wallet-total");
+    total.setTextOverrun(OverrunStyle.ELLIPSIS);
+    Label status = new Label(walletLogs > 0 || walletBalanceKnown ? "Active" : "Ready");
+    status.getStyleClass().add("transaction-wallet-status");
+    amountRow.getChildren().addAll(total, status);
+
+    Label caption = new Label("Total deposit amount");
+    caption.getStyleClass().add("transaction-wallet-caption");
+    main.getChildren().addAll(titleRow, amountRow, caption);
+
+    VBox metrics = new VBox(12);
+    metrics.setMinWidth(0);
+    metrics.setPrefWidth(420);
+    metrics.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(metrics, Priority.ALWAYS);
+
+    HBox topMetrics = new HBox(12);
+    topMetrics.setAlignment(Pos.CENTER);
+    topMetrics.getChildren().addAll(
+        transactionMetricCard("Paid", formatMoney(completedPayments.toPlainString())),
+        transactionMetricCard(
+            "Balance",
+            walletBalanceKnown ? formatMoney(currentWalletBalance.toPlainString()) : "Syncing"
+        )
+    );
+
+    HBox bottomMetrics = new HBox(12);
+    bottomMetrics.setAlignment(Pos.CENTER_RIGHT);
+    Region spacer = new Region();
+    HBox.setHgrow(spacer, Priority.ALWAYS);
+    bottomMetrics.getChildren().addAll(
+        spacer,
+        transactionMetricCard("Payment Due", formatMoney(pendingDue.toPlainString()))
+    );
+
+    metrics.getChildren().addAll(topMetrics, bottomMetrics);
+    card.getChildren().addAll(main, metrics);
+    workspaceBox.getChildren().add(card);
+  }
+
+  private VBox transactionMetricCard(String labelText, String valueText) {
+    VBox metric = new VBox(6);
+    metric.setMinWidth(0);
+    metric.setPrefWidth(190);
+    metric.setMaxWidth(Double.MAX_VALUE);
+    HBox.setHgrow(metric, Priority.ALWAYS);
+    metric.getStyleClass().add("transaction-wallet-metric");
+
+    Label label = new Label(labelText);
+    label.getStyleClass().add("transaction-wallet-metric-label");
+    Label value = new Label(valueText);
+    value.getStyleClass().add("transaction-wallet-metric-value");
+    value.setTextOverrun(OverrunStyle.ELLIPSIS);
+    value.setMaxWidth(Double.MAX_VALUE);
+
+    metric.getChildren().addAll(label, value);
+    return metric;
+  }
+
+  private void updateKnownWalletBalanceFromMessage(String message) {
+    String[] parts = message == null ? new String[0] : message.split("\\|", 3);
+    if (parts.length >= 3) {
+      updateKnownWalletBalance(parts[2]);
+    }
+  }
+
+  private void updateKnownWalletBalance(String rawBalance) {
+    currentWalletBalance = moneyValue(rawBalance);
+    walletBalanceKnown = true;
+  }
+
+  private void reloadTransactionsFromServer() {
+    transactionsLoaded = false;
+    if (transactionsLoading) {
+      transactionsReloadPending = true;
+      refreshTransactionWorkspaceIfVisible();
+      return;
+    }
+    requestUserTransactions();
+    refreshTransactionWorkspaceIfVisible();
+  }
+
+  private void requestPendingTransactionReloadIfNeeded() {
+    if (!transactionsReloadPending) {
+      return;
+    }
+    transactionsReloadPending = false;
+    reloadTransactionsFromServer();
+  }
+
+  private void refreshTransactionWorkspaceIfVisible() {
+    if ("winners".equals(currentSectionKey)) {
+      renderWorkspace(currentSectionKey, activeFilter);
+      applyTransactionStatsIfVisible();
     }
   }
 
@@ -1701,6 +2096,8 @@ public class UserDashboardController extends BaseDashboardController {
       case "payment due" -> transaction.isPayable() || status.contains("payment due");
       case "won" -> transaction.isBuyer();
       case "sold" -> transaction.isSeller();
+      case "wallet" -> transaction.isWallet();
+      case "deposit" -> transaction.isDeposit();
       case "completed" -> status.contains("completed");
       case "failed" -> status.contains("failed");
       case "refunded" -> status.contains("refunded") || haystack.contains("refund");
@@ -1804,19 +2201,27 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private String buildTransactionMeta(TransactionData transaction) {
-    String role = transaction.isBuyer() ? "Won auction" : "Sold auction";
+    String role = transaction.isWallet()
+        ? prettyStatus(transaction.walletTxType)
+        : transaction.isBuyer() ? "Won auction" : "Sold auction";
     String status = prettyStatus(transaction.paymentStatus);
     String date = transaction.paidAt.isBlank() ? transaction.createdAt : transaction.paidAt;
-    return role + " • AUC-" + transaction.auctionId + " • " + status + " • "
+    String reference = transaction.isWallet() ? "Wallet" : "AUC-" + transaction.auctionId;
+    return role + " • " + reference + " • " + status + " • "
         + fallback(date, "No timestamp");
   }
 
   private String buildTransactionDetailText(TransactionData transaction) {
     StringBuilder builder = new StringBuilder();
-    builder.append("Payment ID: PAY-").append(transaction.paymentId).append('\n');
-    builder.append("Auction ID: AUC-").append(transaction.auctionId).append('\n');
-    builder.append("Role: ").append(transaction.isBuyer() ? "Buyer" : "Seller").append('\n');
-    builder.append("Counterparty: ").append(transaction.counterpartName).append('\n');
+    if (transaction.isWallet()) {
+      builder.append("Wallet transaction: WT-").append(transaction.walletTxId).append('\n');
+      builder.append("Type: ").append(prettyStatus(transaction.walletTxType)).append('\n');
+    } else {
+      builder.append("Payment ID: PAY-").append(transaction.paymentId).append('\n');
+      builder.append("Auction ID: AUC-").append(transaction.auctionId).append('\n');
+      builder.append("Role: ").append(transaction.isBuyer() ? "Buyer" : "Seller").append('\n');
+      builder.append("Counterparty: ").append(transaction.counterpartName).append('\n');
+    }
     builder.append("Amount: ").append(transaction.amount).append('\n');
     builder.append("Payment status: ").append(prettyStatus(transaction.paymentStatus)).append('\n');
     builder.append("Auction status: ").append(prettyStatus(transaction.auctionStatus)).append('\n');
@@ -1835,6 +2240,9 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private String resolveTransactionStatus(TransactionData transaction) {
+    if (transaction.isWallet()) {
+      return prettyStatus(fallback(transaction.paymentStatus, "COMPLETED"));
+    }
     String paymentStatus = normalize(transaction.paymentStatus);
     if (paymentStatus.equals("pending")) {
       return transaction.isBuyer() ? "Payment Due" : "Awaiting Payment";
@@ -2135,6 +2543,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     stopAuctionDetailCountdown();
     currentSectionKey = sellerView ? "myItems" : "auctions";
+    setDepositFloatingButtonVisible(false);
     workspaceBox.getChildren().clear();
 
     if (surfaceTitleLabel != null) {
@@ -2769,6 +3178,11 @@ public class UserDashboardController extends BaseDashboardController {
     if (activeAutoBidCancelButton != null) {
       activeAutoBidCancelButton.setDisable(disabled);
     }
+  }
+
+  private BigDecimal parsePositiveMoney(String rawValue) {
+    BigDecimal value = moneyValue(rawValue);
+    return value.compareTo(BigDecimal.ZERO) > 0 ? value : null;
   }
 
   private String normalizeBidAmount(String rawValue) {
@@ -4168,6 +4582,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     workspaceBox.getChildren().clear();
     setCreateListingFloatingButtonVisible(false);
+    setDepositFloatingButtonVisible(false);
     if (userActionBar != null) {
       userActionBar.getChildren().clear();
       userActionBar.setVisible(false);
@@ -5050,6 +5465,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_ITEMS_BEGIN")) {
+      sellerItemsLoading = true;
       incomingSellerItems = new ArrayList<>();
       return;
     }
@@ -5063,6 +5479,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_ITEMS_END")) {
+      sellerItemsLoading = false;
       sellerItems.clear();
       sellerItems.addAll(incomingSellerItems);
       sellerItemsLoaded = true;
@@ -5074,6 +5491,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.startsWith("USER_ITEMS_ERROR")) {
+      sellerItemsLoading = false;
       sellerItems.clear();
       sellerItemsLoaded = true;
       if ("myItems".equals(currentSectionKey)) {
@@ -5084,6 +5502,8 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("CREATE_ITEM_SUCCESS")
         || message.startsWith("USER_UPDATE_DRAFT_SUCCESS")) {
+      sellerItemsLoaded = false;
+      sellerItemStatsLoaded = false;
       requestCreateListingMetadata();
       showTemporaryDetail(
           "My Items",

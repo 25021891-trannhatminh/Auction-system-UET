@@ -54,6 +54,9 @@ public class WalletDAO {
     private static final String SQL_SELECT_BALANCE =
         "SELECT balance FROM wallets WHERE wallet_id = ?";
 
+    private static final String SQL_SELECT_ID_BY_USER_ID =
+        "SELECT wallet_id FROM wallets WHERE user_id = ?";
+
     private static final String SQL_INSERT =
         "INSERT INTO wallets (user_id, balance) VALUES (?, 0.00)";
 
@@ -147,9 +150,33 @@ public class WalletDAO {
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) return rs.getInt(1);
                 }
+                return findWalletIdByUserId(conn, userId);
             }
         } catch (SQLException e) {
             logger.error("createWallet failed for userId={}", userId, e);
+        }
+        return -1;
+    }
+
+    /**
+     * Tạo ví trong transaction đang mở.
+     *
+     * <p>Dùng khi service cần tạo ví rồi ghi biến động số dư trong cùng một commit.</p>
+     *
+     * @param conn   Connection đang trong transaction
+     * @param userId ID người dùng cần tạo ví
+     * @return walletId vừa tạo, hoặc {@code -1} nếu thất bại
+     * @throws SQLException nếu DB trả lỗi
+     */
+    public int createWalletInTx(Connection conn, int userId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, userId);
+            if (ps.executeUpdate() > 0) {
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (rs.next()) return rs.getInt(1);
+                }
+                return findWalletIdByUserId(conn, userId);
+            }
         }
         return -1;
     }
@@ -338,6 +365,15 @@ public class WalletDAO {
     // ============================================================
     // Private Helpers
     // ============================================================
+
+    private int findWalletIdByUserId(Connection conn, int userId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ID_BY_USER_ID)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt("wallet_id") : -1;
+            }
+        }
+    }
 
     private boolean isInvalidAmount(BigDecimal amount) {
         return amount == null || amount.compareTo(BigDecimal.ZERO) <= 0;
