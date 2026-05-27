@@ -1966,22 +1966,18 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void addTransactionOverviewCard() {
-    BigDecimal totalDeposits = BigDecimal.ZERO;
     BigDecimal completedPayments = BigDecimal.ZERO;
     BigDecimal pendingDue = BigDecimal.ZERO;
-    int walletLogs = 0;
 
     for (TransactionData transaction : transactions) {
       if (transaction == null) {
         continue;
       }
       BigDecimal amount = moneyValue(transaction.amount);
-      if (transaction.isDeposit()) {
-        totalDeposits = totalDeposits.add(amount);
-      }
       if (transaction.isWallet()) {
-        walletLogs++;
-      } else if (transaction.isPayable()) {
+        continue;
+      }
+      if (transaction.isPayable()) {
         pendingDue = pendingDue.add(amount);
       } else {
         String status = normalize(resolveTransactionStatus(transaction));
@@ -2011,14 +2007,18 @@ public class UserDashboardController extends BaseDashboardController {
 
     HBox amountRow = new HBox(12);
     amountRow.setAlignment(Pos.CENTER_LEFT);
-    Label total = new Label(formatMoney(totalDeposits.toPlainString()));
+    Label total = new Label(walletBalanceKnown
+        ? formatMoney(currentWalletBalance.toPlainString())
+        : "Syncing...");
     total.getStyleClass().add("transaction-wallet-total");
     total.setTextOverrun(OverrunStyle.ELLIPSIS);
-    Label status = new Label(walletLogs > 0 || walletBalanceKnown ? "Active" : "Ready");
+    Label status = new Label(walletBalanceKnown ? "DB Synced" : "Syncing");
     status.getStyleClass().add("transaction-wallet-status");
     amountRow.getChildren().addAll(total, status);
 
-    Label caption = new Label("Total deposit amount");
+    Label caption = new Label(walletBalanceKnown
+        ? "Current balance from database"
+        : "Reading wallet balance from database");
     caption.getStyleClass().add("transaction-wallet-caption");
     main.getChildren().addAll(titleRow, amountRow, caption);
 

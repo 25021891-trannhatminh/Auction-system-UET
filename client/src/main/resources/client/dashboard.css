@@ -2836,7 +2836,6 @@
 
 .user-dashboard-root .transaction-deposit-title {
     -fx-text-fill: #f7f3e9;
-    -fx-font-family: "Georgia";
     -fx-font-size: 24px;
     -fx-font-weight: bold;
 }
@@ -2902,7 +2901,6 @@
 
 .user-dashboard-root .transaction-wallet-title {
     -fx-text-fill: #f7f3e9;
-    -fx-font-family: "Georgia";
     -fx-font-size: 26px;
     -fx-font-weight: bold;
 }
@@ -3010,7 +3008,6 @@
 
 .wallet-deposit-title {
     -fx-text-fill: #f7f3e9;
-    -fx-font-family: "Georgia";
     -fx-font-size: 24px;
     -fx-font-weight: bold;
     -fx-padding: 0 0 2 0;

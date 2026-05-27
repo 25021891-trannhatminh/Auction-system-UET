@@ -929,7 +929,14 @@ public class ClientHandler implements Runnable{
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql)) {
-            Map<Integer, BigDecimal> balanceAfterByTx = loadWalletBalanceAfterByTx(conn, targetUserId);
+            BigDecimal currentWalletBalance = loadCurrentWalletBalance(conn, targetUserId);
+            send("WALLET_UPDATE|" + targetUserId + "|" + currentWalletBalance.toPlainString());
+
+            Map<Integer, BigDecimal> balanceAfterByTx = loadWalletBalanceAfterByTx(
+                conn,
+                targetUserId,
+                currentWalletBalance
+            );
 
             ps.setInt(1, targetUserId);
             ps.setInt(2, targetUserId);
@@ -975,10 +982,15 @@ public class ClientHandler implements Runnable{
      * The current wallet balance remains the source of truth; the method walks the audit log
      * backwards and never mutates payment or wallet domain state.
      */
-    private Map<Integer, BigDecimal> loadWalletBalanceAfterByTx(Connection conn, int targetUserId)
-            throws SQLException {
+    private Map<Integer, BigDecimal> loadWalletBalanceAfterByTx(
+            Connection conn,
+            int targetUserId,
+            BigDecimal currentWalletBalance
+    ) throws SQLException {
         Map<Integer, BigDecimal> balanceAfterByTx = new HashMap<>();
-        BigDecimal runningBalance = loadCurrentWalletBalance(conn, targetUserId);
+        BigDecimal runningBalance = currentWalletBalance == null
+            ? BigDecimal.ZERO
+            : currentWalletBalance;
         String sql = """
             SELECT tx_id, type, amount, note
             FROM wallet_transactions
