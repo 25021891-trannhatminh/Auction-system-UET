@@ -2896,7 +2896,7 @@
     -fx-background-radius: 30;
     -fx-border-color: rgba(209, 177, 93, 0.18);
     -fx-border-radius: 30;
-    -fx-padding: 22 24 22 24;
+    -fx-padding: 18 22 18 22;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.42), 24, 0.18, 0, 10);
 }
 
@@ -2915,7 +2915,7 @@
 
 .user-dashboard-root .transaction-wallet-total {
     -fx-text-fill: #f7f3e9;
-    -fx-font-size: 32px;
+    -fx-font-size: 28px;
     -fx-font-weight: 900;
 }
 
@@ -2941,7 +2941,7 @@
     -fx-background-radius: 20;
     -fx-border-color: rgba(255, 255, 255, 0.055);
     -fx-border-radius: 20;
-    -fx-padding: 16 18 16 18;
+    -fx-padding: 14 16 14 16;
 }
 
 .user-dashboard-root .transaction-wallet-metric-label {
@@ -2959,16 +2959,16 @@
 /* Wallet deposit dialog. Kept opaque so the popup never renders transparent. */
 .wallet-deposit-dialog-pane {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 24;
+    -fx-background-radius: 20;
     -fx-border-color: rgba(209, 177, 93, 0.24);
-    -fx-border-radius: 24;
+    -fx-border-radius: 20;
     -fx-border-width: 1;
     -fx-padding: 0;
 }
 
 .wallet-deposit-dialog-pane > .content {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 24;
+    -fx-background-radius: 20;
     -fx-padding: 0;
 }
 
@@ -2988,13 +2988,13 @@
 
 .wallet-deposit-card {
     -fx-background-color: linear-gradient(to bottom right, #1d1d1d, #101010);
-    -fx-background-radius: 24;
-    -fx-border-color: transparent;
-    -fx-border-radius: 24;
-    -fx-padding: 22 24 20 24;
-    -fx-pref-width: 420;
-    -fx-max-width: 420;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.42), 22, 0.16, 0, 10);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(209, 177, 93, 0.16);
+    -fx-border-radius: 20;
+    -fx-padding: 18 20 18 20;
+    -fx-pref-width: 360;
+    -fx-max-width: 360;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.40), 18, 0.14, 0, 8);
 }
 
 .wallet-deposit-eyebrow {
@@ -3003,9 +3003,16 @@
     -fx-font-weight: bold;
 }
 
+.wallet-deposit-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-family: "Georgia";
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
 .wallet-deposit-balance {
     -fx-text-fill: #f7f3e9;
-    -fx-font-size: 32px;
+    -fx-font-size: 24px;
     -fx-font-weight: 900;
 }
 
@@ -3026,10 +3033,10 @@
     -fx-background-radius: 16;
     -fx-border-color: rgba(255, 255, 255, 0.11);
     -fx-border-radius: 16;
-    -fx-padding: 11 14 11 14;
+    -fx-padding: 10 13 10 13;
     -fx-text-fill: #f7f3e9;
     -fx-prompt-text-fill: rgba(247, 243, 233, 0.42);
-    -fx-font-size: 15px;
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
 }
 
@@ -3060,7 +3067,7 @@
 }
 
 .wallet-deposit-action-row {
-    -fx-padding: 14 0 0 0;
+    -fx-padding: 12 0 0 0;
     -fx-border-color: rgba(255, 255, 255, 0.08) transparent transparent transparent;
 }
 
@@ -3068,7 +3075,7 @@
     -fx-background-color: #d1b15d;
     -fx-background-radius: 999;
     -fx-text-fill: #111111;
-    -fx-padding: 10 24 10 24;
+    -fx-padding: 9 21 9 21;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
@@ -3084,7 +3091,7 @@
     -fx-border-color: rgba(255, 255, 255, 0.10);
     -fx-border-radius: 999;
     -fx-text-fill: #f7f3e9;
-    -fx-padding: 10 22 10 22;
+    -fx-padding: 9 20 9 20;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
