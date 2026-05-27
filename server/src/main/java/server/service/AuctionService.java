@@ -89,6 +89,7 @@ public class AuctionService {
 
     for (Auction auction : auctions) {
       loadAutoBidsForAuction(auction);
+      loadUsersForAuction(auction);
       auctionManager.loadAuction(auction);
       logger.info("Loaded auction {} with status {}", auction.getId(), auction.getStatus());
     }
@@ -107,7 +108,22 @@ public class AuctionService {
       auctionManager.getAutoBidEngine().register(config, bidder);
     }
   }
-
+  private void loadUsersForAuction(Auction auction) {
+    // Lấy tất cả bidder_id trong Auction
+    List<Integer> bidderIds = bidTransactionDAO.getBiddersByAuctionId(auction.getId());
+    for (int bidderId : bidderIds) {
+      User bidder = accountDAO.getUserById(bidderId);
+      if (bidder != null) {
+        // Đăng ký vào userMap (Update RAM)
+        auctionManager.registerOrGetUser(bidder);
+      }
+    }
+    // Đăng ký seller
+    User seller = accountDAO.getUserById(auction.getSellerId());
+    if (seller != null) {
+      auctionManager.registerOrGetUser(seller);
+    }
+  }
   // ==================== TẠO AUCTION ====================
 
   public Auction createAuction(Item item, int sellerId,

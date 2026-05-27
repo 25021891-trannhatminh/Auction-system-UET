@@ -48,7 +48,7 @@ public class BidTransactionDAO {
         "INSERT INTO bid_transactions (auction_id, bidder_id, amount, is_auto_bid, status, bid_time) VALUES (?, ?, ?, ?, ?, ?)";
 
     private static final String SQL_SELECT_HISTORY =
-        "SELECT bid_id, auction_id, bidder_id, amount, is_auto_bid, status, bid_time FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time DESC";
+        "SELECT bid_id, auction_id, bidder_id, amount, is_auto_bid, status, bid_time FROM bid_transactions WHERE auction_id = ? ORDER BY bid_time ASC";
 
     private static final String SQL_SELECT_HISTORY_WITH_BIDDERS = """
         SELECT bt.bid_id, bt.auction_id, bt.bidder_id,

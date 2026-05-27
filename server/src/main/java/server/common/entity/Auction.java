@@ -675,7 +675,7 @@ public class Auction extends Entity {
     }
 
     /**
-     * Rollback RAM state sau khi DB commit thất bại.
+     * Rollback RAM state.
      *
      * Gọi bơi AuctionService để Cancel Auto-Bid WINNING
      *
