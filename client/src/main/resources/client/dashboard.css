@@ -2977,6 +2977,15 @@
     -fx-padding: 0;
 }
 
+.wallet-deposit-dialog-pane .button-bar,
+.wallet-deposit-dialog-pane .button-bar .container {
+    -fx-padding: 0;
+    -fx-spacing: 0;
+    -fx-min-height: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+}
+
 .wallet-deposit-card {
     -fx-background-color: linear-gradient(to bottom right, #1d1d1d, #101010);
     -fx-background-radius: 24;
@@ -3083,4 +3092,73 @@
 
 .wallet-deposit-secondary-btn:hover {
     -fx-background-color: rgba(255, 255, 255, 0.11);
+}
+
+/* Transactions table: database-backed wallet/payment ledger. */
+.user-dashboard-root .transaction-table-row {
+    -fx-min-height: 58;
+}
+
+.user-dashboard-root .transaction-type-cell,
+.user-dashboard-root .transaction-description-cell,
+.user-dashboard-root .transaction-amount-cell,
+.user-dashboard-root .transaction-balance-cell,
+.user-dashboard-root .transaction-time-cell,
+.user-dashboard-root .transaction-status-cell {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 12px;
+    -fx-line-spacing: 2;
+}
+
+.user-dashboard-root .transaction-type-cell,
+.user-dashboard-root .transaction-description-cell {
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.user-dashboard-root .transaction-type-cell {
+    -fx-font-weight: bold;
+}
+
+.user-dashboard-root .transaction-description-cell {
+    -fx-text-fill: rgba(247, 243, 233, 0.88);
+}
+
+.user-dashboard-root .transaction-amount-cell,
+.user-dashboard-root .transaction-balance-cell {
+    -fx-font-weight: bold;
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.user-dashboard-root .transaction-time-cell {
+    -fx-text-fill: rgba(247, 243, 233, 0.82);
+    -fx-font-size: 11px;
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.user-dashboard-root .transaction-status-cell {
+    -fx-text-fill: rgba(247, 243, 233, 0.72);
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.user-dashboard-root .transaction-pay-btn {
+    -fx-min-width: 58;
+    -fx-pref-width: 58;
+    -fx-max-width: 72;
+    -fx-padding: 5 8 5 8;
+    -fx-font-size: 11px;
+}
+
+.user-dashboard-root .transaction-pay-btn:disabled {
+    -fx-opacity: 0.58;
+}
+
+.user-dashboard-root .transaction-table-row .table-header-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.72);
+    -fx-font-size: 11px;
 }
