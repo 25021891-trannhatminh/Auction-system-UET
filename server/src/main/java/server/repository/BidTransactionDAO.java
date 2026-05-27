@@ -3,6 +3,7 @@ package server.repository;
 import server.common.entity.BidTransaction;
 import server.common.enums.BidStatus;
 import server.common.model.BidHistoryDTO;
+import server.common.model.BidPointDTO;
 import server.common.model.BidResultDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
@@ -11,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,6 +24,9 @@ import java.util.List;
 public class BidTransactionDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(BidTransactionDAO.class);
+
+    private static final DateTimeFormatter BID_POINT_TIME_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public record AuctionLockInfo(String status, LocalDateTime endTime) {}
 
@@ -223,6 +228,35 @@ public class BidTransactionDAO {
             logger.error("getBidHistory() - Lỗi truy vấn DB: {}", e.getMessage());
         }
         return historyList;
+    }
+
+    /**
+     * Lấy bid history của 1 auction, sort ASC theo bid_time.
+     * Source duy nhất: bảng bid_transactions.
+     */
+    public List<BidPointDTO> getBidPointHistory(int auctionId) {
+        String sql = """
+        SELECT bid_time, amount
+        FROM bid_transactions
+        WHERE auction_id = ?
+        ORDER BY bid_time ASC
+        """;
+        List<BidPointDTO> points = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    points.add(new BidPointDTO(
+                        rs.getTimestamp("bid_time").toLocalDateTime().format(BID_POINT_TIME_FORMATTER),
+                        rs.getBigDecimal("amount")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("getBidHistory failed for auctionId={}", auctionId, e);
+        }
+        return points;
     }
 
     /**

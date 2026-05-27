@@ -97,6 +97,11 @@ public final class ProtocolConstants {
 
     /** Tín hiệu kết thúc truyền toàn bộ dữ liệu lịch sử. */
     public static final String HISTORY_END = "HISTORY_END";
+
+    // ========== VISUALISATION ==========
+    public static final String GET_AUCTION_VISUALISATION         = "GET_AUCTION_VISUALISATION";
+    public static final String AUCTION_VISUALISATION_SUCCESS     = "AUCTION_VISUALISATION_SUCCESS";
+    public static final String AUCTION_VISUALISATION_FAIL        = "AUCTION_VISUALISATION_FAIL";
     // =========== PAYMENT ===========
     public static final String CONFIRM_PAYMENT = "CONFIRM_PAYMENT";
     public static final String REFUND_PAYMENT = "REFUND_PAYMENT";

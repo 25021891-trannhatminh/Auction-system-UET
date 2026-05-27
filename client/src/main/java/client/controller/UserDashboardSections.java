@@ -21,19 +21,18 @@ final class UserDashboardSections {
         "Dashboard",
         "Track bids, browse live auctions, manage listings, and follow transactions.",
         "User Auction Workspace",
-        "A compact workspace for outbid alerts, ending-soon auctions, unpaid wins, seller " +
-            "tasks, and auto-bid warnings.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Active Bids", "Winning Now", "Outbid", "Ending Soon"},
+        "A compact workspace for bids, auctions, seller items, and wallet transactions.",
+        new String[0],
+        new String[0],
         new String[]{"Action needed", "Bid tracking", "Seller follow-up"},
         new String[]{
-            "Outbid rows and ending-soon auctions are pushed to the top.",
+            "Rows use statuses defined by the core domain enums.",
             "My Bids keeps current price, your bid, status, and next action visible.",
             "Sold items and won auctions move into Transactions after bidding ends."
         },
         new String[]{
             "Auction activity loads from database.",
-            "Countdowns use live auction end_time.",
+            "Countdowns use live auction end_time without creating a separate auction status.",
             "Seller follow-up rows are hidden until wired to DB.",
             "Auto-bid rows are hidden until wired to DB."
         }
@@ -43,10 +42,10 @@ final class UserDashboardSections {
         "Auctions",
         "Browse by category, filter live auctions, preview items, and place bids quickly.",
         "Auction Browse",
-        "Marketplace-style browsing with product images, category cards, status filters, and " +
-            "paginated auction cards.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Live Auctions", "Ending Soon", "Hot Items", "Watched"},
+        "Marketplace-style browsing with product images, core status filters, category filters, " +
+            "and paginated auction cards.",
+        new String[0],
+        new String[0],
         new String[]{"Shop by Category", "Auction cards", "Pagination"},
         new String[]{
             "Category cards work as practical browse shortcuts instead of decorative sections.",
@@ -56,7 +55,7 @@ final class UserDashboardSections {
         },
         new String[]{
             "Live auction cards come from the auctions table.",
-            "Auction stats refresh after database responses.",
+            "Auction filters mirror AuctionStatus and ItemCategory from the core domain.",
             "Reserve price displays only from the stored auction row.",
             "Category cards are generated from live auction categories."
         }
@@ -68,8 +67,8 @@ final class UserDashboardSections {
         "Bid Tracking Board",
         "A management table is best here: item thumbnail, current price, your bid, status, " +
             "countdown, and quick action.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Total Bids", "Winning", "Outbid", "Completed"},
+        new String[0],
+        new String[0],
         new String[]{"Bid history", "Status badges", "Quick re-bid"},
         new String[]{
             "Rows should compare current price, your latest bid, and closing pressure.",
@@ -79,30 +78,30 @@ final class UserDashboardSections {
         new String[]{
             "Bid history is hidden until user bid queries are added.",
             "Outbid rows are not mocked.",
-            "Ending-soon counts use seconds_left from the server.",
-            "Completed bid rows need a real transaction query before rendering."
+            "Countdown text uses seconds_left from the server without adding a new status.",
+            "Bid filters mirror WINNING, OUTBID, WON, and LOST from the core domain."
         }
     ));
 
     map.put("autoBids", page(
         "Auto Bids",
-        "Manage automated bidding rules, maximum limits, increments, and pause or resume controls.",
+        "Manage automated bidding rules, maximum limits, increments, and cancellation controls.",
         "Auto Bid Controls",
         "Auto bids are bidding rules, not just history. Keep max limit, current price, " +
-            "increment, warning threshold, and controls visible.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Active Rules", "Paused", "Near Limit", "Limit Reached"},
-        new String[]{"Rule table", "Limit safety", "Pause / resume"},
+            "increment, core status, and controls visible.",
+        new String[0],
+        new String[0],
+        new String[]{"Rule table", "Core status", "Cancel rule"},
         new String[]{
             "Show each automated rule beside the related auction item.",
-            "Warn when current price approaches the configured max bid.",
-            "Allow quick Edit, Pause, Resume, or Delete actions."
+            "Statuses stay aligned with ACTIVE, COMPLETED, and CANCELED.",
+            "Allow quick viewing and cancellation without inventing extra rule states."
         },
         new String[]{
             "Auto-bid rules are hidden until loaded from DB.",
-            "Paused auto-bid rows are not mocked.",
-            "Ended auto-bid rows are not mocked.",
-            "Auto-bid safety data will render only after DB wiring."
+            "Only ACTIVE, COMPLETED, and CANCELED are exposed as filters.",
+            "Ended auto-bid rows are rendered as COMPLETED from DB.",
+            "Auto-bid rows stay hidden until loaded from DB."
         }
     ));
 
@@ -112,11 +111,11 @@ final class UserDashboardSections {
         "Seller Workspace",
         "Seller management stays practical with item thumbnails, listing status, bids, " +
             "watchers, countdown, winner, and context actions.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Items", "Drafts", "Active Sales", "Sold"},
+        new String[0],
+        new String[0],
         new String[]{"Listing status", "Auction linkage", "Seller actions"},
         new String[]{
-            "Draft, Pending, Active, Sold, and Unsold items are separated by filter chips.",
+            "Draft, Pending Review, Available, In Auction, Sold, and Removed map to ItemStatus.",
             "Each item shows whether it has bids, watchers, or a winner follow-up task.",
             "Actions change by state: Edit, Publish, View Bids, Contact Winner, Mark Shipped, " +
                 "or Relist."
@@ -134,17 +133,17 @@ final class UserDashboardSections {
         "Follow wallet deposits plus auctions you won or sold after bidding ends.",
         "Wallet & Auction Transactions",
         "Transactions combines wallet top-ups with bidder payment and seller payout follow-up.",
-        new String[]{"00", "00", "00", "00"},
-        new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "Wallet Logs"},
+        new String[0],
+        new String[0],
         new String[]{"Wallet deposits", "Won auctions", "Sold auctions"},
         new String[]{
             "Wallet Deposit rows show the amount, timestamp, and wallet transaction reference.",
-            "Won Auctions track final price, seller, payment status, and Pay Now action.",
-            "Sold Auctions track winner, winning bid, payment status, and seller fulfilment."
+            "Auction payments track final price, counterparty, payment status, and Pay Now action.",
+            "Transaction filters mirror PaymentStatus and WalletTransactionType."
         },
         new String[]{
             "Transaction rows load from payments and wallet_transactions.",
-            "Payment Due rows call the existing CONFIRM_PAYMENT flow.",
+            "PENDING buyer rows call the existing CONFIRM_PAYMENT flow.",
             "Deposit rows call the wallet top-up endpoint and are logged as DEPOSIT.",
             "Payment, refund, and deposit references are shown from wallet transaction logs."
         }

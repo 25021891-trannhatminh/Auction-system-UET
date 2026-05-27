@@ -1,9 +1,11 @@
 package server.handler;
 
 import java.time.LocalDateTime;
+import java.util.stream.Collectors;
 import server.common.ProtocolConstants;
 import java.math.BigDecimal;
 import server.common.enums.AuctionStatus;
+import server.common.model.AuctionVisualisationDTO;
 
 /**
  * Builder tạo response message theo protocol chuẩn.
@@ -264,6 +266,62 @@ public final class ResponseBuilder {
      */
     public static String historyEnd() {
         return ProtocolConstants.HISTORY_END;
+    }
+
+    // ==================== VISUALISATION ====================
+
+    /**
+     * Response visualisation thành công.
+     *
+     * <p>Format: {@code AUCTION_VISUALISATION_SUCCESS auctionId|itemName|startingPrice|currentPrice|points}</p>
+     * <p>points: {@code "time1,amount1;time2,amount2;..."} — sort ASC theo bidTime, rỗng {@code ""} nếu chưa có bid.</p>
+     * <p>Dùng {@code ;} phân tách point, {@code ,} phân tách time/amount trong mỗi point,
+     * {@code |} phân tách field — 3 ký tự không xung đột nhau.</p>
+     *
+     * @param dto DTO chứa toàn bộ dữ liệu visualisation
+     * @return chuỗi protocol AUCTION_VISUALISATION_SUCCESS
+     */
+    public static String auctionVisualisationSuccess(AuctionVisualisationDTO dto) {
+        String points = dto.getPoints().stream()
+            .map(p -> p.getBidTime() + "," + p.getAmount().toPlainString())
+            .collect(Collectors.joining(";"));
+
+        return String.format("%s %d|%s|%s|%s|%s",
+            ProtocolConstants.AUCTION_VISUALISATION_SUCCESS,
+            dto.getAuctionId(),
+            encodeField(dto.getItemName()),
+            dto.getStartingPrice().toPlainString(),
+            dto.getCurrentPrice().toPlainString(),
+            points
+        );
+    }
+
+    /**
+     * Response visualisation thất bại.
+     *
+     * @param reason Lý do thất bại
+     * @return "AUCTION_VISUALISATION_FAIL reason"
+     */
+    public static String auctionVisualisationFail(String reason) {
+        return String.format("%s %s", ProtocolConstants.AUCTION_VISUALISATION_FAIL, reason);
+    }
+
+// ==================== INTERNAL HELPERS ====================
+
+    /**
+     * Encode một field để an toàn khi truyền qua protocol pipe-delimited.
+     * Escape {@code \} thành {@code \\}, {@code |} thành {@code \p}, newline thành {@code \n}.
+     *
+     * @param value giá trị cần encode; null trả về chuỗi rỗng
+     * @return chuỗi đã encode
+     */
+    private static String encodeField(String value) {
+        if (value == null) return "";
+        return value
+            .replace("\\", "\\\\")
+            .replace("|", "\\p")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
     }
 
 }
