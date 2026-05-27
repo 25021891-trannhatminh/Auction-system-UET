@@ -76,6 +76,7 @@ public class UserDashboardController extends BaseDashboardController {
   @FXML private Button depositFloatingButton;
 
   private static final int AUCTIONS_PER_PAGE = 6;
+  private static final int TABLE_ROWS_PER_PAGE = 8;
   private static final double USER_ACTION_PRIMARY_WIDTH = 84;
   private static final double USER_ACTION_MORE_WIDTH = 28;
   private static final double USER_ACTION_GAP = 6;
@@ -192,6 +193,10 @@ public class UserDashboardController extends BaseDashboardController {
   private String currentSectionKey = "auctions";
   private String activeFilter = "All";
   private int auctionPage = 1;
+  private int sellerItemsPage = 1;
+  private int myBidsPage = 1;
+  private int autoBidsPage = 1;
+  private int transactionsPage = 1;
   private Timeline auctionDetailCountdownTimeline;
   private String activeAuctionDetailId;
   private Label activeAuctionPriceLabel;
@@ -1224,7 +1229,7 @@ public class UserDashboardController extends BaseDashboardController {
     leaveActiveAuctionRoom();
     currentSectionKey = sectionKey;
     activeFilter = getDefaultFilter(sectionKey);
-    auctionPage = 1;
+    resetPageForSection(sectionKey);
 
     if (workspaceTitleLabel != null) {
       workspaceTitleLabel.setVisible(true);
@@ -1366,7 +1371,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void applyFilter(String filter) {
     activeFilter = filter;
-    auctionPage = 1;
+    resetPageForSection(currentSectionKey);
     renderWorkspace(currentSectionKey, activeFilter);
   }
 
@@ -1546,9 +1551,14 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    for (SellerItemData item : filteredItems) {
+    int totalPages = totalPages(filteredItems.size(), TABLE_ROWS_PER_PAGE);
+    sellerItemsPage = clampPage(sellerItemsPage, totalPages);
+    for (SellerItemData item : pageSlice(filteredItems, sellerItemsPage, TABLE_ROWS_PER_PAGE)) {
       addSellerItemRow(item);
     }
+    workspaceBox.getChildren().add(
+        buildSectionPagination("myItems", totalPages, filteredItems.size())
+    );
   }
 
   private List<SellerItemData> filterSellerItems(String filter) {
@@ -1592,8 +1602,6 @@ public class UserDashboardController extends BaseDashboardController {
     mainCell.getStyleClass().add("row-main-cell");
     GridPane.setHgrow(mainCell, Priority.ALWAYS);
 
-    StackPane thumbnail = buildImageThumbnail(item.imagePath, item.name);
-
     VBox textCell = new VBox(2);
     textCell.setMinWidth(0);
     textCell.setMaxWidth(Double.MAX_VALUE);
@@ -1616,7 +1624,7 @@ public class UserDashboardController extends BaseDashboardController {
     meta.setTextOverrun(OverrunStyle.ELLIPSIS);
 
     textCell.getChildren().addAll(link, meta);
-    mainCell.getChildren().addAll(thumbnail, textCell);
+    mainCell.getChildren().add(textCell);
 
     Label firstMetric = rowMetric(item.startingPrice);
     Label secondMetric = rowMetric(item.createdAt);
@@ -1781,7 +1789,7 @@ public class UserDashboardController extends BaseDashboardController {
     List<UserRow> rows = new ArrayList<>();
     for (MyBidData bid : myBids) {
       String status = resolveMyBidStatus(bid);
-      rows.add(row(
+      rows.add(rowWithAuction(
           bid.itemName,
           buildMyBidMeta(bid),
           bid.currentPrice,
@@ -1789,11 +1797,25 @@ public class UserDashboardController extends BaseDashboardController {
           status,
           buildMyBidDetailText(bid, status),
           initialsFor(bid.itemName),
-          isAuctionStillOpen(bid) ? "Open" : "View"
+          toMyBidAuctionCard(bid, status),
+          "View"
       ));
     }
 
-    addFilteredRows(rows, filter);
+    List<UserRow> filteredRows = filterRows(rows, filter);
+    if (filteredRows.isEmpty()) {
+      addEmptyRow(filter);
+      return;
+    }
+
+    int totalPages = totalPages(filteredRows.size(), TABLE_ROWS_PER_PAGE);
+    myBidsPage = clampPage(myBidsPage, totalPages);
+    for (UserRow row : pageSlice(filteredRows, myBidsPage, TABLE_ROWS_PER_PAGE)) {
+      addRow(row);
+    }
+    workspaceBox.getChildren().add(
+        buildSectionPagination("myBids", totalPages, filteredRows.size())
+    );
   }
 
   private void addLoadingRow(String message) {
@@ -1851,6 +1873,39 @@ public class UserDashboardController extends BaseDashboardController {
     return auctionStatus.equals("open") || auctionStatus.equals("running");
   }
 
+  private AuctionCardData toMyBidAuctionCard(MyBidData bid, String status) {
+    AuctionCardData latest = latestAuctionCardById(bid.auctionId);
+    if (latest != null) {
+      return latest;
+    }
+    return new AuctionCardData(
+        bid.auctionId,
+        bid.itemId,
+        bid.itemName,
+        fallback(prettyStatus(bid.category), "Auction"),
+        "",
+        fallback(bid.currentPrice, bid.userBid),
+        "0 VND",
+        "No reserve",
+        0,
+        bid.autoBid ? "Auto bid" : "Manual bid",
+        fallback(bid.endTime, "Not scheduled"),
+        0L,
+        status,
+        fallback(bid.imagePath, AUCTION_IMAGE_FALLBACK),
+        fallback(bid.imagePath, AUCTION_IMAGE_FALLBACK),
+        buildMyBidDetailText(bid, status),
+        fallback(bid.auctionStatus, status),
+        "not available",
+        fallback(bid.endTime, "not available"),
+        "",
+        bid.winnerId,
+        "",
+        "300",
+        "60"
+    );
+  }
+
   private String currentUserIdString() {
     User currentUser = SessionManager.getCurrentUser();
     return currentUser == null ? "" : String.valueOf(currentUser.getUserId());
@@ -1870,7 +1925,7 @@ public class UserDashboardController extends BaseDashboardController {
     List<UserRow> rows = new ArrayList<>();
     for (AutoBidData rule : autoBids) {
       String status = resolveAutoBidStatus(rule);
-      rows.add(row(
+      rows.add(rowWithAuction(
           rule.itemName,
           buildAutoBidMeta(rule),
           rule.maxBid,
@@ -1878,11 +1933,25 @@ public class UserDashboardController extends BaseDashboardController {
           status,
           buildAutoBidDetailText(rule, status),
           initialsFor(rule.itemName),
+          toAutoBidAuctionCard(rule, status),
           "View"
       ));
     }
 
-    addFilteredRows(rows, filter);
+    List<UserRow> filteredRows = filterRows(rows, filter);
+    if (filteredRows.isEmpty()) {
+      addEmptyRow(filter);
+      return;
+    }
+
+    int totalPages = totalPages(filteredRows.size(), TABLE_ROWS_PER_PAGE);
+    autoBidsPage = clampPage(autoBidsPage, totalPages);
+    for (UserRow row : pageSlice(filteredRows, autoBidsPage, TABLE_ROWS_PER_PAGE)) {
+      addRow(row);
+    }
+    workspaceBox.getChildren().add(
+        buildSectionPagination("autoBids", totalPages, filteredRows.size())
+    );
   }
 
   private String buildAutoBidMeta(AutoBidData rule) {
@@ -1909,6 +1978,39 @@ public class UserDashboardController extends BaseDashboardController {
 
   private String resolveAutoBidStatus(AutoBidData rule) {
     return prettyStatus(rule.status);
+  }
+
+  private AuctionCardData toAutoBidAuctionCard(AutoBidData rule, String status) {
+    AuctionCardData latest = latestAuctionCardById(rule.auctionId);
+    if (latest != null) {
+      return latest;
+    }
+    return new AuctionCardData(
+        rule.auctionId,
+        rule.itemId,
+        rule.itemName,
+        fallback(prettyStatus(rule.category), "Auction"),
+        "",
+        fallback(rule.currentPrice, rule.maxBid),
+        fallback(rule.increment, "0 VND"),
+        "No reserve",
+        0,
+        "Auto bid",
+        formatTimeLeft(rule.secondsLeft),
+        rule.secondsLeft,
+        status,
+        fallback(rule.imagePath, AUCTION_IMAGE_FALLBACK),
+        fallback(rule.imagePath, AUCTION_IMAGE_FALLBACK),
+        buildAutoBidDetailText(rule, status),
+        normalize(rule.status).equals("active") ? "RUNNING" : rule.status,
+        "not available",
+        fallback(rule.endTime, "not available"),
+        fallback(rule.seller, ""),
+        "",
+        "",
+        "300",
+        "60"
+    );
   }
 
   private void renderMyItems(String filter) {
@@ -1955,17 +2057,27 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    int count = 0;
+    List<TransactionData> filteredTransactions = new ArrayList<>();
     for (TransactionData transaction : transactions) {
       if (matchesTransactionFilter(transaction, filter)) {
-        addTransactionRow(transaction);
-        count++;
+        filteredTransactions.add(transaction);
       }
     }
 
-    if (count == 0) {
+    if (filteredTransactions.isEmpty()) {
       addEmptyRow(filter);
+      return;
     }
+
+    int totalPages = totalPages(filteredTransactions.size(), TABLE_ROWS_PER_PAGE);
+    transactionsPage = clampPage(transactionsPage, totalPages);
+    for (TransactionData transaction
+        : pageSlice(filteredTransactions, transactionsPage, TABLE_ROWS_PER_PAGE)) {
+      addTransactionRow(transaction);
+    }
+    workspaceBox.getChildren().add(
+        buildSectionPagination("winners", totalPages, filteredTransactions.size())
+    );
   }
 
   private void addTransactionOverviewCard() {
@@ -4272,19 +4384,27 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private HBox buildPagination(int totalPages, int totalItems) {
+    return buildSectionPagination("auctions", totalPages, totalItems);
+  }
+
+  private HBox buildSectionPagination(String sectionKey, int totalPages, int totalItems) {
     HBox pagination = new HBox(7);
     pagination.setAlignment(Pos.CENTER_RIGHT);
     pagination.getStyleClass().add("pagination-bar");
+
+    int currentPage = clampPage(getPageForSection(sectionKey), totalPages);
+    setPageForSection(sectionKey, currentPage);
 
     Label total = new Label(totalItems + " results");
     total.getStyleClass().add("row-meta");
     HBox.setHgrow(total, Priority.ALWAYS);
 
-    Button previous = paginationButton("< Previous", auctionPage <= 1);
+    Button previous = paginationButton("< Previous", currentPage <= 1);
     previous.setOnAction(event -> {
-      if (auctionPage > 1) {
-        auctionPage--;
-        renderWorkspace("auctions", activeFilter);
+      int page = getPageForSection(sectionKey);
+      if (page > 1) {
+        setPageForSection(sectionKey, page - 1);
+        renderWorkspace(sectionKey, activeFilter);
       }
     });
 
@@ -4293,24 +4413,64 @@ public class UserDashboardController extends BaseDashboardController {
     for (int page = 1; page <= totalPages; page++) {
       final int targetPage = page;
       Button button = paginationButton(String.valueOf(page), false);
-      button.getStyleClass().add(page == auctionPage ? "pagination-active" : "pagination-btn");
+      button.getStyleClass().add(page == currentPage ? "pagination-active" : "pagination-btn");
       button.setOnAction(event -> {
-        auctionPage = targetPage;
-        renderWorkspace("auctions", activeFilter);
+        setPageForSection(sectionKey, targetPage);
+        renderWorkspace(sectionKey, activeFilter);
       });
       pagination.getChildren().add(button);
     }
 
-    Button next = paginationButton("Next >", auctionPage >= totalPages);
+    Button next = paginationButton("Next >", currentPage >= totalPages);
     next.setOnAction(event -> {
-      if (auctionPage < totalPages) {
-        auctionPage++;
-        renderWorkspace("auctions", activeFilter);
+      int page = getPageForSection(sectionKey);
+      if (page < totalPages) {
+        setPageForSection(sectionKey, page + 1);
+        renderWorkspace(sectionKey, activeFilter);
       }
     });
 
     pagination.getChildren().add(next);
     return pagination;
+  }
+
+  private int totalPages(int totalItems, int pageSize) {
+    return Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
+  }
+
+  private int clampPage(int page, int totalPages) {
+    return Math.max(1, Math.min(page, totalPages));
+  }
+
+  private <T> List<T> pageSlice(List<T> items, int page, int pageSize) {
+    int fromIndex = Math.max(0, (page - 1) * pageSize);
+    int toIndex = Math.min(fromIndex + pageSize, items.size());
+    return items.subList(fromIndex, toIndex);
+  }
+
+  private void resetPageForSection(String sectionKey) {
+    setPageForSection(sectionKey, 1);
+  }
+
+  private int getPageForSection(String sectionKey) {
+    return switch (sectionKey) {
+      case "myItems" -> sellerItemsPage;
+      case "myBids" -> myBidsPage;
+      case "autoBids" -> autoBidsPage;
+      case "winners" -> transactionsPage;
+      default -> auctionPage;
+    };
+  }
+
+  private void setPageForSection(String sectionKey, int page) {
+    int safePage = Math.max(1, page);
+    switch (sectionKey) {
+      case "myItems" -> sellerItemsPage = safePage;
+      case "myBids" -> myBidsPage = safePage;
+      case "autoBids" -> autoBidsPage = safePage;
+      case "winners" -> transactionsPage = safePage;
+      default -> auctionPage = safePage;
+    }
   }
 
   private Button paginationButton(String text, boolean disabled) {
@@ -4589,19 +4749,49 @@ public class UserDashboardController extends BaseDashboardController {
     return new UserRow(title, meta, firstValue, secondValue, status, detail, thumbnail, actions);
   }
 
-  private void addFilteredRows(List<UserRow> rows, String filter) {
-    int count = 0;
+  private UserRow rowWithAuction(
+      String title,
+      String meta,
+      String firstValue,
+      String secondValue,
+      String status,
+      String detail,
+      String thumbnail,
+      AuctionCardData linkedAuction,
+      String... actions
+  ) {
+    return new UserRow(
+        title,
+        meta,
+        firstValue,
+        secondValue,
+        status,
+        detail,
+        thumbnail,
+        linkedAuction,
+        actions
+    );
+  }
 
-    for (UserRow row : rows) {
-      if (matchesFilter(row, filter)) {
-        addRow(row);
-        count++;
-      }
+  private void addFilteredRows(List<UserRow> rows, String filter) {
+    List<UserRow> filteredRows = filterRows(rows, filter);
+    for (UserRow row : filteredRows) {
+      addRow(row);
     }
 
-    if (count == 0) {
+    if (filteredRows.isEmpty()) {
       addEmptyRow(filter);
     }
+  }
+
+  private List<UserRow> filterRows(List<UserRow> rows, String filter) {
+    List<UserRow> filteredRows = new ArrayList<>();
+    for (UserRow row : rows) {
+      if (matchesFilter(row, filter)) {
+        filteredRows.add(row);
+      }
+    }
+    return filteredRows;
   }
 
   private boolean matchesFilter(UserRow row, String filter) {
@@ -4659,7 +4849,7 @@ public class UserDashboardController extends BaseDashboardController {
     mainCell.getStyleClass().add("row-main-cell");
     GridPane.setHgrow(mainCell, Priority.ALWAYS);
 
-    StackPane thumbnail = buildThumbnail(data.thumbnail);
+    StackPane thumbnail = shouldShowRowThumbnail() ? buildThumbnail(data.thumbnail) : null;
 
     VBox textCell = new VBox(2);
     textCell.setMinWidth(0);
@@ -4682,7 +4872,11 @@ public class UserDashboardController extends BaseDashboardController {
     meta.setTextOverrun(OverrunStyle.ELLIPSIS);
 
     textCell.getChildren().addAll(link, meta);
-    mainCell.getChildren().addAll(thumbnail, textCell);
+    if (thumbnail == null) {
+      mainCell.getChildren().add(textCell);
+    } else {
+      mainCell.getChildren().addAll(thumbnail, textCell);
+    }
 
     Label firstMetric = rowMetric(data.firstValue);
     Label secondMetric = rowMetric(data.secondValue);
@@ -4701,6 +4895,12 @@ public class UserDashboardController extends BaseDashboardController {
     GridPane.setHalignment(actions, HPos.CENTER);
 
     workspaceBox.getChildren().add(row);
+  }
+
+  private boolean shouldShowRowThumbnail() {
+    return !("myItems".equals(currentSectionKey)
+        || "myBids".equals(currentSectionKey)
+        || "autoBids".equals(currentSectionKey));
   }
 
   private String resolvePrimaryAction(UserRow data) {
@@ -4762,7 +4962,18 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void handleRowAction(String action, UserRow data) {
+    if (data != null && data.linkedAuction != null && isAuctionViewAction(action)) {
+      renderAuctionDetailPage(latestAuctionCard(data.linkedAuction));
+      return;
+    }
     showTemporaryDetail(action + " - " + data.title, data.detail);
+  }
+
+  private boolean isAuctionViewAction(String action) {
+    String normalized = normalize(action);
+    return normalized.equals("view")
+        || normalized.equals("open")
+        || normalized.equals("view auction");
   }
 
   private StackPane buildThumbnail(String text) {

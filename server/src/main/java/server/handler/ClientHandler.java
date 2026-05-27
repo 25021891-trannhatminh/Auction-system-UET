@@ -356,6 +356,10 @@ public class ClientHandler implements Runnable{
                 sendUserTransactions(request);
                 break;
 
+            case "DEPOSIT_WALLET":
+                handleWalletDeposit(request);
+                break;
+
             case "SELLER_AUCTION_BIDS":
                 sendSellerAuctionBids(request);
                 break;
@@ -720,6 +724,15 @@ public class ClientHandler implements Runnable{
         return -1;
     }
 
+    private int parsePositiveInt(String value, int fallbackValue) {
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? parsed : fallbackValue;
+        } catch (NumberFormatException exception) {
+            return fallbackValue;
+        }
+    }
+
     /**
      * Sends persisted auto-bid rules for the current user.
      *
@@ -799,8 +812,39 @@ public class ClientHandler implements Runnable{
         send("USER_AUTOBIDS_END");
     }
 
+    private void handleWalletDeposit(String[] request) {
+        int targetUserId = this.userId > 0 ? this.userId : -1;
+        int amountIndex = 1;
+        if (request != null && request.length >= 3) {
+            targetUserId = parsePositiveInt(request[1], targetUserId);
+            amountIndex = 2;
+        }
+
+        if (targetUserId <= 0) {
+            send("DEPOSIT_FAIL NOT_LOGGED_IN");
+            return;
+        }
+        if (request == null || request.length <= amountIndex) {
+            send("DEPOSIT_FAIL INVALID_FORMAT");
+            return;
+        }
+
+        try {
+            BigDecimal amount = new BigDecimal(request[amountIndex].replace(",", "").trim());
+            BigDecimal newBalance = paymentService.depositToWallet(targetUserId, amount);
+            if (newBalance == null) {
+                send("DEPOSIT_FAIL DEPOSIT_NOT_COMPLETED");
+                return;
+            }
+            send("DEPOSIT_SUCCESS " + fields(amount, newBalance));
+            ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
+        } catch (NumberFormatException exception) {
+            send("DEPOSIT_FAIL INVALID_AMOUNT");
+        }
+    }
+
     /**
-     * Sends post-auction payment rows visible to the current user.
+     * Sends post-auction payment rows and standalone wallet rows visible to the current user.
      *
      * <p>The mutation path still goes through PaymentService; this method only exposes the
      * persisted payments/wallet transaction state to the Transactions screen.</p>
@@ -815,39 +859,68 @@ public class ClientHandler implements Runnable{
         }
 
         String sql = """
-            SELECT p.payment_id,
-                   p.auction_id,
-                   CASE WHEN p.buyer_id = ? THEN 'BUYER' ELSE 'SELLER' END AS user_role,
-                   COALESCE(i.name, CONCAT('Auction #', p.auction_id)) AS item_name,
-                   CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END AS counterpart_id,
-                   COALESCE(counterpart.username,
-                            CONCAT('User #', CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END))
-                            AS counterpart_name,
-                   p.amount,
-                   p.status AS payment_status,
-                   a.status AS auction_status,
-                   p.created_at,
-                   p.paid_at,
-                   COALESCE(wt.tx_id, 0) AS wallet_tx_id,
-                   COALESCE(wt.type, '') AS wallet_tx_type,
-                   COALESCE(wt.note, '') AS wallet_note
-            FROM payments p
-            JOIN auctions a ON a.auction_id = p.auction_id
-            LEFT JOIN items i ON i.item_id = a.item_id
-            LEFT JOIN accounts counterpart ON counterpart.user_id =
-                CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END
-            LEFT JOIN (
-                SELECT wt1.tx_id, wt1.user_id, wt1.ref_auction_id, wt1.type, wt1.note
-                FROM wallet_transactions wt1
-                JOIN (
-                    SELECT user_id, ref_auction_id, MAX(tx_id) AS latest_tx_id
-                    FROM wallet_transactions
-                    WHERE type IN ('PAYMENT', 'REFUND')
-                    GROUP BY user_id, ref_auction_id
-                ) latest ON latest.latest_tx_id = wt1.tx_id
-            ) wt ON wt.ref_auction_id = p.auction_id AND wt.user_id = ?
-            WHERE p.buyer_id = ? OR p.seller_id = ?
-            ORDER BY p.created_at DESC, p.payment_id DESC
+            SELECT *
+            FROM (
+                SELECT p.payment_id,
+                       p.auction_id,
+                       CASE WHEN p.buyer_id = ? THEN 'BUYER' ELSE 'SELLER' END AS user_role,
+                       COALESCE(i.name, CONCAT('Auction #', p.auction_id)) AS item_name,
+                       CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END AS counterpart_id,
+                       COALESCE(counterpart.username,
+                                CONCAT('User #', CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END))
+                                AS counterpart_name,
+                       p.amount,
+                       p.status AS payment_status,
+                       a.status AS auction_status,
+                       p.created_at,
+                       p.paid_at,
+                       COALESCE(wt.tx_id, 0) AS wallet_tx_id,
+                       COALESCE(wt.type, '') AS wallet_tx_type,
+                       COALESCE(wt.note, '') AS wallet_note
+                FROM payments p
+                JOIN auctions a ON a.auction_id = p.auction_id
+                LEFT JOIN items i ON i.item_id = a.item_id
+                LEFT JOIN accounts counterpart ON counterpart.user_id =
+                    CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END
+                LEFT JOIN (
+                    SELECT wt1.tx_id, wt1.user_id, wt1.ref_auction_id, wt1.type, wt1.note
+                    FROM wallet_transactions wt1
+                    JOIN (
+                        SELECT user_id, ref_auction_id, MAX(tx_id) AS latest_tx_id
+                        FROM wallet_transactions
+                        WHERE type IN ('PAYMENT', 'REFUND')
+                        GROUP BY user_id, ref_auction_id
+                    ) latest ON latest.latest_tx_id = wt1.tx_id
+                ) wt ON wt.ref_auction_id = p.auction_id AND wt.user_id = ?
+                WHERE p.buyer_id = ? OR p.seller_id = ?
+
+                UNION ALL
+
+                SELECT 0 AS payment_id,
+                       COALESCE(wt.ref_auction_id, 0) AS auction_id,
+                       'WALLET' AS user_role,
+                       CASE
+                           WHEN wt.type = 'DEPOSIT' THEN 'Wallet top-up'
+                           WHEN wt.ref_auction_id IS NULL THEN 'Wallet'
+                           ELSE COALESCE(i.name, CONCAT('Auction #', wt.ref_auction_id))
+                       END AS item_name,
+                       0 AS counterpart_id,
+                       'Wallet' AS counterpart_name,
+                       wt.amount,
+                       'COMPLETED' AS payment_status,
+                       'WALLET' AS auction_status,
+                       wt.created_at,
+                       wt.created_at AS paid_at,
+                       wt.tx_id AS wallet_tx_id,
+                       wt.type AS wallet_tx_type,
+                       COALESCE(wt.note, '') AS wallet_note
+                FROM wallet_transactions wt
+                LEFT JOIN auctions a ON a.auction_id = wt.ref_auction_id
+                LEFT JOIN items i ON i.item_id = a.item_id
+                WHERE wt.user_id = ?
+                  AND wt.type IN ('DEPOSIT', 'WITHDRAW')
+            ) tx
+            ORDER BY tx.created_at DESC, tx.payment_id DESC, tx.wallet_tx_id DESC
             """;
 
         try (Connection conn = DBConnection.getConnection();
@@ -868,6 +941,7 @@ public class ClientHandler implements Runnable{
             ps.setInt(5, targetUserId);
             ps.setInt(6, targetUserId);
             ps.setInt(7, targetUserId);
+            ps.setInt(8, targetUserId);
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
