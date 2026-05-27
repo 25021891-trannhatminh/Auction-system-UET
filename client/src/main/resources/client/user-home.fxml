@@ -114,35 +114,6 @@
                                     </children>
                                 </HBox>
 
-                                <FlowPane hgap="8.0" vgap="8.0" styleClass="stat-grid">
-                                    <children>
-                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
-                                            <children>
-                                                <Label fx:id="statValue1" styleClass="stat-value" text="00" />
-                                                <Label fx:id="statLabel1" styleClass="stat-label" text="Live Auctions" />
-                                            </children>
-                                        </VBox>
-                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
-                                            <children>
-                                                <Label fx:id="statValue2" styleClass="stat-value" text="00" />
-                                                <Label fx:id="statLabel2" styleClass="stat-label" text="Running" />
-                                            </children>
-                                        </VBox>
-                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
-                                            <children>
-                                                <Label fx:id="statValue3" styleClass="stat-value" text="00" />
-                                                <Label fx:id="statLabel3" styleClass="stat-label" text="Ending Soon" />
-                                            </children>
-                                        </VBox>
-                                        <VBox spacing="5.0" prefWidth="156.0" styleClass="stat-card">
-                                            <children>
-                                                <Label fx:id="statValue4" styleClass="stat-value" text="00" />
-                                                <Label fx:id="statLabel4" styleClass="stat-label" text="Total Bids" />
-                                            </children>
-                                        </VBox>
-                                    </children>
-                                </FlowPane>
-
                                 <VBox spacing="12.0" styleClass="surface-card" VBox.vgrow="ALWAYS">
                                     <children>
                                         <FlowPane fx:id="userActionBar" hgap="7.0" vgap="7.0" />
