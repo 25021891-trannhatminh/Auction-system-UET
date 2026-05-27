@@ -258,7 +258,7 @@ public class ClientHandler implements Runnable{
                 try {
                     int    auctionId = Integer.parseInt(request[1]);
                     String itemName  = request.length > 2
-                        ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
+                        ? commandSafeText(String.join(" ", Arrays.copyOfRange(request, 2, request.length)))
                         : "Auction #" + auctionId;
 
                     PaymentAuthorization authorization = resolvePaymentAuthorization(auctionId);
@@ -273,7 +273,7 @@ public class ClientHandler implements Runnable{
                         ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
                         ClientManager.broadcast("USER_AUCTIONS_DIRTY");
                     } else {
-                        send("PAYMENT_FAIL " + auctionId + " PAYMENT_NOT_COMPLETED");
+                        send("PAYMENT_FAIL " + auctionId + " " + resolvePaymentCompletionFailure(auctionId));
                         ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
                     }
                 } catch (NumberFormatException e) {
@@ -852,6 +852,15 @@ public class ClientHandler implements Runnable{
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql)) {
+            BigDecimal currentWalletBalance = loadCurrentWalletBalance(conn, targetUserId);
+            send("WALLET_UPDATE|" + targetUserId + "|" + currentWalletBalance.toPlainString());
+
+            Map<Integer, BigDecimal> balanceAfterByTx = loadWalletBalanceAfterByTx(
+                conn,
+                targetUserId,
+                currentWalletBalance
+            );
+
             ps.setInt(1, targetUserId);
             ps.setInt(2, targetUserId);
             ps.setInt(3, targetUserId);
@@ -862,6 +871,8 @@ public class ClientHandler implements Runnable{
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    int walletTxId = rs.getInt("wallet_tx_id");
+                    BigDecimal balanceAfter = balanceAfterByTx.get(walletTxId);
                     send("USER_TRANSACTION " + fields(
                         rs.getInt("payment_id"),
                         rs.getInt("auction_id"),
@@ -874,9 +885,10 @@ public class ClientHandler implements Runnable{
                         rs.getString("auction_status"),
                         rs.getTimestamp("created_at"),
                         rs.getTimestamp("paid_at"),
-                        rs.getInt("wallet_tx_id"),
+                        walletTxId,
                         rs.getString("wallet_tx_type"),
-                        rs.getString("wallet_note")
+                        rs.getString("wallet_note"),
+                        balanceAfter == null ? "" : balanceAfter
                     ));
                 }
             }
@@ -885,6 +897,125 @@ public class ClientHandler implements Runnable{
             e.printStackTrace();
         }
         send("USER_TRANSACTIONS_END");
+    }
+
+    /**
+     * Builds display-only wallet balances after each persisted wallet transaction.
+     * The current wallet balance remains the source of truth; the method walks the audit log
+     * backwards and never mutates payment or wallet domain state.
+     */
+    private Map<Integer, BigDecimal> loadWalletBalanceAfterByTx(
+            Connection conn,
+            int targetUserId,
+            BigDecimal currentWalletBalance
+    ) throws SQLException {
+        Map<Integer, BigDecimal> balanceAfterByTx = new HashMap<>();
+        BigDecimal runningBalance = currentWalletBalance == null
+            ? BigDecimal.ZERO
+            : currentWalletBalance;
+        String sql = """
+            SELECT tx_id, type, amount, note
+            FROM wallet_transactions
+            WHERE user_id = ?
+            ORDER BY created_at DESC, tx_id DESC
+            """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int txId = rs.getInt("tx_id");
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    BigDecimal delta = walletDisplayDelta(
+                        rs.getString("type"),
+                        amount == null ? BigDecimal.ZERO : amount,
+                        rs.getString("note")
+                    );
+                    balanceAfterByTx.put(txId, runningBalance);
+                    runningBalance = runningBalance.subtract(delta);
+                }
+            }
+        }
+        return balanceAfterByTx;
+    }
+
+    private BigDecimal loadCurrentWalletBalance(Connection conn, int targetUserId) throws SQLException {
+        String sql = "SELECT balance FROM wallets WHERE user_id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    BigDecimal balance = rs.getBigDecimal("balance");
+                    return balance == null ? BigDecimal.ZERO : balance;
+                }
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private BigDecimal walletDisplayDelta(String type, BigDecimal amount, String note) {
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+        String normalizedNote = note == null ? "" : note.trim().toLowerCase();
+        return switch (normalizedType) {
+            case "DEPOSIT", "RELEASE" -> amount;
+            case "WITHDRAW", "HOLD" -> amount.negate();
+            case "PAYMENT" -> normalizedNote.startsWith("received") ? amount : amount.negate();
+            case "REFUND" -> normalizedNote.contains("received") ? amount : amount.negate();
+            default -> BigDecimal.ZERO;
+        };
+    }
+
+    private String resolvePaymentCompletionFailure(int auctionId) {
+        String sql = """
+            SELECT p.status,
+                   p.amount,
+                   bw.wallet_id AS buyer_wallet_id,
+                   bw.balance AS buyer_balance,
+                   sw.wallet_id AS seller_wallet_id
+            FROM payments p
+            LEFT JOIN wallets bw ON bw.user_id = p.buyer_id
+            LEFT JOIN wallets sw ON sw.user_id = p.seller_id
+            WHERE p.auction_id = ?
+            """;
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return "PAYMENT_NOT_FOUND";
+                }
+
+                int buyerWalletId = rs.getInt("buyer_wallet_id");
+                if (rs.wasNull() || buyerWalletId <= 0) {
+                    return "BUYER_WALLET_NOT_FOUND";
+                }
+                int sellerWalletId = rs.getInt("seller_wallet_id");
+                if (rs.wasNull() || sellerWalletId <= 0) {
+                    return "SELLER_WALLET_NOT_FOUND";
+                }
+
+                BigDecimal amount = rs.getBigDecimal("amount");
+                BigDecimal buyerBalance = rs.getBigDecimal("buyer_balance");
+                String status = rs.getString("status");
+                boolean insufficientBalance = amount != null
+                    && buyerBalance != null
+                    && buyerBalance.compareTo(amount) < 0;
+                if (insufficientBalance) {
+                    return "INSUFFICIENT_BALANCE";
+                }
+                if (status != null && !"PENDING".equalsIgnoreCase(status)) {
+                    return "PAYMENT_" + status.toUpperCase();
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return "PAYMENT_DB_ERROR";
+        }
+        return "PAYMENT_NOT_COMPLETED";
+    }
+
+    private String commandSafeText(String value) {
+        return value == null ? "" : value.replaceAll("[\r\n\t]+", " ").trim();
     }
 
     private PaymentAuthorization resolvePaymentAuthorization(int auctionId) {

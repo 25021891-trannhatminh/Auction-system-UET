@@ -21,6 +21,7 @@ final class TransactionData {
   final String walletTxId;
   final String walletTxType;
   final String walletNote;
+  final String balanceAfter;
 
   TransactionData(
       String paymentId,
@@ -36,7 +37,8 @@ final class TransactionData {
       String paidAt,
       String walletTxId,
       String walletTxType,
-      String walletNote
+      String walletNote,
+      String balanceAfter
   ) {
     this.paymentId = safe(paymentId);
     this.auctionId = safe(auctionId);
@@ -52,6 +54,7 @@ final class TransactionData {
     this.walletTxId = safe(walletTxId);
     this.walletTxType = safe(walletTxType);
     this.walletNote = safe(walletNote);
+    this.balanceAfter = safe(balanceAfter);
   }
 
   boolean isBuyer() {

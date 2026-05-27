@@ -76,6 +76,12 @@ public class WalletDAO {
         "UPDATE wallets SET balance = balance - ?, updated_at = NOW() " +
             "WHERE wallet_id = ? AND balance >= ?";
 
+    /**
+     * Kiểm tra user có tồn tại  wallet không
+     */
+    private static final String SQL_CHECK_WALLET =
+        "SELECT wallet_id FROM wallets WHERE user_id = ?";
+
     // ============================================================
     // SELECT Methods
     // ============================================================
@@ -137,48 +143,71 @@ public class WalletDAO {
     // ============================================================
 
     /**
-     * Tạo ví mới với số dư ban đầu = 0.
+     * Tạo ví cho user nếu chưa tồn tại, trong transaction đang mở.
      *
-     * @return walletId vừa tạo, hoặc {@code -1} nếu thất bại.
+     * @param userId ID user cần tạo ví
+     * @return walletId nếu thành công, -1 nếu thất bại
+     * @throws SQLException nếu lỗi DB
      */
-    public int createWallet(int userId) {
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
-
-            ps.setInt(1, userId);
-            if (ps.executeUpdate() > 0) {
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    if (rs.next()) return rs.getInt(1);
+    public int createWalletIfNotExists(int userId) {
+        try (Connection conn = DBConnection.getConnection()) {
+            // Kiểm tra và tạo ví
+            try (PreparedStatement ps = conn.prepareStatement(SQL_CHECK_WALLET)) {
+                ps.setInt(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return rs.getInt("wallet_id");
                 }
-                return findWalletIdByUserId(conn, userId);
+            }
+            try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, PreparedStatement.RETURN_GENERATED_KEYS)) {
+                ps.setInt(1, userId);
+                int affected = ps.executeUpdate();
+                if (affected > 0) {
+                    try (ResultSet rs = ps.getGeneratedKeys()) {
+                        if (rs.next()) return rs.getInt(1);
+                    }
+                }
+                return -1;
             }
         } catch (SQLException e) {
-            logger.error("createWallet failed for userId={}", userId, e);
+            logger.error("createWalletIfNotExists failed for userId={}", userId, e);
+            return -1;
         }
-        return -1;
     }
 
     /**
      * Tạo ví trong transaction đang mở.
      *
-     * <p>Dùng khi service cần tạo ví rồi ghi biến động số dư trong cùng một commit.</p>
+     * <p>Dùng cho các flow cần đảm bảo ví tồn tại trước khi lock và chuyển tiền.
+     * Method này dùng đúng {@code Connection} của caller nên không phá vỡ transaction
+     * thanh toán hiện tại.</p>
      *
      * @param conn   Connection đang trong transaction
      * @param userId ID người dùng cần tạo ví
-     * @return walletId vừa tạo, hoặc {@code -1} nếu thất bại
+     * @return walletId hiện có hoặc vừa tạo, {@code -1} nếu không tạo được
      * @throws SQLException nếu DB trả lỗi
      */
     public int createWalletInTx(Connection conn, int userId) throws SQLException {
+        if (userId <= 0) {
+            return -1;
+        }
+        int existingWalletId = findWalletIdByUserId(conn, userId);
+        if (existingWalletId > 0) {
+            return existingWalletId;
+        }
+
         try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, userId);
             if (ps.executeUpdate() > 0) {
                 try (ResultSet rs = ps.getGeneratedKeys()) {
-                    if (rs.next()) return rs.getInt(1);
+                    if (rs.next()) {
+                        return rs.getInt(1);
+                    }
                 }
-                return findWalletIdByUserId(conn, userId);
             }
+        } catch (SQLIntegrityConstraintViolationException duplicateWallet) {
+            return findWalletIdByUserId(conn, userId);
         }
-        return -1;
+        return findWalletIdByUserId(conn, userId);
     }
 
     // ============================================================

@@ -209,6 +209,20 @@ public class AccountDAO {
         return null;
     }
 
+    public int getUserIdByUsername(String username) {
+        String sql = "SELECT user_id FROM accounts WHERE username = ?";
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt("user_id");
+            }
+        } catch (SQLException e) {
+            logger.error("getUserIdByUsername failed", e);
+        }
+        return -1;
+    }
+
     /**
      * Lấy thông tin admin theo ID.
      *

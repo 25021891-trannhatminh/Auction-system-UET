@@ -62,7 +62,7 @@ public class AuthHandler {
      * @return Response string
      */
     public String handleRegister(String[] request) {
-        if (request.length < 6) {
+        if (request.length < 2) {
             return ResponseBuilder.registerFail(ProtocolConstants.FAIL_INVALID_FORMAT);
         }
         return authService.register(request);
