@@ -465,9 +465,10 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void preloadAuctionImages() {
-    for (AuctionCardData card : liveAuctionCards) {
-      getCachedImage(card.imagePath);
-    }
+    // Auction images can come from remote Cloudinary/http URLs. Loading all of them
+    // synchronously when USER_AUCTIONS_END arrives blocks the JavaFX thread and makes
+    // user-home feel slow. Cards now request images lazily with JavaFX background
+    // loading, so auction data appears first and images fill in as they are ready.
   }
 
   private void setupCreateItemNetwork() {
@@ -2009,16 +2010,16 @@ public class UserDashboardController extends BaseDashboardController {
     amountRow.setAlignment(Pos.CENTER_LEFT);
     Label total = new Label(walletBalanceKnown
         ? formatMoney(currentWalletBalance.toPlainString())
-        : "Syncing...");
+        : "Updating...");
     total.getStyleClass().add("transaction-wallet-total");
     total.setTextOverrun(OverrunStyle.ELLIPSIS);
-    Label status = new Label(walletBalanceKnown ? "DB Synced" : "Syncing");
+    Label status = new Label(walletBalanceKnown ? "Ready to bid" : "Updating");
     status.getStyleClass().add("transaction-wallet-status");
     amountRow.getChildren().addAll(total, status);
 
     Label caption = new Label(walletBalanceKnown
-        ? "Current balance from database"
-        : "Reading wallet balance from database");
+        ? "Available for bidding and payments"
+        : "Updating your wallet balance...");
     caption.getStyleClass().add("transaction-wallet-caption");
     main.getChildren().addAll(titleRow, amountRow, caption);
 
@@ -3250,8 +3251,7 @@ public class UserDashboardController extends BaseDashboardController {
     return latestData != null
         && normalize(latestData.status).equals("running")
         && currentSecondsLeft(latestData) > 0
-        && !isOwnAuction(latestData)
-        && !isCurrentUserWinning(latestData);
+        && !isOwnAuction(latestData);
   }
 
   private String bidDisabledReason(AuctionCardData data) {
@@ -4226,19 +4226,19 @@ public class UserDashboardController extends BaseDashboardController {
       if (normalizedPath.startsWith("file:")
           || normalizedPath.startsWith("http://")
           || normalizedPath.startsWith("https://")) {
-        return new Image(normalizedPath, false);
+        return new Image(normalizedPath, true);
       }
 
       File localFile = new File(normalizedPath);
       if (localFile.exists()) {
-        return new Image(localFile.toURI().toString(), false);
+        return new Image(localFile.toURI().toString(), true);
       }
 
       if (getClass().getResource(normalizedPath) == null) {
         return null;
       }
 
-      return new Image(getClass().getResource(normalizedPath).toExternalForm(), false);
+      return new Image(getClass().getResource(normalizedPath).toExternalForm(), true);
     } catch (IllegalArgumentException exception) {
       return null;
     }
