@@ -929,6 +929,8 @@ public class ClientHandler implements Runnable{
 
         try (Connection conn = DBConnection.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql)) {
+            Map<Integer, BigDecimal> balanceAfterByTx = loadWalletBalanceAfterByTx(conn, targetUserId);
+
             ps.setInt(1, targetUserId);
             ps.setInt(2, targetUserId);
             ps.setInt(3, targetUserId);
@@ -940,6 +942,8 @@ public class ClientHandler implements Runnable{
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    int walletTxId = rs.getInt("wallet_tx_id");
+                    BigDecimal balanceAfter = balanceAfterByTx.get(walletTxId);
                     send("USER_TRANSACTION " + fields(
                         rs.getInt("payment_id"),
                         rs.getInt("auction_id"),
@@ -952,9 +956,10 @@ public class ClientHandler implements Runnable{
                         rs.getString("auction_status"),
                         rs.getTimestamp("created_at"),
                         rs.getTimestamp("paid_at"),
-                        rs.getInt("wallet_tx_id"),
+                        walletTxId,
                         rs.getString("wallet_tx_type"),
-                        rs.getString("wallet_note")
+                        rs.getString("wallet_note"),
+                        balanceAfter == null ? "" : balanceAfter
                     ));
                 }
             }
@@ -963,6 +968,67 @@ public class ClientHandler implements Runnable{
             e.printStackTrace();
         }
         send("USER_TRANSACTIONS_END");
+    }
+
+    /**
+     * Builds display-only wallet balances after each persisted wallet transaction.
+     * The current wallet balance remains the source of truth; the method walks the audit log
+     * backwards and never mutates payment or wallet domain state.
+     */
+    private Map<Integer, BigDecimal> loadWalletBalanceAfterByTx(Connection conn, int targetUserId)
+            throws SQLException {
+        Map<Integer, BigDecimal> balanceAfterByTx = new HashMap<>();
+        BigDecimal runningBalance = loadCurrentWalletBalance(conn, targetUserId);
+        String sql = """
+            SELECT tx_id, type, amount, note
+            FROM wallet_transactions
+            WHERE user_id = ?
+            ORDER BY created_at DESC, tx_id DESC
+            """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int txId = rs.getInt("tx_id");
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    BigDecimal delta = walletDisplayDelta(
+                        rs.getString("type"),
+                        amount == null ? BigDecimal.ZERO : amount,
+                        rs.getString("note")
+                    );
+                    balanceAfterByTx.put(txId, runningBalance);
+                    runningBalance = runningBalance.subtract(delta);
+                }
+            }
+        }
+        return balanceAfterByTx;
+    }
+
+    private BigDecimal loadCurrentWalletBalance(Connection conn, int targetUserId) throws SQLException {
+        String sql = "SELECT balance FROM wallets WHERE user_id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, targetUserId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    BigDecimal balance = rs.getBigDecimal("balance");
+                    return balance == null ? BigDecimal.ZERO : balance;
+                }
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private BigDecimal walletDisplayDelta(String type, BigDecimal amount, String note) {
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+        String normalizedNote = note == null ? "" : note.trim().toLowerCase();
+        return switch (normalizedType) {
+            case "DEPOSIT", "RELEASE" -> amount;
+            case "WITHDRAW", "HOLD" -> amount.negate();
+            case "PAYMENT" -> normalizedNote.startsWith("received") ? amount : amount.negate();
+            case "REFUND" -> normalizedNote.contains("received") ? amount : amount.negate();
+            default -> BigDecimal.ZERO;
+        };
     }
 
     private PaymentAuthorization resolvePaymentAuthorization(int auctionId) {

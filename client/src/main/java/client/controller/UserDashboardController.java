@@ -942,6 +942,7 @@ public class UserDashboardController extends BaseDashboardController {
       return null;
     }
 
+    String rawBalanceAfter = fields.size() > 14 ? safeField(fields, 14) : "";
     return new TransactionData(
         safeField(fields, 0),
         safeField(fields, 1),
@@ -956,7 +957,8 @@ public class UserDashboardController extends BaseDashboardController {
         shortTimestamp(safeField(fields, 10)),
         safeField(fields, 11),
         safeField(fields, 12),
-        safeField(fields, 13)
+        safeField(fields, 13),
+        rawBalanceAfter.isBlank() ? "" : formatMoney(rawBalanceAfter)
     );
   }
 
@@ -1908,7 +1910,7 @@ public class UserDashboardController extends BaseDashboardController {
     setWorkspaceTitle("Transactions");
     renderChips(filter, "All", "Payment Due", "Won", "Sold", "Wallet", "Deposit", "Completed", "Failed", "Refunded");
     addTransactionOverviewCard();
-    addHeader("Auction", "Amount", "Counterparty");
+    addTransactionHeader();
 
     if (!transactionsLoaded) {
       requestUserTransactions();
@@ -2105,61 +2107,186 @@ public class UserDashboardController extends BaseDashboardController {
     };
   }
 
+  private void addTransactionHeader() {
+    GridPane header = createTransactionTableGrid("data-header");
+
+    header.add(headerLabel("Type", HPos.LEFT), 0, 0);
+    header.add(headerLabel("Description", HPos.LEFT), 1, 0);
+    header.add(headerLabel("Amount", HPos.CENTER), 2, 0);
+    header.add(headerLabel("Balance After", HPos.CENTER), 3, 0);
+    header.add(headerLabel("Time", HPos.CENTER), 4, 0);
+
+    workspaceBox.getChildren().add(header);
+  }
+
+  private GridPane createTransactionTableGrid(String styleClass) {
+    GridPane grid = new GridPane();
+    grid.setHgap(10);
+    grid.setAlignment(Pos.CENTER_LEFT);
+    grid.getStyleClass().addAll(styleClass, "transaction-table-row");
+    grid.setMaxWidth(Double.MAX_VALUE);
+    grid.setMinWidth(0);
+
+    grid.getColumnConstraints().addAll(
+        percentColumn(16),
+        percentColumn(38),
+        percentColumn(15),
+        percentColumn(16),
+        percentColumn(15)
+    );
+    return grid;
+  }
+
   private void addTransactionRow(TransactionData transaction) {
-    GridPane row = createTableGrid("data-row");
+    GridPane row = createTransactionTableGrid("data-row");
     String detail = buildTransactionDetailText(transaction);
-    row.setOnMouseClicked(event -> showTemporaryDetail(transaction.itemName, detail));
+    row.setOnMouseClicked(event -> showTemporaryDetail(
+        resolveTransactionTypeText(transaction),
+        detail
+    ));
 
-    HBox mainCell = new HBox(9);
-    mainCell.setAlignment(Pos.CENTER_LEFT);
-    mainCell.setMinWidth(0);
-    mainCell.setMaxWidth(Double.MAX_VALUE);
-    mainCell.getStyleClass().add("row-main-cell");
-    GridPane.setHgrow(mainCell, Priority.ALWAYS);
+    Label type = transactionTableLabel(resolveTransactionTypeText(transaction), "transaction-type-cell");
+    Label description = transactionTableLabel(
+        buildTransactionDescriptionText(transaction),
+        "transaction-description-cell"
+    );
+    Label amount = transactionTableLabel(
+        buildSignedTransactionAmount(transaction),
+        "transaction-amount-cell"
+    );
+    Label balanceAfter = transactionTableLabel(
+        fallback(transaction.balanceAfter, "—"),
+        "transaction-balance-cell"
+    );
+    Label time = transactionTableLabel(
+        buildTransactionTimeText(transaction),
+        "transaction-time-cell"
+    );
 
-    StackPane thumbnail = buildThumbnail(initialsFor(transaction.itemName));
+    row.add(type, 0, 0);
+    row.add(description, 1, 0);
+    row.add(amount, 2, 0);
+    row.add(balanceAfter, 3, 0);
+    row.add(time, 4, 0);
 
-    VBox textCell = new VBox(2);
-    textCell.setMinWidth(0);
-    textCell.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(textCell, Priority.ALWAYS);
-
-    Button link = new Button(transaction.itemName);
-    link.setMnemonicParsing(false);
-    link.getStyleClass().add("row-link");
-    link.setMinWidth(0);
-    link.setMaxWidth(Double.MAX_VALUE);
-    link.setTextOverrun(OverrunStyle.ELLIPSIS);
-    link.setOnAction(event -> showTemporaryDetail(transaction.itemName, detail));
-
-    Label meta = new Label(buildTransactionMeta(transaction));
-    meta.getStyleClass().add("row-meta");
-    meta.setWrapText(false);
-    meta.setMinWidth(0);
-    meta.setMaxWidth(Double.MAX_VALUE);
-    meta.setTextOverrun(OverrunStyle.ELLIPSIS);
-
-    textCell.getChildren().addAll(link, meta);
-    mainCell.getChildren().addAll(thumbnail, textCell);
-
-    Label amount = rowMetric(transaction.amount);
-    Label counterpart = rowMetric(transaction.counterpartName);
-    Label status = statusBadge(resolveTransactionStatus(transaction));
-    GridPane actions = transactionActions(transaction, detail);
-
-    row.add(mainCell, 0, 0);
-    row.add(amount, 1, 0);
-    row.add(counterpart, 2, 0);
-    row.add(status, 3, 0);
-    row.add(actions, 4, 0);
-
+    GridPane.setHalignment(type, HPos.LEFT);
+    GridPane.setHalignment(description, HPos.LEFT);
     GridPane.setHalignment(amount, HPos.CENTER);
-    GridPane.setHalignment(counterpart, HPos.CENTER);
-    GridPane.setHalignment(status, HPos.CENTER);
-    GridPane.setHalignment(actions, HPos.CENTER);
+    GridPane.setHalignment(balanceAfter, HPos.CENTER);
+    GridPane.setHalignment(time, HPos.CENTER);
 
     workspaceBox.getChildren().add(row);
   }
+
+  private Label transactionTableLabel(String text, String styleClass) {
+    Label label = new Label(text == null ? "" : text);
+    label.getStyleClass().add(styleClass);
+    label.setMaxWidth(Double.MAX_VALUE);
+    label.setMinWidth(0);
+    label.setWrapText(true);
+    label.setTextOverrun(OverrunStyle.ELLIPSIS);
+    return label;
+  }
+
+  private String resolveTransactionTypeText(TransactionData transaction) {
+    if (transaction.isDeposit()) {
+      return "Deposit";
+    }
+    if (transaction.isWallet()) {
+      return prettyStatus(transaction.walletTxType);
+    }
+    if (normalize(transaction.paymentStatus).equals("refunded")
+        || normalize(transaction.walletTxType).equals("refund")) {
+      return "Refund";
+    }
+    return "Payment";
+  }
+
+  private String buildTransactionDescriptionText(TransactionData transaction) {
+    if (transaction.isDeposit()) {
+      return "Wallet top-up";
+    }
+    if (transaction.isWallet()) {
+      String note = cleanWalletNote(transaction.walletNote);
+      return note.isBlank() ? prettyStatus(transaction.walletTxType) : note;
+    }
+
+    String itemName = fallback(transaction.itemName, "Auction #" + transaction.auctionId);
+    String status = normalize(transaction.paymentStatus);
+    if (status.equals("pending")) {
+      return transaction.isBuyer()
+          ? "Payment due for winning auction:\n" + itemName
+          : "Awaiting buyer payment:\n" + itemName;
+    }
+    if (status.equals("refunded")) {
+      return transaction.isBuyer()
+          ? "Refunded for auction:\n" + itemName
+          : "Refunded to buyer for auction:\n" + itemName;
+    }
+    if (transaction.isSeller()) {
+      return "Received from sold auction:\n" + itemName;
+    }
+    return "Paid for winning auction:\n" + itemName;
+  }
+
+  private String cleanWalletNote(String note) {
+    String trimmed = note == null ? "" : note.trim();
+    if (trimmed.equalsIgnoreCase("Wallet top-up from user dashboard")) {
+      return "Wallet top-up";
+    }
+    return trimmed;
+  }
+
+  private String buildSignedTransactionAmount(TransactionData transaction) {
+    BigDecimal amount = moneyValue(transaction.amount);
+    String formatted = formatMoney(amount.abs().toPlainString());
+    if (amount.compareTo(BigDecimal.ZERO) == 0) {
+      return formatted;
+    }
+    String sign = transactionAmountSign(transaction);
+    return sign.isBlank() ? formatted : sign + formatted;
+  }
+
+  private String transactionAmountSign(TransactionData transaction) {
+    String walletType = normalize(transaction.walletTxType);
+    String note = normalize(transaction.walletNote);
+    String paymentStatus = normalize(transaction.paymentStatus);
+
+    if (transaction.isWallet()) {
+      if (walletType.equals("deposit") || walletType.equals("release")) {
+        return "+";
+      }
+      if (walletType.equals("withdraw") || walletType.equals("hold")) {
+        return "-";
+      }
+    }
+
+    if (paymentStatus.equals("refunded") || walletType.equals("refund")) {
+      return transaction.isBuyer() || note.contains("received") ? "+" : "-";
+    }
+    if (transaction.isSeller() || note.startsWith("received")) {
+      return "+";
+    }
+    if (transaction.isBuyer()) {
+      return "-";
+    }
+    return "";
+  }
+
+  private String buildTransactionTimeText(TransactionData transaction) {
+    String rawTime = transaction.paidAt.isBlank()
+        || transaction.paidAt.equalsIgnoreCase("not available")
+        ? transaction.createdAt
+        : transaction.paidAt;
+    LocalDateTime parsed = parseTimestamp(rawTime);
+    if (parsed == null) {
+      return fallback(rawTime, "Not available");
+    }
+    return parsed.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        + "\n"
+        + parsed.format(DateTimeFormatter.ofPattern("HH:mm"));
+  }
+
 
   private GridPane transactionActions(TransactionData transaction, String detail) {
     GridPane actions = new GridPane();
