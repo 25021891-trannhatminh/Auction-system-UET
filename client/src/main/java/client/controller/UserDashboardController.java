@@ -82,11 +82,11 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double USER_ACTION_GAP = 6;
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
-  private static final double AUCTION_DETAIL_INFO_WIDTH = 318;
-  private static final double AUCTION_DETAIL_GAP = 14;
-  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 318;
-  private static final double AUCTION_DETAIL_THUMB_WIDTH = 76;
-  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 66;
+  private static final double AUCTION_DETAIL_INFO_WIDTH = 382;
+  private static final double AUCTION_DETAIL_GAP = 22;
+  private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 380;
+  private static final double AUCTION_DETAIL_THUMB_WIDTH = 86;
+  private static final double AUCTION_DETAIL_THUMB_HEIGHT = 62;
   private static final int MAX_CREATE_ITEM_IMAGES = 5;
   private static final double CREATE_UPLOAD_CARD_MAX_WIDTH = 520;
   private static final double CREATE_PREVIEW_CARD_MAX_WIDTH = 460;
@@ -2836,13 +2836,7 @@ public class UserDashboardController extends BaseDashboardController {
     bid.setMaxWidth(Double.MAX_VALUE);
     bid.setOnAction(event -> renderAuctionDetailPage(latestAuctionCard(data)));
 
-    Button view = new Button("View Auction");
-    view.setMnemonicParsing(false);
-    view.getStyleClass().add("auction-market-view-btn");
-    view.setMaxWidth(Double.MAX_VALUE);
-    view.setOnAction(event -> renderAuctionDetailPage(latestAuctionCard(data)));
-
-    content.getChildren().addAll(title, meta, priceBox, facts, bid, view);
+    content.getChildren().addAll(title, meta, priceBox, facts, bid);
     card.getChildren().addAll(imageWrap, content);
     return card;
   }
@@ -2957,24 +2951,19 @@ public class UserDashboardController extends BaseDashboardController {
     detailShell.setMinWidth(0);
     detailShell.setMaxWidth(Double.MAX_VALUE);
 
-    Label pageTitle = new Label(displayData.title);
-    pageTitle.getStyleClass().add("auction-detail-page-title");
-    pageTitle.setWrapText(true);
-    pageTitle.setMaxWidth(Double.MAX_VALUE);
-
     HBox detailContent = new HBox(AUCTION_DETAIL_GAP);
     detailContent.getStyleClass().add("auction-detail-content");
     detailContent.setAlignment(Pos.TOP_LEFT);
     detailContent.setMinWidth(0);
     detailContent.setMaxWidth(Double.MAX_VALUE);
 
-    VBox mediaColumn = new VBox(10);
+    VBox mediaColumn = new VBox(14);
     mediaColumn.getStyleClass().add("auction-detail-media-column");
     mediaColumn.setMinWidth(0);
     mediaColumn.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(mediaColumn, Priority.ALWAYS);
 
-    HBox gallery = new HBox(10);
+    VBox gallery = new VBox(12);
     gallery.getStyleClass().add("auction-detail-gallery");
     gallery.setAlignment(Pos.TOP_LEFT);
     gallery.setMinWidth(0);
@@ -2984,36 +2973,34 @@ public class UserDashboardController extends BaseDashboardController {
     mainImage.getStyleClass().add("auction-detail-main-image");
     mainImage.setMinWidth(0);
     mainImage.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(mainImage, Priority.ALWAYS);
 
-    VBox thumbnails = new VBox(8);
+    HBox thumbnails = new HBox(8);
     thumbnails.getStyleClass().add("auction-detail-side-thumbnails");
-    thumbnails.setAlignment(Pos.TOP_CENTER);
-    lockRegionWidth(thumbnails, AUCTION_DETAIL_THUMB_WIDTH);
+    thumbnails.setAlignment(Pos.CENTER_LEFT);
+    thumbnails.setMinWidth(0);
+    thumbnails.setMaxWidth(Double.MAX_VALUE);
 
     List<String> imagePaths = imagePathsFromPayload(displayData.imagePayload);
     if (imagePaths.isEmpty()) {
       imagePaths.add(displayData.imagePath);
     }
-    for (String path : imagePaths.subList(0, Math.min(4, imagePaths.size()))) {
+    for (int index = 0; index < Math.min(5, imagePaths.size()); index++) {
+      String path = imagePaths.get(index);
       StackPane thumb = createAuctionImageWrap(path, AUCTION_DETAIL_THUMB_HEIGHT);
       thumb.getStyleClass().add("auction-detail-thumb");
+      if (index == 0) {
+        thumb.getStyleClass().add("auction-detail-thumb-active");
+      }
       lockRegionWidth(thumb, AUCTION_DETAIL_THUMB_WIDTH);
-      thumb.setOnMouseClicked(event ->
-          setAuctionImageContent(mainImage, path, AUCTION_DETAIL_IMAGE_HEIGHT));
+      thumb.setOnMouseClicked(event -> {
+        setAuctionImageContent(mainImage, path, AUCTION_DETAIL_IMAGE_HEIGHT);
+        setActiveAuctionThumbnail(thumbnails, thumb);
+      });
       thumbnails.getChildren().add(thumb);
     }
 
     gallery.getChildren().addAll(mainImage, thumbnails);
-
-    Label descriptionLine = new Label(
-        fallback(displayData.description, "No description stored for this item."));
-    descriptionLine.getStyleClass().add("auction-detail-description-line");
-    descriptionLine.setWrapText(true);
-    descriptionLine.setMaxWidth(Double.MAX_VALUE);
-    descriptionLine.maxWidthProperty().bind(mediaColumn.widthProperty());
-
-    mediaColumn.getChildren().addAll(gallery, descriptionLine);
+    mediaColumn.getChildren().addAll(gallery, buildAuctionDescriptionCard(displayData));
 
     VBox sidePanel = new VBox(14);
     sidePanel.getStyleClass().add("auction-detail-side-panel");
@@ -3103,12 +3090,53 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidMessageLabel = sellerView ? null : bidMessage;
 
     detailContent.getChildren().addAll(mediaColumn, sidePanel);
-    detailShell.getChildren().addAll(pageTitle, detailContent);
+    detailShell.getChildren().add(detailContent);
     if (sellerView) {
       detailShell.getChildren().add(buildSellerBidHistorySection(displayData.auctionId));
     }
     workspaceBox.getChildren().add(detailShell);
     joinAuctionRoom(displayData.auctionId);
+  }
+
+  private void setActiveAuctionThumbnail(HBox thumbnails, StackPane activeThumb) {
+    if (thumbnails == null || activeThumb == null) {
+      return;
+    }
+    for (Node child : thumbnails.getChildren()) {
+      child.getStyleClass().remove("auction-detail-thumb-active");
+    }
+    if (!activeThumb.getStyleClass().contains("auction-detail-thumb-active")) {
+      activeThumb.getStyleClass().add("auction-detail-thumb-active");
+    }
+  }
+
+  private VBox buildAuctionDescriptionCard(AuctionCardData data) {
+    VBox card = new VBox(10);
+    card.getStyleClass().add("auction-detail-description-card");
+    card.setMaxWidth(Double.MAX_VALUE);
+
+    Label title = new Label(fallback(data.title, "Auction detail"));
+    title.getStyleClass().add("auction-detail-description-title");
+    title.setWrapText(true);
+
+    Label seller = new Label(fallback(data.seller, "Seller not available"));
+    seller.getStyleClass().add("auction-detail-description-seller");
+    seller.setWrapText(true);
+
+    Region divider = new Region();
+    divider.getStyleClass().add("auction-detail-description-divider");
+    divider.setMinHeight(1);
+    divider.setPrefHeight(1);
+    divider.setMaxHeight(1);
+    divider.setMaxWidth(Double.MAX_VALUE);
+
+    Label description = new Label(fallback(data.description, "No description stored for this item."));
+    description.getStyleClass().add("auction-detail-description-line");
+    description.setWrapText(true);
+    description.setMaxWidth(Double.MAX_VALUE);
+
+    card.getChildren().addAll(title, seller, divider, description);
+    return card;
   }
 
 
@@ -4039,26 +4067,21 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private HBox buildAuctionBreadcrumb(AuctionCardData data) {
-    HBox breadcrumb = new HBox(9);
+    HBox breadcrumb = new HBox(13);
     breadcrumb.getStyleClass().add("auction-breadcrumb");
     breadcrumb.setAlignment(Pos.CENTER_LEFT);
     breadcrumb.setMaxWidth(Double.MAX_VALUE);
 
-    Label home = new Label("Home");
-    home.getStyleClass().add("auction-breadcrumb-muted");
+    Button backButton = new Button("\u2190");
+    backButton.setMnemonicParsing(false);
+    backButton.getStyleClass().add("auction-back-button");
+    backButton.setOnAction(event -> showSection("auctions"));
 
-    Label firstSeparator = new Label("/");
-    firstSeparator.getStyleClass().add("auction-breadcrumb-separator");
+    Label auctions = new Label("Auctions");
+    auctions.getStyleClass().add("auction-breadcrumb-muted");
 
-    Button liveAuctions = new Button("Live Auctions");
-    liveAuctions.setMnemonicParsing(false);
-    liveAuctions.getStyleClass().add("auction-breadcrumb-link");
-    liveAuctions.setOnAction(event -> {
-      showSection("auctions");
-    });
-
-    Label secondSeparator = new Label("/");
-    secondSeparator.getStyleClass().add("auction-breadcrumb-separator");
+    Label separator = new Label("/");
+    separator.getStyleClass().add("auction-breadcrumb-separator");
 
     Label currentTitle = new Label(data.title);
     currentTitle.getStyleClass().add("auction-breadcrumb-current");
@@ -4066,35 +4089,26 @@ public class UserDashboardController extends BaseDashboardController {
     currentTitle.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(currentTitle, Priority.ALWAYS);
 
-    breadcrumb.getChildren().addAll(
-        home,
-        firstSeparator,
-        liveAuctions,
-        secondSeparator,
-        currentTitle
-    );
+    breadcrumb.getChildren().addAll(backButton, auctions, separator, currentTitle);
     return breadcrumb;
   }
 
   private HBox buildSellerAuctionBreadcrumb(AuctionCardData data) {
-    HBox breadcrumb = new HBox(9);
+    HBox breadcrumb = new HBox(13);
     breadcrumb.getStyleClass().add("auction-breadcrumb");
     breadcrumb.setAlignment(Pos.CENTER_LEFT);
     breadcrumb.setMaxWidth(Double.MAX_VALUE);
 
-    Label home = new Label("Home");
-    home.getStyleClass().add("auction-breadcrumb-muted");
+    Button backButton = new Button("\u2190");
+    backButton.setMnemonicParsing(false);
+    backButton.getStyleClass().add("auction-back-button");
+    backButton.setOnAction(event -> showSection("myItems"));
 
-    Label firstSeparator = new Label("/");
-    firstSeparator.getStyleClass().add("auction-breadcrumb-separator");
+    Label myItems = new Label("My Items");
+    myItems.getStyleClass().add("auction-breadcrumb-muted");
 
-    Button myItems = new Button("My Items");
-    myItems.setMnemonicParsing(false);
-    myItems.getStyleClass().add("auction-breadcrumb-link");
-    myItems.setOnAction(event -> showSection("myItems"));
-
-    Label secondSeparator = new Label("/");
-    secondSeparator.getStyleClass().add("auction-breadcrumb-separator");
+    Label separator = new Label("/");
+    separator.getStyleClass().add("auction-breadcrumb-separator");
 
     Label currentTitle = new Label(data.title);
     currentTitle.getStyleClass().add("auction-breadcrumb-current");
@@ -4102,13 +4116,7 @@ public class UserDashboardController extends BaseDashboardController {
     currentTitle.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(currentTitle, Priority.ALWAYS);
 
-    breadcrumb.getChildren().addAll(
-        home,
-        firstSeparator,
-        myItems,
-        secondSeparator,
-        currentTitle
-    );
+    breadcrumb.getChildren().addAll(backButton, myItems, separator, currentTitle);
     return breadcrumb;
   }
 

@@ -3176,3 +3176,268 @@
     -fx-text-fill: rgba(247, 243, 233, 0.72);
     -fx-font-size: 11px;
 }
+/* Experiment: flatten the auction workspace so filters and auction cards sit directly on the page. */
+.user-dashboard-root .surface-card {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .auction-market-bid-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #c59d3c);
+    -fx-border-color: rgba(255, 226, 128, 0.45);
+    -fx-border-radius: 16;
+    -fx-text-fill: #050505;
+}
+
+.user-dashboard-root .auction-market-bid-btn:hover {
+    -fx-background-color: linear-gradient(to right, #e0c36c, #d1b15d);
+    -fx-opacity: 1;
+}
+
+.user-dashboard-root .auction-market-bid-btn:disabled {
+    -fx-background-color: #2d2d2d;
+    -fx-border-color: #3a3a3a;
+    -fx-text-fill: rgba(247, 243, 233, 0.46);
+}
+
+/* Auction detail redesign: black canvas, yellow back action, direct image, and real description card. */
+.user-dashboard-root .auction-breadcrumb {
+    -fx-padding: 0 0 18 0;
+    -fx-spacing: 13;
+}
+
+.user-dashboard-root .auction-back-button {
+    -fx-background-color: linear-gradient(to bottom right, #ffe24f, #d1b15d);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(255, 235, 130, 0.58);
+    -fx-border-radius: 999;
+    -fx-min-width: 42;
+    -fx-min-height: 42;
+    -fx-pref-width: 42;
+    -fx-pref-height: 42;
+    -fx-max-width: 42;
+    -fx-max-height: 42;
+    -fx-padding: 0;
+    -fx-text-fill: #050505;
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.user-dashboard-root .auction-back-button:hover {
+    -fx-background-color: linear-gradient(to bottom right, #fff071, #e0c36c);
+}
+
+.user-dashboard-root .auction-breadcrumb-muted,
+.user-dashboard-root .auction-breadcrumb-separator {
+    -fx-text-fill: rgba(247, 243, 233, 0.54);
+    -fx-font-size: 17px;
+    -fx-font-weight: 600;
+}
+
+.user-dashboard-root .auction-breadcrumb-current {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 18px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-shell {
+    -fx-padding: 0;
+    -fx-spacing: 0;
+    -fx-background-color: transparent;
+}
+
+.user-dashboard-root .auction-detail-content {
+    -fx-spacing: 22;
+    -fx-alignment: top-left;
+}
+
+.user-dashboard-root .auction-detail-media-column {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-padding: 0;
+    -fx-spacing: 14;
+}
+
+.user-dashboard-root .auction-detail-gallery {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-spacing: 12;
+}
+
+.user-dashboard-root .auction-detail-main-image {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 24;
+    -fx-border-radius: 24;
+}
+
+.user-dashboard-root .auction-detail-side-thumbnails {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-spacing: 8;
+}
+
+.user-dashboard-root .auction-detail-thumb {
+    -fx-background-color: rgba(247, 243, 233, 0.04);
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(247, 243, 233, 0.14);
+    -fx-border-radius: 14;
+    -fx-opacity: 0.84;
+    -fx-cursor: hand;
+}
+
+.user-dashboard-root .auction-detail-thumb:hover,
+.user-dashboard-root .auction-detail-thumb-active {
+    -fx-border-color: #d1b15d;
+    -fx-opacity: 1;
+}
+
+.user-dashboard-root .auction-detail-description-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(20, 20, 20, 0.94), rgba(10, 10, 10, 0.94));
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(247, 243, 233, 0.12);
+    -fx-border-radius: 20;
+    -fx-padding: 18 18 20 18;
+}
+
+.user-dashboard-root .auction-detail-description-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 22px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-description-seller {
+    -fx-text-fill: rgba(247, 243, 233, 0.70);
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.user-dashboard-root .auction-detail-description-divider {
+    -fx-fill: rgba(247, 243, 233, 0.12);
+}
+
+.user-dashboard-root .auction-detail-description-line {
+    -fx-text-fill: rgba(247, 243, 233, 0.76);
+    -fx-font-size: 15px;
+    -fx-line-spacing: 5px;
+}
+
+.user-dashboard-root .auction-detail-side-panel {
+    -fx-background-color: linear-gradient(to bottom right, rgba(18, 18, 18, 0.96), rgba(8, 8, 8, 0.96));
+    -fx-background-radius: 24;
+    -fx-border-color: rgba(247, 243, 233, 0.13);
+    -fx-border-radius: 24;
+    -fx-padding: 28 28 24 28;
+    -fx-spacing: 16;
+}
+
+.user-dashboard-root .auction-detail-panel-title {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 16px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown {
+    -fx-background-color: rgba(31, 31, 31, 0.74);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(247, 243, 233, 0.12);
+    -fx-border-radius: 20;
+    -fx-padding: 22 18 22 18;
+    -fx-spacing: 12;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-unit {
+    -fx-min-width: 58;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-number {
+    -fx-text-fill: #ff5b64;
+    -fx-font-size: 30px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.62);
+    -fx-font-size: 11px;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-meta-row {
+    -fx-border-color: rgba(247, 243, 233, 0.12) transparent rgba(247, 243, 233, 0.12) transparent;
+    -fx-padding: 18 0 18 0;
+}
+
+.user-dashboard-root .auction-detail-meta-key,
+.user-dashboard-root .auction-market-label {
+    -fx-text-fill: rgba(247, 243, 233, 0.55);
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+}
+
+.user-dashboard-root .auction-detail-meta-value {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 13px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-price {
+    -fx-text-fill: #f7f3e9;
+    -fx-font-size: 30px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-text,
+.user-dashboard-root .auction-detail-end-note {
+    -fx-text-fill: rgba(247, 243, 233, 0.66);
+    -fx-font-size: 12px;
+}
+
+.user-dashboard-root .auction-detail-bid-input {
+    -fx-background-color: rgba(33, 33, 33, 0.88);
+    -fx-background-radius: 13;
+    -fx-border-color: rgba(247, 243, 233, 0.14);
+    -fx-border-radius: 13;
+    -fx-text-fill: #f7f3e9;
+    -fx-prompt-text-fill: rgba(247, 243, 233, 0.56);
+    -fx-font-size: 13px;
+    -fx-padding: 13 16 13 16;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-market-bid-btn,
+.user-dashboard-root .auction-detail-auto-bid-panel .auction-market-bid-btn {
+    -fx-background-radius: 13;
+    -fx-border-radius: 13;
+    -fx-padding: 13 16 13 16;
+    -fx-font-size: 13px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .auction-detail-auto-bid-panel {
+    -fx-background-color: rgba(16, 16, 16, 0.92);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(247, 243, 233, 0.12);
+    -fx-border-radius: 18;
+    -fx-padding: 16;
+    -fx-spacing: 11;
+}
+
+.user-dashboard-root .auction-detail-secondary-btn {
+    -fx-background-color: rgba(28, 28, 28, 0.78);
+    -fx-background-radius: 13;
+    -fx-border-color: rgba(247, 243, 233, 0.16);
+    -fx-border-radius: 13;
+    -fx-text-fill: #f7f3e9;
+    -fx-padding: 13 16 13 16;
+}
+
+.user-dashboard-root .auction-detail-description-divider {
+    -fx-background-color: rgba(247, 243, 233, 0.12);
+    -fx-background-radius: 999;
+}
