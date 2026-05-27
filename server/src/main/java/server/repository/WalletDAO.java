@@ -54,6 +54,9 @@ public class WalletDAO {
     private static final String SQL_SELECT_BALANCE =
         "SELECT balance FROM wallets WHERE wallet_id = ?";
 
+    private static final String SQL_SELECT_ID_BY_USER_ID =
+        "SELECT wallet_id FROM wallets WHERE user_id = ?";
+
     private static final String SQL_INSERT =
         "INSERT INTO wallets (user_id, balance) VALUES (?, 0.00)";
 
@@ -147,6 +150,7 @@ public class WalletDAO {
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) return rs.getInt(1);
                 }
+                return findWalletIdByUserId(conn, userId);
             }
         } catch (SQLException e) {
             logger.error("createWallet failed for userId={}", userId, e);
@@ -171,6 +175,7 @@ public class WalletDAO {
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) return rs.getInt(1);
                 }
+                return findWalletIdByUserId(conn, userId);
             }
         }
         return -1;
@@ -360,6 +365,15 @@ public class WalletDAO {
     // ============================================================
     // Private Helpers
     // ============================================================
+
+    private int findWalletIdByUserId(Connection conn, int userId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(SQL_SELECT_ID_BY_USER_ID)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt("wallet_id") : -1;
+            }
+        }
+    }
 
     private boolean isInvalidAmount(BigDecimal amount) {
         return amount == null || amount.compareTo(BigDecimal.ZERO) <= 0;

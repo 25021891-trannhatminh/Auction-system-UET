@@ -226,20 +226,32 @@ public class ClientHandler implements Runnable{
                 break;
 
             case "DEPOSIT_WALLET": {
-                // Format: DEPOSIT_WALLET <amount>
-                if (this.userId <= 0) {
-                    send("DEPOSIT_FAIL NOT_LOGGED_IN");
-                    break;
-                }
-                if (request.length < 2) {
+                // Format moi: DEPOSIT_WALLET <userId> <amount>
+                // Format cu:  DEPOSIT_WALLET <amount>
+                DepositCommand depositCommand = parseDepositCommand(request);
+                if (depositCommand == null) {
                     send("DEPOSIT_FAIL INVALID_FORMAT");
                     break;
                 }
+
+                int targetUserId = this.userId > 0 ? this.userId : depositCommand.userId();
+                if (targetUserId <= 0) {
+                    send("DEPOSIT_FAIL NOT_LOGGED_IN");
+                    break;
+                }
+
                 try {
-                    BigDecimal amount = new BigDecimal(request[1].replace(",", ""));
-                    BigDecimal balance = paymentService.depositToWallet(this.userId, amount);
+                    BigDecimal amount = new BigDecimal(
+                        depositCommand.amountText().replace(",", "").trim());
+                    if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                        send("DEPOSIT_FAIL INVALID_AMOUNT");
+                        break;
+                    }
+
+                    BigDecimal balance = paymentService.depositToWallet(targetUserId, amount);
                     if (balance != null) {
                         send("DEPOSIT_SUCCESS " + fields(amount, balance));
+                        send("WALLET_UPDATE|" + targetUserId + "|" + balance.toPlainString());
                         send("USER_TRANSACTIONS_DIRTY");
                     } else {
                         send("DEPOSIT_FAIL INVALID_AMOUNT");
@@ -491,6 +503,19 @@ public class ClientHandler implements Runnable{
         } catch (NumberFormatException e) {
             return fallbackValue;
         }
+    }
+
+    private DepositCommand parseDepositCommand(String[] request) {
+        if (request == null || request.length < 2) {
+            return null;
+        }
+        if (request.length >= 3) {
+            int requestedUserId = parseIntOrDefault(request[1], -1);
+            if (requestedUserId > 0) {
+                return new DepositCommand(requestedUserId, request[2]);
+            }
+        }
+        return new DepositCommand(-1, request[1]);
     }
 
     private void sendAdminUsers() {
@@ -1146,6 +1171,8 @@ public class ClientHandler implements Runnable{
             .replace("\n", "\\n")
             .replace("\r", "\\r");
     }
+    private record DepositCommand(int userId, String amountText) {}
+
     private record PaymentAuthorization(boolean allowed, String reason) {
         static PaymentAuthorization allow() {
             return new PaymentAuthorization(true, "");

@@ -149,6 +149,7 @@ public class UserDashboardController extends BaseDashboardController {
   private List<TransactionData> incomingTransactions = new ArrayList<>();
   private boolean transactionsLoaded;
   private boolean transactionsLoading;
+  private boolean transactionsReloadPending;
   private BigDecimal currentWalletBalance = BigDecimal.ZERO;
   private boolean walletBalanceKnown;
   private final Map<String, Long> auctionSecondsSyncedAtMillis = new HashMap<>();
@@ -292,11 +293,14 @@ public class UserDashboardController extends BaseDashboardController {
 
     DialogPane dialogPane = dialog.getDialogPane();
     dialogPane.getStyleClass().add("wallet-deposit-dialog-pane");
+    dialogPane.setMinWidth(420);
+    dialogPane.setPrefWidth(420);
+    dialogPane.setMaxWidth(420);
     String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
     dialogPane.getStylesheets().add(dashboardCss);
 
     TextField amountField = new TextField();
-    amountField.setPromptText("0");
+    amountField.setPromptText("Enter amount");
     amountField.getStyleClass().add("wallet-deposit-input");
 
     Label errorLabel = new Label("Enter a valid amount greater than 0 VND.");
@@ -370,7 +374,7 @@ public class UserDashboardController extends BaseDashboardController {
         notifUIHandler.showError("Deposit failed", "Cannot connect to the server.");
         return;
       }
-      networkManager.send("DEPOSIT_WALLET " + amount.toPlainString());
+      networkManager.send(buildDepositCommand(amount));
       notifUIHandler.showSuccess(
           "Deposit processing",
           "The server is updating your wallet balance."
@@ -384,39 +388,53 @@ public class UserDashboardController extends BaseDashboardController {
       Button depositButton,
       Button cancelButton
   ) {
-    VBox card = new VBox(20);
+    VBox card = new VBox(16);
     card.getStyleClass().add("wallet-deposit-card");
+    card.setMinWidth(380);
+    card.setPrefWidth(420);
+    card.setMaxWidth(420);
 
-    VBox header = new VBox(7);
+    VBox header = new VBox(5);
     Label eyebrow = new Label("Wallet balance");
     eyebrow.getStyleClass().add("wallet-deposit-eyebrow");
     Label balance = new Label(
         walletBalanceKnown ? formatMoney(currentWalletBalance.toPlainString()) : "Syncing"
     );
     balance.getStyleClass().add("wallet-deposit-balance");
+    balance.setMaxWidth(Double.MAX_VALUE);
+    balance.setTextOverrun(OverrunStyle.ELLIPSIS);
     Label balanceCaption = new Label("Top up your bidding wallet in VND.");
     balanceCaption.getStyleClass().add("wallet-deposit-caption");
     header.getChildren().addAll(eyebrow, balance, balanceCaption);
 
-    HBox inputRow = new HBox(10);
-    inputRow.setAlignment(Pos.CENTER_LEFT);
+    VBox amountBlock = new VBox(8);
+    HBox amountHeader = new HBox(10);
+    amountHeader.setAlignment(Pos.CENTER_LEFT);
     Label amountLabel = new Label("Amount");
     amountLabel.getStyleClass().add("wallet-deposit-field-label");
+    Region labelSpacer = new Region();
+    HBox.setHgrow(labelSpacer, Priority.ALWAYS);
     Label currencyPill = new Label("VND");
     currencyPill.getStyleClass().add("wallet-deposit-currency-pill");
+    amountHeader.getChildren().addAll(amountLabel, labelSpacer, currencyPill);
     amountField.setMaxWidth(Double.MAX_VALUE);
-    HBox.setHgrow(amountField, Priority.ALWAYS);
-    inputRow.getChildren().addAll(amountLabel, amountField, currencyPill);
+    amountBlock.getChildren().addAll(amountHeader, amountField);
 
-    Region buttonSpacer = new Region();
-    HBox.setHgrow(buttonSpacer, Priority.ALWAYS);
-    HBox buttonRow = new HBox(12);
+    HBox buttonRow = new HBox(10);
     buttonRow.setAlignment(Pos.CENTER_RIGHT);
     buttonRow.getStyleClass().add("wallet-deposit-action-row");
-    buttonRow.getChildren().addAll(buttonSpacer, depositButton, cancelButton);
+    buttonRow.getChildren().addAll(cancelButton, depositButton);
 
-    card.getChildren().addAll(header, inputRow, errorLabel, buttonRow);
+    card.getChildren().addAll(header, amountBlock, errorLabel, buttonRow);
     return card;
+  }
+
+  private String buildDepositCommand(BigDecimal amount) {
+    User currentUser = SessionManager.getCurrentUser();
+    if (currentUser != null && currentUser.getUserId() > 0) {
+      return "DEPOSIT_WALLET " + currentUser.getUserId() + " " + amount.toPlainString();
+    }
+    return "DEPOSIT_WALLET " + amount.toPlainString();
   }
 
   private void preloadAuctionImages() {
@@ -819,7 +837,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.equals("USER_TRANSACTIONS_DIRTY")) {
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       return;
     }
 
@@ -832,7 +850,7 @@ public class UserDashboardController extends BaseDashboardController {
               ? "Your transaction has been paid successfully."
               : "Payment completed for auction AUC-" + auctionId + "."
       );
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       requestUserBids();
       requestUserAuctions();
       return;
@@ -840,10 +858,11 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("PAYMENT_FAIL")) {
       String[] parts = message.trim().split("\\s+", 3);
-      String reason = parts.length > 2 ? parts[2] : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
+      String reason = parts.length > 2
+          ? parts[2]
+          : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
       notifUIHandler.showError("Payment failed", readablePaymentFailure(reason));
-      transactionsLoaded = false;
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       return;
     }
 
@@ -860,23 +879,20 @@ public class UserDashboardController extends BaseDashboardController {
               ? "Your wallet was topped up successfully."
               : "Added " + amount + ". New balance: " + balance + "."
       );
-      transactionsLoaded = false;
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       return;
     }
 
     if (message.startsWith("DEPOSIT_FAIL")) {
       String reason = message.substring("DEPOSIT_FAIL".length()).trim();
       notifUIHandler.showError("Deposit failed", readablePaymentFailure(reason));
-      transactionsLoaded = false;
-      requestUserTransactions();
+      reloadTransactionsFromServer();
       return;
     }
 
     if (message.startsWith("WALLET_UPDATE|")) {
       updateKnownWalletBalanceFromMessage(message);
-      transactionsLoaded = false;
-      requestUserTransactions();
+      refreshTransactionWorkspaceIfVisible();
       return;
     }
 
@@ -904,6 +920,7 @@ public class UserDashboardController extends BaseDashboardController {
         renderWorkspace(currentSectionKey, activeFilter);
         applyTransactionStatsIfVisible();
       }
+      requestPendingTransactionReloadIfNeeded();
       return;
     }
 
@@ -915,6 +932,7 @@ public class UserDashboardController extends BaseDashboardController {
       if ("winners".equals(currentSectionKey)) {
         renderWorkspace(currentSectionKey, activeFilter);
       }
+      requestPendingTransactionReloadIfNeeded();
     }
   }
 
@@ -2027,6 +2045,32 @@ public class UserDashboardController extends BaseDashboardController {
   private void updateKnownWalletBalance(String rawBalance) {
     currentWalletBalance = moneyValue(rawBalance);
     walletBalanceKnown = true;
+  }
+
+  private void reloadTransactionsFromServer() {
+    transactionsLoaded = false;
+    if (transactionsLoading) {
+      transactionsReloadPending = true;
+      refreshTransactionWorkspaceIfVisible();
+      return;
+    }
+    requestUserTransactions();
+    refreshTransactionWorkspaceIfVisible();
+  }
+
+  private void requestPendingTransactionReloadIfNeeded() {
+    if (!transactionsReloadPending) {
+      return;
+    }
+    transactionsReloadPending = false;
+    reloadTransactionsFromServer();
+  }
+
+  private void refreshTransactionWorkspaceIfVisible() {
+    if ("winners".equals(currentSectionKey)) {
+      renderWorkspace(currentSectionKey, activeFilter);
+      applyTransactionStatsIfVisible();
+    }
   }
 
   private boolean matchesTransactionFilter(TransactionData transaction, String filter) {

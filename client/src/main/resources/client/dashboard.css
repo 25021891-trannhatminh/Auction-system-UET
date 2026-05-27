@@ -2959,16 +2959,16 @@
 /* Wallet deposit dialog. Kept opaque so the popup never renders transparent. */
 .wallet-deposit-dialog-pane {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 30;
-    -fx-border-color: rgba(209, 177, 93, 0.22);
-    -fx-border-radius: 30;
+    -fx-background-radius: 24;
+    -fx-border-color: rgba(209, 177, 93, 0.24);
+    -fx-border-radius: 24;
     -fx-border-width: 1;
     -fx-padding: 0;
 }
 
 .wallet-deposit-dialog-pane > .content {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 30;
+    -fx-background-radius: 24;
     -fx-padding: 0;
 }
 
@@ -2978,49 +2978,49 @@
 }
 
 .wallet-deposit-card {
-    -fx-background-color: linear-gradient(to bottom right, #1e1e1e, #111111);
-    -fx-background-radius: 30;
+    -fx-background-color: linear-gradient(to bottom right, #1d1d1d, #101010);
+    -fx-background-radius: 24;
     -fx-border-color: transparent;
-    -fx-border-radius: 30;
-    -fx-padding: 28 30 24 30;
-    -fx-pref-width: 540;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.44), 28, 0.18, 0, 12);
+    -fx-border-radius: 24;
+    -fx-padding: 22 24 20 24;
+    -fx-pref-width: 420;
+    -fx-max-width: 420;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.42), 22, 0.16, 0, 10);
 }
 
 .wallet-deposit-eyebrow {
-    -fx-text-fill: rgba(247, 243, 233, 0.70);
-    -fx-font-size: 13px;
+    -fx-text-fill: rgba(247, 243, 233, 0.68);
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
 }
 
 .wallet-deposit-balance {
     -fx-text-fill: #f7f3e9;
-    -fx-font-size: 42px;
+    -fx-font-size: 32px;
     -fx-font-weight: 900;
 }
 
 .wallet-deposit-caption {
     -fx-text-fill: rgba(247, 243, 233, 0.62);
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
 }
 
 .wallet-deposit-field-label {
     -fx-text-fill: rgba(247, 243, 233, 0.76);
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
-    -fx-min-width: 58;
 }
 
 .wallet-deposit-input {
     -fx-background-color: rgba(255, 255, 255, 0.06);
-    -fx-background-radius: 18;
-    -fx-border-color: rgba(255, 255, 255, 0.10);
-    -fx-border-radius: 18;
-    -fx-padding: 12 15 12 15;
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(255, 255, 255, 0.11);
+    -fx-border-radius: 16;
+    -fx-padding: 11 14 11 14;
     -fx-text-fill: #f7f3e9;
     -fx-prompt-text-fill: rgba(247, 243, 233, 0.42);
-    -fx-font-size: 16px;
+    -fx-font-size: 15px;
     -fx-font-weight: bold;
 }
 
@@ -3034,13 +3034,13 @@
 }
 
 .wallet-deposit-currency-pill {
-    -fx-background-color: #2a2a2a;
+    -fx-background-color: #292929;
     -fx-background-radius: 999;
     -fx-border-color: rgba(209, 177, 93, 0.34);
     -fx-border-radius: 999;
-    -fx-padding: 10 16 10 16;
+    -fx-padding: 7 13 7 13;
     -fx-text-fill: #d1b15d;
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
 }
 
@@ -3051,36 +3051,36 @@
 }
 
 .wallet-deposit-action-row {
-    -fx-padding: 18 0 0 0;
+    -fx-padding: 14 0 0 0;
     -fx-border-color: rgba(255, 255, 255, 0.08) transparent transparent transparent;
 }
 
 .wallet-deposit-primary-btn {
-    -fx-background-color: #f7f3e9;
+    -fx-background-color: #d1b15d;
     -fx-background-radius: 999;
     -fx-text-fill: #111111;
-    -fx-padding: 12 30 12 30;
-    -fx-font-size: 13px;
+    -fx-padding: 10 24 10 24;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
 
 .wallet-deposit-primary-btn:hover {
-    -fx-background-color: #d1b15d;
+    -fx-background-color: #f7f3e9;
 }
 
 .wallet-deposit-secondary-btn {
     -fx-background-color: rgba(255, 255, 255, 0.055);
     -fx-background-radius: 999;
-    -fx-border-color: rgba(255, 255, 255, 0.09);
+    -fx-border-color: rgba(255, 255, 255, 0.10);
     -fx-border-radius: 999;
     -fx-text-fill: #f7f3e9;
-    -fx-padding: 12 26 12 26;
-    -fx-font-size: 13px;
+    -fx-padding: 10 22 10 22;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
 
 .wallet-deposit-secondary-btn:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.10);
+    -fx-background-color: rgba(255, 255, 255, 0.11);
 }
