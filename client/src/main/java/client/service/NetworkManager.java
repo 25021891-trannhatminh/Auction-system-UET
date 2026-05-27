@@ -32,7 +32,6 @@ public class NetworkManager {
 
     private final List<Consumer<String>> handlers = new CopyOnWriteArrayList<>();
     private final Queue<String> messageQueue = new ConcurrentLinkedQueue<>();
-
     private volatile boolean connected = false;
     private volatile boolean shouldReconnect = true;
     private volatile boolean isConnecting = false;
