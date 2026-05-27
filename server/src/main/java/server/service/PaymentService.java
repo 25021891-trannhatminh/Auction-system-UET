@@ -163,6 +163,58 @@ public class PaymentService {
   }
 
   /**
+   * Nạp tiền vào ví người dùng và ghi lịch sử ví trong cùng DB transaction.
+   *
+   * <p>Flow này chỉ mở protocol cho UI, dùng lại WalletDAO/WalletTransactionDAO hiện có
+   * và không thay đổi luật thanh toán auction.</p>
+   *
+   * @param userId ID user cần nạp tiền
+   * @param amount số tiền nạp, phải lớn hơn 0
+   * @return số dư mới nếu thành công; {@code null} nếu thất bại
+   */
+  public BigDecimal depositToWallet(int userId, BigDecimal amount) {
+    if (userId <= 0 || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+      return null;
+    }
+
+    Connection conn = null;
+    try {
+      conn = DBConnection.getConnection();
+      conn.setAutoCommit(false);
+
+      WalletDTO wallet = walletDAO.lockByUserId(conn, userId);
+      if (wallet == null) {
+        int walletId = walletDAO.createWalletInTx(conn, userId);
+        if (walletId <= 0) {
+          conn.rollback();
+          return null;
+        }
+        wallet = new WalletDTO(walletId, userId, BigDecimal.ZERO, null);
+      }
+
+      walletDAO.depositInTx(conn, wallet.getWalletId(), amount);
+      walletTxDAO.logTransactionInTx(conn, wallet.getWalletId(), userId,
+          WalletTransactionType.DEPOSIT, amount, null, "Wallet top-up from user dashboard");
+
+      conn.commit();
+
+      BigDecimal newBalance = wallet.getBalance().add(amount);
+      notificationService.push(userId, "Deposit successful",
+          "Your wallet has been topped up by " + formatMoney(amount) + ".",
+          NotificationType.SYSTEM);
+      pushWalletUpdate(userId, newBalance);
+      return newBalance;
+
+    } catch (SQLException e) {
+      rollbackQuietly(conn);
+      logger.error("depositToWallet() – DB error for userId={}", userId, e);
+      return null;
+    } finally {
+      closeQuietly(conn);
+    }
+  }
+
+  /**
    * Hoàn tiền (COMPLETED → REFUNDED). Dùng transaction + lock tương tự.
    */
   public boolean refundPayment(int auctionId, String itemName) {

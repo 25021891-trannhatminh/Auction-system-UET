@@ -131,49 +131,22 @@ final class UserDashboardSections {
 
     map.put("winners", page(
         "Transactions",
-        "Follow auctions you won and auctions you sold after bidding ends.",
-        "Post-Auction Transactions",
-        "Transactions split bidder and seller follow-up: Won Auctions for purchases, Sold " +
-            "Auctions for winners of your listings.",
+        "Follow wallet deposits plus auctions you won or sold after bidding ends.",
+        "Wallet & Auction Transactions",
+        "Transactions combines wallet top-ups with bidder payment and seller payout follow-up.",
         new String[]{"00", "00", "00", "00"},
-        new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "To Ship"},
-        new String[]{"Won auctions", "Sold auctions", "Fulfilment"},
+        new String[]{"Won Auctions", "Payment Due", "Sold Auctions", "Wallet Logs"},
+        new String[]{"Wallet deposits", "Won auctions", "Sold auctions"},
         new String[]{
-            "Won Auctions track final price, seller, payment, and pickup or shipping status.",
-            "Sold Auctions track winner, winning bid, payment status, and seller fulfilment.",
-            "Actions stay clear: Pay Now, Contact Seller, Contact Winner, Mark Shipped, or " +
-                "Leave Review."
+            "Wallet Deposit rows show the amount, timestamp, and wallet transaction reference.",
+            "Won Auctions track final price, seller, payment status, and Pay Now action.",
+            "Sold Auctions track winner, winning bid, payment status, and seller fulfilment."
         },
         new String[]{
-            "Transaction rows load from payments joined with auctions, items, and accounts.",
+            "Transaction rows load from payments and wallet_transactions.",
             "Payment Due rows call the existing CONFIRM_PAYMENT flow.",
-            "Completed, failed, and refunded states come from the payments table.",
-            "Wallet transaction references are shown when the payment flow writes them."
-        }
-    ));
-
-    map.put("settings", page(
-        "Settings",
-        "Manage account details, notifications, bidding preferences, seller profile, payments, " +
-            "and app preferences.",
-        "Settings Workspace",
-        "Settings should be grouped forms, not auction tables: account, notifications, " +
-            "bidding, seller profile, payment, privacy, and preferences.",
-        new String[]{"07", "08", "04", "03"},
-        new String[]{"Groups", "Alerts", "Bid Rules", "Preferences"},
-        new String[]{"Account", "Notifications", "Bidding preferences"},
-        new String[]{
-            "Profile, email, phone number, avatar, and password change belong in Account.",
-            "Outbid, ending soon, won auction, payment, new bid, and auto-bid limit alerts " +
-                "belong in Notifications.",
-            "Default increment, quick bid confirmation, auto-bid threshold, currency, " +
-                "timezone, and default view belong in Preferences."
-        },
-        new String[]{
-            "Outbid and ending-soon alerts are enabled.",
-            "Confirm before placing bid is enabled.",
-            "Default auction view is Grid/List hybrid.",
-            "Currency is set to VND."
+            "Deposit rows call the wallet top-up endpoint and are logged as DEPOSIT.",
+            "Payment, refund, and deposit references are shown from wallet transaction logs."
         }
     ));
 
