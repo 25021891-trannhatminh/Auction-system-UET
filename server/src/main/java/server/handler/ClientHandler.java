@@ -6,13 +6,15 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,24 +22,28 @@ import java.util.List;
 import java.util.Map;
 
 import server.common.ProtocolConstants;
+import server.common.entity.Auction;
+import server.common.entity.Item;
 import server.common.entity.Notification;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
+import server.common.enums.ItemStatus;
 import server.common.enums.NotificationType;
 import server.common.model.AuctionDTO;
-import server.common.model.BidHistoryDTO;
 import server.database.DBConnection;
 import server.network.ClientManager;
 import server.repository.AuctionDAO;
 import server.repository.BidTransactionDAO;
 import server.repository.ItemDAO;
+import server.common.model.BidHistoryDTO;
 import server.service.AdminService;
 import server.service.AuctionService;
 import server.service.ItemService;
 import server.service.NotificationService;
 import server.service.PaymentService;
 import server.service.ServerAuthService;
+import server.service.listeners.RealTimeObserver;
 
 public class ClientHandler implements Runnable{
 //    private static final int GLOBAL_USER_ID = -1;
@@ -205,16 +211,27 @@ public class ClientHandler implements Runnable{
 
                 // 2. KÍCH HOẠT HÀM BIỂU ĐỒ TẠI ĐÂY
                 // Nếu join phòng thành công (Chuỗi trả về bắt đầu bằng JOIN_SUCCESS)
-                if (joinResponse != null && joinResponse.startsWith(ProtocolConstants.JOIN_AUCTION_SUCCESS)) {
+                if (joinResponse != null && joinResponse.startsWith("AUCTION_SNAPSHOT")) {
                     try {
-                        // Trích xuất auctionId từ câu lệnh Client gửi lên (Ví dụ: JOIN_AUCTION 12)
-                        int auctionId = Integer.parseInt(request[1]);
+                        int auctionId = -1;
+                        // Bóc tách lấy mã phòng (auctionId) từ chuỗi phản hồi thực tế (nằm ở vị trí index 1 sau dấu |)
+                        if (joinResponse.contains("|")) {
+                            String[] snapshotParts = joinResponse.split("\\|");
+                            if (snapshotParts.length > 1) {
+                                auctionId = Integer.parseInt(snapshotParts[1]);
+                            }
+                        } else {
+                            // Trường hợp dự phòng nếu mảng request từ Client gửi lên chứa ID phòng dạng số
+                            auctionId = Integer.parseInt(request[1]);
+                        }
 
-                        // Gọi hàm gửi dữ liệu quá khứ xuống cho Client vẽ biểu đồ
-                        sendChartHistory(auctionId);
-
+                        // Kích hoạt gửi dữ liệu lịch sử giá xuống cho Client vẽ biểu đồ
+                        if (auctionId != -1) {
+                            sendChartHistory(auctionId);
+                            System.out.println("[SUCCESS] Đã kích hoạt và truyền dữ liệu biểu đồ cho phòng: " + auctionId);
+                        }
                     } catch (Exception e) {
-                        System.err.println("Lỗi tự động kích hoạt biểu đồ: " + e.getMessage());
+                        System.err.println("Lỗi bóc tách ID phòng đấu giá để nạp biểu đồ: " + e.getMessage());
                     }
                 }
                 break;
@@ -224,43 +241,6 @@ public class ClientHandler implements Runnable{
                 String leaveResult = auctionHandler.handleLeave(request, this.userId);
                 send(leaveResult);
                 break;
-
-            case "DEPOSIT_WALLET": {
-                // Format moi: DEPOSIT_WALLET <userId> <amount>
-                // Format cu:  DEPOSIT_WALLET <amount>
-                DepositCommand depositCommand = parseDepositCommand(request);
-                if (depositCommand == null) {
-                    send("DEPOSIT_FAIL INVALID_FORMAT");
-                    break;
-                }
-
-                int targetUserId = this.userId > 0 ? this.userId : depositCommand.userId();
-                if (targetUserId <= 0) {
-                    send("DEPOSIT_FAIL NOT_LOGGED_IN");
-                    break;
-                }
-
-                try {
-                    BigDecimal amount = new BigDecimal(
-                        depositCommand.amountText().replace(",", "").trim());
-                    if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                        send("DEPOSIT_FAIL INVALID_AMOUNT");
-                        break;
-                    }
-
-                    BigDecimal balance = paymentService.depositToWallet(targetUserId, amount);
-                    if (balance != null) {
-                        send("DEPOSIT_SUCCESS " + fields(amount, balance));
-                        send("WALLET_UPDATE|" + targetUserId + "|" + balance.toPlainString());
-                        send("USER_TRANSACTIONS_DIRTY");
-                    } else {
-                        send("DEPOSIT_FAIL INVALID_AMOUNT");
-                    }
-                } catch (NumberFormatException e) {
-                    send("DEPOSIT_FAIL INVALID_AMOUNT");
-                }
-                break;
-            }
 
             case "CONFIRM_PAYMENT": {
                 // Format: CONFIRM_PAYMENT <auctionId> <itemName...>
@@ -374,6 +354,10 @@ public class ClientHandler implements Runnable{
 
             case "USER_LIST_TRANSACTIONS":
                 sendUserTransactions(request);
+                break;
+
+            case "DEPOSIT_WALLET":
+                handleWalletDeposit(request);
                 break;
 
             case "SELLER_AUCTION_BIDS":
@@ -503,19 +487,6 @@ public class ClientHandler implements Runnable{
         } catch (NumberFormatException e) {
             return fallbackValue;
         }
-    }
-
-    private DepositCommand parseDepositCommand(String[] request) {
-        if (request == null || request.length < 2) {
-            return null;
-        }
-        if (request.length >= 3) {
-            int requestedUserId = parseIntOrDefault(request[1], -1);
-            if (requestedUserId > 0) {
-                return new DepositCommand(requestedUserId, request[2]);
-            }
-        }
-        return new DepositCommand(-1, request[1]);
     }
 
     private void sendAdminUsers() {
@@ -753,6 +724,15 @@ public class ClientHandler implements Runnable{
         return -1;
     }
 
+    private int parsePositiveInt(String value, int fallbackValue) {
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? parsed : fallbackValue;
+        } catch (NumberFormatException exception) {
+            return fallbackValue;
+        }
+    }
+
     /**
      * Sends persisted auto-bid rules for the current user.
      *
@@ -832,8 +812,39 @@ public class ClientHandler implements Runnable{
         send("USER_AUTOBIDS_END");
     }
 
+    private void handleWalletDeposit(String[] request) {
+        int targetUserId = this.userId > 0 ? this.userId : -1;
+        int amountIndex = 1;
+        if (request != null && request.length >= 3) {
+            targetUserId = parsePositiveInt(request[1], targetUserId);
+            amountIndex = 2;
+        }
+
+        if (targetUserId <= 0) {
+            send("DEPOSIT_FAIL NOT_LOGGED_IN");
+            return;
+        }
+        if (request == null || request.length <= amountIndex) {
+            send("DEPOSIT_FAIL INVALID_FORMAT");
+            return;
+        }
+
+        try {
+            BigDecimal amount = new BigDecimal(request[amountIndex].replace(",", "").trim());
+            BigDecimal newBalance = paymentService.depositToWallet(targetUserId, amount);
+            if (newBalance == null) {
+                send("DEPOSIT_FAIL DEPOSIT_NOT_COMPLETED");
+                return;
+            }
+            send("DEPOSIT_SUCCESS " + fields(amount, newBalance));
+            ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
+        } catch (NumberFormatException exception) {
+            send("DEPOSIT_FAIL INVALID_AMOUNT");
+        }
+    }
+
     /**
-     * Sends post-auction payment rows visible to the current user.
+     * Sends post-auction payment rows and standalone wallet rows visible to the current user.
      *
      * <p>The mutation path still goes through PaymentService; this method only exposes the
      * persisted payments/wallet transaction state to the Transactions screen.</p>
@@ -848,22 +859,9 @@ public class ClientHandler implements Runnable{
         }
 
         String sql = """
-            SELECT row_id AS payment_id,
-                   auction_id,
-                   user_role,
-                   item_name,
-                   counterpart_id,
-                   counterpart_name,
-                   amount,
-                   payment_status,
-                   auction_status,
-                   created_at,
-                   paid_at,
-                   wallet_tx_id,
-                   wallet_tx_type,
-                   wallet_note
+            SELECT *
             FROM (
-                SELECT p.payment_id AS row_id,
+                SELECT p.payment_id,
                        p.auction_id,
                        CASE WHEN p.buyer_id = ? THEN 'BUYER' ELSE 'SELLER' END AS user_role,
                        COALESCE(i.name, CONCAT('Auction #', p.auction_id)) AS item_name,
@@ -878,8 +876,7 @@ public class ClientHandler implements Runnable{
                        p.paid_at,
                        COALESCE(wt.tx_id, 0) AS wallet_tx_id,
                        COALESCE(wt.type, '') AS wallet_tx_type,
-                       COALESCE(wt.note, '') AS wallet_note,
-                       COALESCE(p.paid_at, p.created_at) AS sort_time
+                       COALESCE(wt.note, '') AS wallet_note
                 FROM payments p
                 JOIN auctions a ON a.auction_id = p.auction_id
                 LEFT JOIN items i ON i.item_id = a.item_id
@@ -899,32 +896,31 @@ public class ClientHandler implements Runnable{
 
                 UNION ALL
 
-                SELECT wt.tx_id AS row_id,
-                       0 AS auction_id,
+                SELECT 0 AS payment_id,
+                       COALESCE(wt.ref_auction_id, 0) AS auction_id,
                        'WALLET' AS user_role,
-                       CASE wt.type
-                           WHEN 'DEPOSIT' THEN 'Wallet Deposit'
-                           WHEN 'WITHDRAW' THEN 'Wallet Withdrawal'
-                           WHEN 'HOLD' THEN 'Wallet Hold'
-                           WHEN 'RELEASE' THEN 'Wallet Release'
-                           ELSE CONCAT('Wallet ', wt.type)
+                       CASE
+                           WHEN wt.type = 'DEPOSIT' THEN 'Wallet top-up'
+                           WHEN wt.ref_auction_id IS NULL THEN 'Wallet'
+                           ELSE COALESCE(i.name, CONCAT('Auction #', wt.ref_auction_id))
                        END AS item_name,
-                       wt.user_id AS counterpart_id,
+                       0 AS counterpart_id,
                        'Wallet' AS counterpart_name,
                        wt.amount,
                        'COMPLETED' AS payment_status,
-                       '' AS auction_status,
+                       'WALLET' AS auction_status,
                        wt.created_at,
                        wt.created_at AS paid_at,
                        wt.tx_id AS wallet_tx_id,
                        wt.type AS wallet_tx_type,
-                       COALESCE(wt.note, '') AS wallet_note,
-                       wt.created_at AS sort_time
+                       COALESCE(wt.note, '') AS wallet_note
                 FROM wallet_transactions wt
+                LEFT JOIN auctions a ON a.auction_id = wt.ref_auction_id
+                LEFT JOIN items i ON i.item_id = a.item_id
                 WHERE wt.user_id = ?
-                  AND wt.type IN ('DEPOSIT', 'WITHDRAW', 'HOLD', 'RELEASE')
-            ) tx_rows
-            ORDER BY sort_time DESC, row_id DESC
+                  AND wt.type IN ('DEPOSIT', 'WITHDRAW')
+            ) tx
+            ORDER BY tx.created_at DESC, tx.payment_id DESC, tx.wallet_tx_id DESC
             """;
 
         try (Connection conn = DBConnection.getConnection();
@@ -1302,8 +1298,6 @@ public class ClientHandler implements Runnable{
             .replace("\n", "\\n")
             .replace("\r", "\\r");
     }
-    private record DepositCommand(int userId, String amountText) {}
-
     private record PaymentAuthorization(boolean allowed, String reason) {
         static PaymentAuthorization allow() {
             return new PaymentAuthorization(true, "");

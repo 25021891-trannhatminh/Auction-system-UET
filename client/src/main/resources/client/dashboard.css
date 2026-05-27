@@ -2958,9 +2958,9 @@
 .wallet-deposit-dialog-pane {
     -fx-background-color: #171717;
     -fx-background-radius: 22;
-    -fx-border-color: #171717;
+    -fx-border-color: rgba(209, 177, 93, 0.92);
     -fx-border-radius: 22;
-    -fx-border-width: 1;
+    -fx-border-width: 1.2;
     -fx-padding: 0;
 }
 
@@ -2992,8 +2992,9 @@
 .wallet-deposit-card {
     -fx-background-color: #171717;
     -fx-background-radius: 22;
-    -fx-border-color: #171717;
+    -fx-border-color: #d1b15d;
     -fx-border-radius: 22;
+    -fx-border-width: 1.2;
     -fx-padding: 26 24 20 24;
     -fx-pref-width: 360;
     -fx-max-width: 360;
