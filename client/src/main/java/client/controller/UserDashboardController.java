@@ -294,9 +294,9 @@ public class UserDashboardController extends BaseDashboardController {
 
     DialogPane dialogPane = dialog.getDialogPane();
     dialogPane.getStyleClass().add("wallet-deposit-dialog-pane");
-    dialogPane.setMinWidth(420);
-    dialogPane.setPrefWidth(420);
-    dialogPane.setMaxWidth(420);
+    dialogPane.setMinWidth(340);
+    dialogPane.setPrefWidth(360);
+    dialogPane.setMaxWidth(360);
     String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
     dialogPane.getStylesheets().add(dashboardCss);
     dialogPane.getButtonTypes().setAll(ButtonType.CANCEL);
@@ -399,24 +399,23 @@ public class UserDashboardController extends BaseDashboardController {
       Button depositButton,
       Button cancelButton
   ) {
-    VBox card = new VBox(16);
+    VBox card = new VBox(14);
     card.getStyleClass().add("wallet-deposit-card");
-    card.setMinWidth(380);
-    card.setPrefWidth(420);
-    card.setMaxWidth(420);
+    card.setMinWidth(320);
+    card.setPrefWidth(360);
+    card.setMaxWidth(360);
 
-    VBox header = new VBox(5);
-    Label eyebrow = new Label("Wallet balance");
+    VBox header = new VBox(4);
+    Label eyebrow = new Label("Wallet deposit");
     eyebrow.getStyleClass().add("wallet-deposit-eyebrow");
-    Label balance = new Label(
-        walletBalanceKnown ? formatMoney(currentWalletBalance.toPlainString()) : "Syncing"
-    );
-    balance.getStyleClass().add("wallet-deposit-balance");
-    balance.setMaxWidth(Double.MAX_VALUE);
-    balance.setTextOverrun(OverrunStyle.ELLIPSIS);
-    Label balanceCaption = new Label("Top up your bidding wallet in VND.");
+    Label title = new Label("Top up wallet");
+    title.getStyleClass().add("wallet-deposit-title");
+    title.setMaxWidth(Double.MAX_VALUE);
+    title.setTextOverrun(OverrunStyle.ELLIPSIS);
+    Label balanceCaption = new Label("Add VND to your bidding balance.");
     balanceCaption.getStyleClass().add("wallet-deposit-caption");
-    header.getChildren().addAll(eyebrow, balance, balanceCaption);
+    balanceCaption.setWrapText(true);
+    header.getChildren().addAll(eyebrow, title, balanceCaption);
 
     VBox amountBlock = new VBox(8);
     HBox amountHeader = new HBox(10);
@@ -618,6 +617,7 @@ public class UserDashboardController extends BaseDashboardController {
   private boolean isRealtimeBidMessage(String message) {
     return message.startsWith("AUCTION_SNAPSHOT|")
         || message.startsWith("BID_UPDATE|")
+        || message.startsWith("AUCTION_BID_UPDATE|")
         || message.startsWith("TIME_EXTENDED|")
         || message.startsWith("AUCTION_CLOSED_UPDATE|")
         || message.startsWith("AUCTION_CLOSED|")
@@ -2001,30 +2001,21 @@ public class UserDashboardController extends BaseDashboardController {
 
     VBox metrics = new VBox(12);
     metrics.setMinWidth(0);
-    metrics.setPrefWidth(420);
+    metrics.setPrefWidth(360);
     metrics.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(metrics, Priority.ALWAYS);
 
     HBox topMetrics = new HBox(12);
-    topMetrics.setAlignment(Pos.CENTER);
+    topMetrics.setAlignment(Pos.CENTER_RIGHT);
+    Region topSpacer = new Region();
+    HBox.setHgrow(topSpacer, Priority.ALWAYS);
     topMetrics.getChildren().addAll(
+        topSpacer,
         transactionMetricCard("Paid", formatMoney(completedPayments.toPlainString())),
-        transactionMetricCard(
-            "Balance",
-            walletBalanceKnown ? formatMoney(currentWalletBalance.toPlainString()) : "Syncing"
-        )
-    );
-
-    HBox bottomMetrics = new HBox(12);
-    bottomMetrics.setAlignment(Pos.CENTER_RIGHT);
-    Region spacer = new Region();
-    HBox.setHgrow(spacer, Priority.ALWAYS);
-    bottomMetrics.getChildren().addAll(
-        spacer,
         transactionMetricCard("Payment Due", formatMoney(pendingDue.toPlainString()))
     );
 
-    metrics.getChildren().addAll(topMetrics, bottomMetrics);
+    metrics.getChildren().add(topMetrics);
     card.getChildren().addAll(main, metrics);
     workspaceBox.getChildren().add(card);
   }
@@ -2032,7 +2023,7 @@ public class UserDashboardController extends BaseDashboardController {
   private VBox transactionMetricCard(String labelText, String valueText) {
     VBox metric = new VBox(6);
     metric.setMinWidth(0);
-    metric.setPrefWidth(190);
+    metric.setPrefWidth(166);
     metric.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(metric, Priority.ALWAYS);
     metric.getStyleClass().add("transaction-wallet-metric");
@@ -3156,6 +3147,10 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void joinAuctionRoom(String auctionId) {
+    requestFreshAuctionState(auctionId);
+  }
+
+  private void requestFreshAuctionState(String auctionId) {
     if (auctionId == null || auctionId.isBlank()) {
       return;
     }
@@ -3401,6 +3396,10 @@ public class UserDashboardController extends BaseDashboardController {
       handleBidUpdate(message.substring("BID_UPDATE|".length()));
       return;
     }
+    if (message.startsWith("AUCTION_BID_UPDATE|")) {
+      handleAuctionBidUpdate(message.substring("AUCTION_BID_UPDATE|".length()));
+      return;
+    }
     if (message.startsWith("TIME_EXTENDED|")) {
       handleTimeExtended(message.substring("TIME_EXTENDED|".length()));
       return;
@@ -3416,19 +3415,15 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("BID_SUCCESS")) {
       String[] parts = message.trim().split("\\s+", 3);
       String auctionId = parts.length > 1 ? parts[1] : activeAuctionDetailId;
-      String amount = parts.length > 2 ? parts[2] : "";
-      if (auctionId != null && !auctionId.isBlank()) {
-        replaceAuctionCardBid(auctionId, amount, -1, -1L, "", currentUsername(), "");
-        if (isActiveAuction(auctionId)) {
-          updateActiveAuctionPrice(amount, -1);
-        }
-      }
       if (activeAuctionBidInput != null) {
         activeAuctionBidInput.clear();
       }
-      updateActiveBidControls(latestAuctionCardById(auctionId));
-      showBidFeedback("Your bid has been confirmed. You are currently leading this auction.", false);
-      notifUIHandler.showSuccess("Bid accepted", "You are now the leading bidder.");
+      if (auctionId != null && !auctionId.isBlank()) {
+        requestFreshAuctionState(auctionId);
+        updateActiveBidControls(latestAuctionCardById(auctionId));
+      }
+      showBidFeedback("Your bid has been recorded. Syncing the latest auction price...", false);
+      notifUIHandler.showSuccess("Bid accepted", "The server confirmed your bid and is syncing the final price.");
       requestUserBids();
       return;
     }
@@ -3476,6 +3471,9 @@ public class UserDashboardController extends BaseDashboardController {
       }
     }
 
+    if (!auctionId.isBlank()) {
+      requestFreshAuctionState(auctionId);
+    }
     requestUserAutoBids();
     requestUserBids();
     requestUserAuctions();
@@ -3562,6 +3560,41 @@ public class UserDashboardController extends BaseDashboardController {
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionPrice(amount, totalBids);
       updateActiveAuctionCountdown(secondsLeft);
+      updateActiveBidControls(latestAuctionCardById(auctionId));
+      showBidFeedback(isCurrentUserWinning(latestAuctionCardById(auctionId))
+          ? "You are currently leading this auction."
+          : "Current price updated in real time.", false);
+    } else if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
+      renderWorkspace(currentSectionKey, activeFilter);
+    }
+  }
+
+  private void handleAuctionBidUpdate(String payload) {
+    List<String> fields = splitPayload(payload);
+    if (fields.size() < 7) {
+      return;
+    }
+    String auctionId = safeField(fields, 0);
+    String currentPrice = safeField(fields, 1);
+    String leaderName = safeField(fields, 3);
+    String endTime = safeField(fields, 4);
+    int totalBids = parseIntOrDefault(safeField(fields, 5), 0);
+    long secondsLeft = secondsUntil(endTime, -1L);
+
+    replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderName, "");
+    if (myBidsLoaded || "myBids".equals(currentSectionKey)) {
+      requestUserBids();
+    }
+    if (activeSellerDetailItem != null
+        && auctionId.equals(activeSellerDetailItem.auctionId)) {
+      requestSellerBidHistory(auctionId);
+    }
+
+    if (isActiveAuction(auctionId)) {
+      updateActiveAuctionPrice(currentPrice, totalBids);
+      if (secondsLeft >= 0) {
+        updateActiveAuctionCountdown(secondsLeft);
+      }
       updateActiveBidControls(latestAuctionCardById(auctionId));
       showBidFeedback(isCurrentUserWinning(latestAuctionCardById(auctionId))
           ? "You are currently leading this auction."
