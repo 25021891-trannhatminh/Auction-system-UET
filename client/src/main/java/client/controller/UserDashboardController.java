@@ -30,6 +30,7 @@ import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
@@ -298,6 +299,13 @@ public class UserDashboardController extends BaseDashboardController {
     dialogPane.setMaxWidth(420);
     String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
     dialogPane.getStylesheets().add(dashboardCss);
+    dialogPane.getButtonTypes().setAll(ButtonType.CANCEL);
+    Node hiddenCancelButton = dialogPane.lookupButton(ButtonType.CANCEL);
+    if (hiddenCancelButton != null) {
+      hiddenCancelButton.setVisible(false);
+      hiddenCancelButton.setManaged(false);
+    }
+    dialog.setResultConverter(buttonType -> null);
 
     TextField amountField = new TextField();
     amountField.setPromptText("Enter amount");
@@ -344,7 +352,10 @@ public class UserDashboardController extends BaseDashboardController {
 
     depositButton.setOnAction(event -> submitDeposit.run());
     amountField.setOnAction(event -> submitDeposit.run());
-    cancelButton.setOnAction(event -> closeDepositDialog.run());
+    cancelButton.setOnAction(event -> {
+      closeDepositDialog.run();
+      event.consume();
+    });
     dialogPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
       if (event.getCode() == KeyCode.ESCAPE) {
         closeDepositDialog.run();
@@ -2110,29 +2121,31 @@ public class UserDashboardController extends BaseDashboardController {
   private void addTransactionHeader() {
     GridPane header = createTransactionTableGrid("data-header");
 
-    header.add(headerLabel("Type", HPos.LEFT), 0, 0);
-    header.add(headerLabel("Description", HPos.LEFT), 1, 0);
+    header.add(headerLabel("Type", HPos.CENTER), 0, 0);
+    header.add(headerLabel("Description", HPos.CENTER), 1, 0);
     header.add(headerLabel("Amount", HPos.CENTER), 2, 0);
     header.add(headerLabel("Balance After", HPos.CENTER), 3, 0);
     header.add(headerLabel("Time", HPos.CENTER), 4, 0);
+    header.add(headerLabel("Action", HPos.CENTER), 5, 0);
 
     workspaceBox.getChildren().add(header);
   }
 
   private GridPane createTransactionTableGrid(String styleClass) {
     GridPane grid = new GridPane();
-    grid.setHgap(10);
+    grid.setHgap(8);
     grid.setAlignment(Pos.CENTER_LEFT);
     grid.getStyleClass().addAll(styleClass, "transaction-table-row");
     grid.setMaxWidth(Double.MAX_VALUE);
     grid.setMinWidth(0);
 
     grid.getColumnConstraints().addAll(
-        percentColumn(16),
-        percentColumn(38),
-        percentColumn(15),
-        percentColumn(16),
-        percentColumn(15)
+        percentColumn(12),
+        percentColumn(30),
+        percentColumn(14),
+        percentColumn(14),
+        percentColumn(19),
+        percentColumn(11)
     );
     return grid;
   }
@@ -2162,18 +2175,25 @@ public class UserDashboardController extends BaseDashboardController {
         buildTransactionTimeText(transaction),
         "transaction-time-cell"
     );
+    Node action = transactionActionCell(transaction);
+
+    type.setWrapText(false);
+    time.setWrapText(false);
+    time.setTextOverrun(OverrunStyle.CLIP);
 
     row.add(type, 0, 0);
     row.add(description, 1, 0);
     row.add(amount, 2, 0);
     row.add(balanceAfter, 3, 0);
     row.add(time, 4, 0);
+    row.add(action, 5, 0);
 
-    GridPane.setHalignment(type, HPos.LEFT);
-    GridPane.setHalignment(description, HPos.LEFT);
+    GridPane.setHalignment(type, HPos.CENTER);
+    GridPane.setHalignment(description, HPos.CENTER);
     GridPane.setHalignment(amount, HPos.CENTER);
     GridPane.setHalignment(balanceAfter, HPos.CENTER);
     GridPane.setHalignment(time, HPos.CENTER);
+    GridPane.setHalignment(action, HPos.CENTER);
 
     workspaceBox.getChildren().add(row);
   }
@@ -2186,6 +2206,26 @@ public class UserDashboardController extends BaseDashboardController {
     label.setWrapText(true);
     label.setTextOverrun(OverrunStyle.ELLIPSIS);
     return label;
+  }
+
+  private Node transactionActionCell(TransactionData transaction) {
+    if (transaction.isPayable()) {
+      Button payButton = new Button("Pay");
+      payButton.setMnemonicParsing(false);
+      payButton.getStyleClass().addAll("mini-action-btn", "transaction-pay-btn");
+      payButton.setMaxWidth(Double.MAX_VALUE);
+      payButton.setOnAction(event -> {
+        payButton.setDisable(true);
+        submitTransactionPayment(transaction);
+        event.consume();
+      });
+      return payButton;
+    }
+
+    Label status = transactionTableLabel(resolveTransactionStatus(transaction), "transaction-status-cell");
+    status.setWrapText(false);
+    status.setTextOverrun(OverrunStyle.ELLIPSIS);
+    return status;
   }
 
   private String resolveTransactionTypeText(TransactionData transaction) {
@@ -2215,18 +2255,18 @@ public class UserDashboardController extends BaseDashboardController {
     String status = normalize(transaction.paymentStatus);
     if (status.equals("pending")) {
       return transaction.isBuyer()
-          ? "Payment due for winning auction:\n" + itemName
-          : "Awaiting buyer payment:\n" + itemName;
+          ? "Payment due • " + itemName
+          : "Awaiting buyer payment • " + itemName;
     }
     if (status.equals("refunded")) {
       return transaction.isBuyer()
-          ? "Refunded for auction:\n" + itemName
-          : "Refunded to buyer for auction:\n" + itemName;
+          ? "Refunded • " + itemName
+          : "Refunded to buyer • " + itemName;
     }
     if (transaction.isSeller()) {
-      return "Received from sold auction:\n" + itemName;
+      return "Received from sold auction • " + itemName;
     }
-    return "Paid for winning auction:\n" + itemName;
+    return "Paid for winning auction • " + itemName;
   }
 
   private String cleanWalletNote(String note) {
@@ -2282,9 +2322,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (parsed == null) {
       return fallback(rawTime, "Not available");
     }
-    return parsed.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        + "\n"
-        + parsed.format(DateTimeFormatter.ofPattern("HH:mm"));
+    return parsed.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
   }
 
 
@@ -2389,6 +2427,10 @@ public class UserDashboardController extends BaseDashboardController {
   private void submitTransactionPayment(TransactionData transaction) {
     if (transaction == null || !transaction.isPayable()) {
       showTemporaryDetail("Payment unavailable", "This transaction is not payable in its current state.");
+      return;
+    }
+    if (transaction.auctionId.isBlank() || "0".equals(transaction.auctionId)) {
+      showTemporaryDetail("Payment unavailable", "This payable row is missing auction information.");
       return;
     }
     if (networkManager == null) {
@@ -4339,6 +4381,13 @@ public class UserDashboardController extends BaseDashboardController {
     label.setMaxWidth(Double.MAX_VALUE);
     label.setMinWidth(0);
     label.setTextOverrun(OverrunStyle.ELLIPSIS);
+    if (alignment == HPos.CENTER) {
+      label.setAlignment(Pos.CENTER);
+    } else if (alignment == HPos.RIGHT) {
+      label.setAlignment(Pos.CENTER_RIGHT);
+    } else {
+      label.setAlignment(Pos.CENTER_LEFT);
+    }
     GridPane.setHalignment(label, alignment);
     return label;
   }
