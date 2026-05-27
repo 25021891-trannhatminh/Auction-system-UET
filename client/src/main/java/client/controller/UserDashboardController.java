@@ -26,6 +26,7 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.geometry.HPos;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
@@ -294,9 +295,10 @@ public class UserDashboardController extends BaseDashboardController {
 
     DialogPane dialogPane = dialog.getDialogPane();
     dialogPane.getStyleClass().add("wallet-deposit-dialog-pane");
-    dialogPane.setMinWidth(340);
-    dialogPane.setPrefWidth(360);
-    dialogPane.setMaxWidth(360);
+    dialogPane.setPadding(Insets.EMPTY);
+    dialogPane.setMinWidth(392);
+    dialogPane.setPrefWidth(392);
+    dialogPane.setMaxWidth(392);
     String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
     dialogPane.getStylesheets().add(dashboardCss);
     dialogPane.getButtonTypes().setAll(ButtonType.CANCEL);
@@ -393,19 +395,21 @@ public class UserDashboardController extends BaseDashboardController {
     });
   }
 
-  private VBox buildDepositDialogContent(
+  private StackPane buildDepositDialogContent(
       TextField amountField,
       Label errorLabel,
       Button depositButton,
       Button cancelButton
   ) {
-    VBox card = new VBox(14);
+    VBox card = new VBox(16);
     card.getStyleClass().add("wallet-deposit-card");
-    card.setMinWidth(320);
+    card.setPadding(new Insets(28, 24, 22, 24));
+    card.setMinWidth(360);
     card.setPrefWidth(360);
     card.setMaxWidth(360);
 
-    VBox header = new VBox(4);
+    VBox header = new VBox(5);
+    header.setPadding(new Insets(0, 0, 4, 0));
     Label eyebrow = new Label("Wallet deposit");
     eyebrow.getStyleClass().add("wallet-deposit-eyebrow");
     Label title = new Label("Top up wallet");
@@ -417,7 +421,8 @@ public class UserDashboardController extends BaseDashboardController {
     balanceCaption.setWrapText(true);
     header.getChildren().addAll(eyebrow, title, balanceCaption);
 
-    VBox amountBlock = new VBox(8);
+    VBox amountBlock = new VBox(9);
+    amountBlock.setFillWidth(true);
     HBox amountHeader = new HBox(10);
     amountHeader.setAlignment(Pos.CENTER_LEFT);
     Label amountLabel = new Label("Amount");
@@ -427,16 +432,26 @@ public class UserDashboardController extends BaseDashboardController {
     Label currencyPill = new Label("VND");
     currencyPill.getStyleClass().add("wallet-deposit-currency-pill");
     amountHeader.getChildren().addAll(amountLabel, labelSpacer, currencyPill);
+    amountField.setMinHeight(48);
+    amountField.setPrefHeight(52);
     amountField.setMaxWidth(Double.MAX_VALUE);
     amountBlock.getChildren().addAll(amountHeader, amountField);
 
-    HBox buttonRow = new HBox(10);
+    HBox buttonRow = new HBox(12);
     buttonRow.setAlignment(Pos.CENTER_RIGHT);
+    buttonRow.setPadding(new Insets(14, 0, 0, 0));
     buttonRow.getStyleClass().add("wallet-deposit-action-row");
     buttonRow.getChildren().addAll(cancelButton, depositButton);
 
     card.getChildren().addAll(header, amountBlock, errorLabel, buttonRow);
-    return card;
+
+    StackPane shell = new StackPane(card);
+    shell.getStyleClass().add("wallet-deposit-shell");
+    shell.setPadding(new Insets(10));
+    shell.setMinWidth(380);
+    shell.setPrefWidth(380);
+    shell.setMaxWidth(380);
+    return shell;
   }
 
   private String buildDepositCommand(BigDecimal amount) {

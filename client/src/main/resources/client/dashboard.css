@@ -2959,16 +2959,16 @@
 /* Wallet deposit dialog. Kept opaque so the popup never renders transparent. */
 .wallet-deposit-dialog-pane {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 20;
+    -fx-background-radius: 22;
     -fx-border-color: rgba(209, 177, 93, 0.24);
-    -fx-border-radius: 20;
+    -fx-border-radius: 22;
     -fx-border-width: 1;
     -fx-padding: 0;
 }
 
 .wallet-deposit-dialog-pane > .content {
     -fx-background-color: #0f0f0f;
-    -fx-background-radius: 20;
+    -fx-background-radius: 22;
     -fx-padding: 0;
 }
 
@@ -2988,10 +2988,10 @@
 
 .wallet-deposit-card {
     -fx-background-color: linear-gradient(to bottom right, #1d1d1d, #101010);
-    -fx-background-radius: 20;
+    -fx-background-radius: 22;
     -fx-border-color: rgba(209, 177, 93, 0.16);
-    -fx-border-radius: 20;
-    -fx-padding: 18 20 18 20;
+    -fx-border-radius: 22;
+    -fx-padding: 30 24 22 24;
     -fx-pref-width: 360;
     -fx-max-width: 360;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.40), 18, 0.14, 0, 8);
@@ -3001,6 +3001,7 @@
     -fx-text-fill: rgba(247, 243, 233, 0.68);
     -fx-font-size: 12px;
     -fx-font-weight: bold;
+    -fx-padding: 0 0 2 0;
 }
 
 .wallet-deposit-title {
@@ -3008,6 +3009,7 @@
     -fx-font-family: "Georgia";
     -fx-font-size: 24px;
     -fx-font-weight: bold;
+    -fx-padding: 0 0 2 0;
 }
 
 .wallet-deposit-balance {
