@@ -2956,25 +2956,30 @@
     -fx-font-weight: bold;
 }
 
-/* Wallet deposit dialog. Kept opaque so the popup never renders transparent. */
+/* Wallet deposit dialog. Kept opaque and visually merged into one card. */
 .wallet-deposit-dialog-pane {
-    -fx-background-color: #0f0f0f;
+    -fx-background-color: #171717;
     -fx-background-radius: 22;
-    -fx-border-color: rgba(209, 177, 93, 0.24);
+    -fx-border-color: #171717;
     -fx-border-radius: 22;
     -fx-border-width: 1;
     -fx-padding: 0;
 }
 
 .wallet-deposit-dialog-pane > .content {
-    -fx-background-color: #0f0f0f;
+    -fx-background-color: #171717;
     -fx-background-radius: 22;
     -fx-padding: 0;
 }
 
 .wallet-deposit-dialog-pane:header .header-panel {
-    -fx-background-color: #0f0f0f;
+    -fx-background-color: #171717;
     -fx-padding: 0;
+}
+
+.wallet-deposit-shell {
+    -fx-background-color: #171717;
+    -fx-background-radius: 22;
 }
 
 .wallet-deposit-dialog-pane .button-bar,
@@ -2987,14 +2992,13 @@
 }
 
 .wallet-deposit-card {
-    -fx-background-color: linear-gradient(to bottom right, #1d1d1d, #101010);
+    -fx-background-color: #171717;
     -fx-background-radius: 22;
-    -fx-border-color: rgba(209, 177, 93, 0.16);
+    -fx-border-color: #171717;
     -fx-border-radius: 22;
-    -fx-padding: 30 24 22 24;
+    -fx-padding: 26 24 20 24;
     -fx-pref-width: 360;
     -fx-max-width: 360;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.40), 18, 0.14, 0, 8);
 }
 
 .wallet-deposit-eyebrow {
@@ -3066,10 +3070,13 @@
     -fx-text-fill: #f0a39b;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
+    -fx-min-height: 18px;
+    -fx-pref-height: 18px;
+    -fx-max-height: 18px;
 }
 
 .wallet-deposit-action-row {
-    -fx-padding: 12 0 0 0;
+    -fx-padding: 10 0 0 0;
     -fx-border-color: rgba(255, 255, 255, 0.08) transparent transparent transparent;
 }
 

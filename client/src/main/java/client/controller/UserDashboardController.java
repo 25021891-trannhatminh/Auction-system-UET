@@ -296,9 +296,9 @@ public class UserDashboardController extends BaseDashboardController {
     DialogPane dialogPane = dialog.getDialogPane();
     dialogPane.getStyleClass().add("wallet-deposit-dialog-pane");
     dialogPane.setPadding(Insets.EMPTY);
-    dialogPane.setMinWidth(392);
-    dialogPane.setPrefWidth(392);
-    dialogPane.setMaxWidth(392);
+    dialogPane.setMinWidth(360);
+    dialogPane.setPrefWidth(360);
+    dialogPane.setMaxWidth(360);
     String dashboardCss = getClass().getResource("/client/dashboard.css").toExternalForm();
     dialogPane.getStylesheets().add(dashboardCss);
     dialogPane.getButtonTypes().setAll(ButtonType.CANCEL);
@@ -316,11 +316,13 @@ public class UserDashboardController extends BaseDashboardController {
     Label errorLabel = new Label("Enter a valid amount greater than 0 VND.");
     errorLabel.getStyleClass().add("wallet-deposit-error");
     errorLabel.setVisible(false);
-    errorLabel.setManaged(false);
+    errorLabel.setManaged(true);
+    errorLabel.setMinHeight(18);
+    errorLabel.setPrefHeight(18);
+    errorLabel.setMaxHeight(18);
     amountField.textProperty().addListener((obs, oldValue, newValue) -> {
       amountField.getStyleClass().remove("wallet-deposit-input-invalid");
       errorLabel.setVisible(false);
-      errorLabel.setManaged(false);
     });
 
     Button depositButton = new Button("Deposit");
@@ -344,7 +346,6 @@ public class UserDashboardController extends BaseDashboardController {
         amountField.getStyleClass().remove("wallet-deposit-input-invalid");
         amountField.getStyleClass().add("wallet-deposit-input-invalid");
         errorLabel.setVisible(true);
-        errorLabel.setManaged(true);
         amountField.requestFocus();
         return;
       }
@@ -374,7 +375,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     dialog.setOnShown(event -> {
       if (dialogPane.getScene() != null) {
-        dialogPane.getScene().setFill(Color.web("#0f0f0f"));
+        dialogPane.getScene().setFill(Color.web("#171717"));
       }
       amountField.requestFocus();
     });
@@ -401,9 +402,9 @@ public class UserDashboardController extends BaseDashboardController {
       Button depositButton,
       Button cancelButton
   ) {
-    VBox card = new VBox(16);
+    VBox card = new VBox(14);
     card.getStyleClass().add("wallet-deposit-card");
-    card.setPadding(new Insets(28, 24, 22, 24));
+    card.setPadding(new Insets(26, 24, 20, 24));
     card.setMinWidth(360);
     card.setPrefWidth(360);
     card.setMaxWidth(360);
@@ -439,7 +440,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     HBox buttonRow = new HBox(12);
     buttonRow.setAlignment(Pos.CENTER_RIGHT);
-    buttonRow.setPadding(new Insets(14, 0, 0, 0));
+    buttonRow.setPadding(new Insets(10, 0, 0, 0));
     buttonRow.getStyleClass().add("wallet-deposit-action-row");
     buttonRow.getChildren().addAll(cancelButton, depositButton);
 
@@ -447,10 +448,10 @@ public class UserDashboardController extends BaseDashboardController {
 
     StackPane shell = new StackPane(card);
     shell.getStyleClass().add("wallet-deposit-shell");
-    shell.setPadding(new Insets(10));
-    shell.setMinWidth(380);
-    shell.setPrefWidth(380);
-    shell.setMaxWidth(380);
+    shell.setPadding(Insets.EMPTY);
+    shell.setMinWidth(360);
+    shell.setPrefWidth(360);
+    shell.setMaxWidth(360);
     return shell;
   }
 
