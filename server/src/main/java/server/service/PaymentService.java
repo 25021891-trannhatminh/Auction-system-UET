@@ -184,12 +184,17 @@ public class PaymentService {
 
       WalletDTO wallet = walletDAO.lockByUserId(conn, userId);
       if (wallet == null) {
-        int walletId = walletDAO.createWalletInTx(conn, userId);
+        int walletId = walletDAO.createWalletIfNotExists(userId);
         if (walletId <= 0) {
           conn.rollback();
           return null;
         }
-        wallet = new WalletDTO(walletId, userId, BigDecimal.ZERO, null);
+        // Sau khi tạo, lấy lại wallet đã lock để có balance chính xác (số dư 0)
+        wallet = walletDAO.lockByUserId(conn, userId);
+        if (wallet == null) {
+          conn.rollback();
+          return null;
+        }
       }
 
       walletDAO.depositInTx(conn, wallet.getWalletId(), amount);

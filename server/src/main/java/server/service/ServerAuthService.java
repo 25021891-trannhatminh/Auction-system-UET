@@ -5,11 +5,13 @@ import server.common.entity.User;
 import server.repository.AccountDAO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.repository.WalletDAO;
 
 public class ServerAuthService {
 
   private static final Logger logger = LoggerFactory.getLogger(ServerAuthService.class);
   private final AccountDAO accountDAO = new AccountDAO();
+  private final WalletDAO walletDAO = new WalletDAO();
 
   /**
    * Xử lý đăng nhập
@@ -70,7 +72,12 @@ public class ServerAuthService {
 
     try {
       boolean success = accountDAO.register(registerUser,registerPass,registerEmail,registerFullName,registerPhone);
-      return success ? "REGISTER_SUCCESS" : "REGISTER_FAIL EXIST_OR_ERROR";
+      if(success){
+        int userId = accountDAO.getUserIdByUsername(registerUser);
+        walletDAO.createWalletIfNotExists(userId);
+        return  "REGISTER_SUCCESS";
+      }
+      return "REGISTER_FAIL EXIST_OR_ERROR";
     } catch (Exception e) {
       logger.error("register() — Server error for user={}", registerUser, e);
       return "REGISTER_FAIL SERVER_ERROR";
