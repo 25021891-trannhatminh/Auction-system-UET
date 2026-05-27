@@ -15,6 +15,7 @@ import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
+import server.common.enums.BidStatus;
 import server.common.enums.ItemStatus;
 import server.common.model.AuctionDTO;
 import server.common.model.BidHistoryDTO;
@@ -286,14 +287,36 @@ public class AuctionService {
       return false;
     }
     auctionManager.cancelAutoBid(auctionId, bidder);
-    // Rollback RAM về secondwinner đang WINNING
-    if (bidder.getId() == auction.getCurrentLeader().getId() && handleWinnerCancel(auction,bidder,auction.getWinningBid())){
-      List<BidTransaction> bidHistory = auction.getBidHistory();
-      BidTransaction secondTransaction = bidHistory.get(bidHistory.size() - 2);
-      int secondWinnerId = secondTransaction.getBidderId();
-      return placeBid(auctionId,secondWinnerId,secondTransaction.getAmount(),secondTransaction.isAutoBid());
+    if (auction.getCurrentLeader() != null
+        && bidder.getId() == auction.getCurrentLeader().getId()) {
+      // Winner cancel -> Rollback RAM
+      BidTransaction secondWinnerBid = handleWinnerCancel(auction, bidder);
+      if (secondWinnerBid != null) {
+        // Người thứ 2 đã được restore WINNING trong RAM — dùng executePlaceBidFlow
+        // để persist DB + notify realtime đúng flow với SELECT FOR UPDATE.
+        // isAutoBid = secondBestTx.isAutoBid() để giữ đúng metadata lịch sử.
+        BidTransactionService txService = new BidTransactionService();
+        try {
+          BidTransaction persisted = txService.executePlaceBidFlow(
+              auctionId,
+              secondWinnerBid.getBidderId(),
+              secondWinnerBid.getAmount(),
+              secondWinnerBid.isAutoBid()
+          );
+          if (persisted == null) {
+            logger.error("cancelAutoBid() – persist second bid failed for auction {}", auctionId);
+            // RAM đã rollback bởi executePlaceBidFlow nếu DB fail — không cần xử lý thêm
+            return false;
+          }
+        } catch (Exception e) {
+          logger.error("cancelAutoBid() – executePlaceBidFlow threw for auction {}", auctionId, e);
+          return false;
+        }
+      }
+    } else {
+      // Không phải winner → trigger bình thường
+      triggerAutoBids(auction, bidder);
     }
-    triggerAutoBids(auction, bidder);
 
     logger.info("Auto-bid cancel requested for auction {} by user {}", auctionId, bidder.getId());
     return true;
@@ -601,7 +624,7 @@ public class AuctionService {
     }
 
     try {
-      Auction.PlaceBidResult autoBidResult = auctionManager.getAutoBidEngine().trigger(auction, previousWinner);  // ← đổi nhận PlaceBidResult
+      Auction.PlaceBidResult autoBidResult = auctionManager.getAutoBidEngine().trigger(auction, previousWinner);
 
       if (autoBidResult != null) {
         persistAutoBidTransaction(auction, autoBidResult.tx());  // ← lấy tx từ result
@@ -611,23 +634,77 @@ public class AuctionService {
     }
   }
 
-  private boolean handleWinnerCancel(Auction auction, User cancelledBidder, BidTransaction winnerTransaction){
-    List<BidTransaction> bidHistory = auction.getBidHistory();
-    if (bidHistory.size() < 2) return false;
-    BidTransaction secondWinnerTransaction = bidHistory.get(bidHistory.size() - 2);
 
-    // Nếu bidHistory > 2 + second khác winner + second là manualBid
-    if (secondWinnerTransaction != null && secondWinnerTransaction.getBidderId() != cancelledBidder.getId()){
-      BigDecimal previousPrice = secondWinnerTransaction.getAmount();
-      User secondLeader = findUserById(secondWinnerTransaction.getBidderId());
-      if (secondLeader == null) {
-        logger.error("CANCEL AUTO-BID failed: Second leader = null");
+  /**
+   * Xử lý cancel auto-bid khi bidder đang là winner của auction.
+   *
+   * Logic:
+   *   1. Lấy winning bid hiện tại (của winner vừa cancel) và bid OUTBID gần nhất
+   *      của người khác — đây là "người thứ 2" hợp lệ nhất trong lịch sử.
+   *   2. Nếu tìm được người thứ 2: rollback RAM về trạng thái người đó đang thắng.
+   *   3. Persist DB: updateAuctionState về giá + leader mới.
+   *   4. Push realtime update ra UI.
+   *   5. Trigger AutoBid để xem có ai cần phản ứng với giá mới không.
+   *
+   * Nếu không tìm được người thứ 2 (winner là người bid duy nhất):
+   *   - Rollback RAM về startingPrice, currentLeader = null.
+   *   - Persist DB tương ứng.
+   *   - Trigger AutoBid.
+   *
+   * @return true nếu xử lý thành công, false nếu có lỗi DB
+   */
+  private BidTransaction handleWinnerCancel(Auction auction, User cancelledBidder){
+
+    BidTransaction winnerTransaction = auction.getWinningBid();
+    // Duyệt bidHistory từ cuối lên, lấy bid OUTBID đầu tiên không phải của winner
+    BidTransaction secondWinnerTransaction = auction.getBidHistory().stream()
+        .filter(tx -> tx.getBidderId() != cancelledBidder.getId()
+            && tx.getStatus() == BidStatus.OUTBID)
+        .reduce((first, second) -> second) // lấy phần tử cuối cùng — gần nhất
+        .orElse(null);
+
+    // Xác định previousPrice, previousLeader, previousOutbidTx
+    BigDecimal previousPrice;
+    User previousLeader;
+    BidTransaction outbidTxToRestore;
+
+    if (secondWinnerTransaction != null) {
+      previousPrice       = secondWinnerTransaction.getAmount();
+      previousLeader      = findUserById(secondWinnerTransaction.getBidderId());
+      outbidTxToRestore   = secondWinnerTransaction;
+
+      if (previousLeader == null) {
+        logger.error("handleWinnerCancel() – secondBestTx bidder {} not found in RAM, abort", secondWinnerTransaction.getBidderId());
+        return null;
       }
-      // Rollback RAM
-      auction.rollbackLastBid(winnerTransaction,secondWinnerTransaction,previousPrice,secondLeader,auction.getEndTime(),auction.getLastBidTime());
-      return true;
+    } else {
+      // Không có người thứ 2 — rollback về startingPrice, leader = null
+      auction.rollbackLastBid(
+          winnerTransaction,
+          null,
+          auction.getStartingPrice(),
+          null,
+          auction.getEndTime(),
+          null
+      );
+      logger.info("handleWinnerCancel() – no second bidder, reset to startingPrice for auction {}", auction.getId());
+      return null;
     }
-    return false;
+
+    // ── Rollback RAM ──────────────────────────────────────────────────
+    // Dùng rollbackLastBid: xóa winningTx khỏi bidHistory, restore state về snapshot,
+    // restore outbidTxToRestore về WINNING nếu có.
+    auction.rollbackLastBid(
+        winnerTransaction,
+        outbidTxToRestore,
+        previousPrice,
+        previousLeader,
+        auction.getEndTime(),       // endTime không thay đổi khi cancel
+        secondWinnerTransaction.getBidTime()
+    );
+    logger.info("handleWinnerCancel() – RAM rolled back: auctionId={} newLeader={} newPrice={}",
+        auction.getId(), previousLeader.getId(), secondWinnerTransaction.getAmount());
+    return secondWinnerTransaction;
   }
 
   // ==================== DATABASE ====================
