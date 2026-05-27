@@ -3,6 +3,8 @@ package server.network;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.common.ProtocolConstants;
+import server.common.entity.Auction;
+import server.common.entity.BidTransaction;
 import server.common.enums.NotificationType;
 import server.common.model.NotificationEvent;
 
@@ -251,6 +253,51 @@ public class NotificationDispatcher implements Runnable {
         .replace("\r", " ")
         .replace("\n", " ")
         .trim();
+  }
+
+
+  /**
+   * Phát payload realtime riêng cho UI đang mở đúng phòng đấu giá.
+   * Gói tin này chỉ được gửi sau khi transaction đã commit thành công xuống DB.
+   */
+  public void publishRealtimeBidUpdate(Auction auction, BidTransaction tx, boolean timeExtended) {
+    String leaderName = auction.getCurrentLeader() != null
+        ? auction.getCurrentLeader().getUsername()
+        : "";
+
+    String bidUpdateMessage = String.format(
+        "BID_UPDATE|%d|%d|%s|%d|%s|%d|%s|%s",
+        auction.getId(),
+        tx.getBidderId(),
+        tx.getAmount().toPlainString(),
+        auction.getTotalBids(),
+        encodeRealtimeField(leaderName),
+        auction.getSecondsRemaining(),
+        auction.getEndTime().toString(),
+        tx.isAutoBid() ? "true" : "false"
+    );
+    pushRawToAuctionWatchers(auction.getId(), bidUpdateMessage);
+
+    if (timeExtended) {
+      String timeExtendedMessage = String.format(
+          "TIME_EXTENDED|%d|%d|%s|%d",
+          auction.getId(),
+          auction.getSecondsRemaining(),
+          auction.getEndTime().toString(),
+          auction.getSnipeExtensionSeconds()
+      );
+      pushRawToAuctionWatchers(auction.getId(), timeExtendedMessage);
+    }
+  }
+
+  private String encodeRealtimeField(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace("\\", "\\\\")
+        .replace("|", "\\p")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r");
   }
   public int getQueueSize() {
     return queue.size();

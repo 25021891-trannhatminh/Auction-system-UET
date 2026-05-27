@@ -286,8 +286,15 @@ public class AuctionService {
       return false;
     }
     auctionManager.cancelAutoBid(auctionId, bidder);
-
+    // Rollback RAM về secondwinner đang WINNING
+    if (bidder.getId() == auction.getCurrentLeader().getId() && handleWinnerCancel(auction,bidder,auction.getWinningBid())){
+      List<BidTransaction> bidHistory = auction.getBidHistory();
+      BidTransaction secondTransaction = bidHistory.get(bidHistory.size() - 2);
+      int secondWinnerId = secondTransaction.getBidderId();
+      return placeBid(auctionId,secondWinnerId,secondTransaction.getAmount(),secondTransaction.isAutoBid());
+    }
     triggerAutoBids(auction, bidder);
+
     logger.info("Auto-bid cancel requested for auction {} by user {}", auctionId, bidder.getId());
     return true;
   }
@@ -604,7 +611,24 @@ public class AuctionService {
     }
   }
 
+  private boolean handleWinnerCancel(Auction auction, User cancelledBidder, BidTransaction winnerTransaction){
+    List<BidTransaction> bidHistory = auction.getBidHistory();
+    if (bidHistory.size() < 2) return false;
+    BidTransaction secondWinnerTransaction = bidHistory.get(bidHistory.size() - 2);
 
+    // Nếu bidHistory > 2 + second khác winner + second là manualBid
+    if (secondWinnerTransaction != null && secondWinnerTransaction.getBidderId() != cancelledBidder.getId()){
+      BigDecimal previousPrice = secondWinnerTransaction.getAmount();
+      User secondLeader = findUserById(secondWinnerTransaction.getBidderId());
+      if (secondLeader == null) {
+        logger.error("CANCEL AUTO-BID failed: Second leader = null");
+      }
+      // Rollback RAM
+      auction.rollbackLastBid(winnerTransaction,secondWinnerTransaction,previousPrice,secondLeader,auction.getEndTime(),auction.getLastBidTime());
+      return true;
+    }
+    return false;
+  }
 
   // ==================== DATABASE ====================
   /** Persist AutoBid vào DB

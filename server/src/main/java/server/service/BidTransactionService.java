@@ -113,7 +113,7 @@ public class BidTransactionService {
         // ── Bước 7: Notify sau khi DB commit thành công ───────────────────────────────────────
         // Gửi raw realtime trước để UI đang mở phòng auction cập nhật giá, bid count,
         // countdown và anti-snipe extension ngay sau khi transaction đã an toàn trong DB.
-        publishRealtimeBidUpdate(auction, tx, result.timeExtended());
+        NotificationDispatcher.getInstance().publishRealtimeBidUpdate(auction, tx, result.timeExtended());
 
         // Truyền toàn bộ result để notifyBidCommitted() lấy previousLeader đúng snapshot,
         // tránh bug gửi onOutbid nhầm cho người vừa thắng.
@@ -154,49 +154,6 @@ public class BidTransactionService {
     }
   }
 
-  /**
-   * Phát payload realtime riêng cho UI đang mở đúng phòng đấu giá.
-   * Gói tin này chỉ được gửi sau khi transaction đã commit thành công xuống DB.
-   */
-  private void publishRealtimeBidUpdate(Auction auction, BidTransaction tx, boolean timeExtended) {
-    String leaderName = auction.getCurrentLeader() != null
-        ? auction.getCurrentLeader().getUsername()
-        : "";
-
-    String bidUpdateMessage = String.format(
-        "BID_UPDATE|%d|%d|%s|%d|%s|%d|%s|%s",
-        auction.getId(),
-        tx.getBidderId(),
-        tx.getAmount().toPlainString(),
-        auction.getTotalBids(),
-        encodeRealtimeField(leaderName),
-        auction.getSecondsRemaining(),
-        auction.getEndTime().toString(),
-        tx.isAutoBid() ? "true" : "false"
-    );
-    NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), bidUpdateMessage);
-
-    if (timeExtended) {
-      String timeExtendedMessage = String.format(
-          "TIME_EXTENDED|%d|%d|%s|%d",
-          auction.getId(),
-          auction.getSecondsRemaining(),
-          auction.getEndTime().toString(),
-          auction.getSnipeExtensionSeconds()
-      );
-      NotificationDispatcher.getInstance().pushRawToAuctionWatchers(auction.getId(), timeExtendedMessage);
-    }
-  }
-
-  private String encodeRealtimeField(String value) {
-    if (value == null) {
-      return "";
-    }
-    return value.replace("\\", "\\\\")
-        .replace("|", "\\p")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r");
-  }
 
   /**
    * Lấy lịch sử đặt giá. Đọc danh sách DTO thô từ DAO lên và dùng hàm toEntity

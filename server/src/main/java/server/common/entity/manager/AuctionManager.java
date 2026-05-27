@@ -176,6 +176,10 @@ public class AuctionManager {
     public Optional<User> findUserById(int userId) {
         return Optional.ofNullable(userMap.get(userId));
     }
+//
+//    public User findUserById(int userId){
+//        return userMap.get(userId);
+//    }
 
     public Optional<User> findUserByUsername(String username) {
         return userMap.values().stream()
