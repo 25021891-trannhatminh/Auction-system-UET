@@ -107,7 +107,15 @@ public class PaymentService {
       int sellerId  = payment.getSellerId();
       BigDecimal amount = payment.getAmount();
 
-      // 2. Lock ví buyer & seller
+      // 2. Đảm bảo cả buyer và seller đều có wallet trước khi lock.
+      // Đây là lớp hạ tầng bảo vệ invariant của bảng wallets, không thay đổi luật thanh toán.
+      if (!ensureWalletsExist(conn, buyerId, sellerId)) {
+        conn.rollback();
+        logger.warn("processPayment() – Missing wallet could not be created for auction {}", auctionId);
+        return false;
+      }
+
+      // 3. Lock ví buyer & seller
       WalletDTO[] wallets = lockWallets(conn, buyerId, sellerId);
       if (wallets == null) {
         conn.rollback();
@@ -129,19 +137,27 @@ public class PaymentService {
       }
 
       // 4. Chuyển tiền trong transaction
-      walletDAO.withdrawInTx(conn, buyerWallet.getWalletId(), amount);
+      if (!walletDAO.withdrawInTx(conn, buyerWallet.getWalletId(), amount)) {
+        conn.rollback();
+        logger.warn("processPayment() – Buyer wallet changed before withdraw for auction {}", auctionId);
+        return false;
+      }
       walletDAO.depositInTx(conn, sellerWallet.getWalletId(), amount);
 
       // 5. Ghi log giao dịch
       walletTxDAO.logTransactionInTx(conn, buyerWallet.getWalletId(), buyerId,
           WalletTransactionType.PAYMENT, amount, auctionId,
-          "Payment for auction #" + auctionId + " – " + itemName);
+          "Payment for auction #" + auctionId + " - " + itemName);
       walletTxDAO.logTransactionInTx(conn, sellerWallet.getWalletId(), sellerId,
           WalletTransactionType.PAYMENT, amount, auctionId,
-          "Received payment for auction #" + auctionId + " – " + itemName);
+          "Received payment for auction #" + auctionId + " - " + itemName);
 
       // 6. Cập nhật payment → COMPLETED
-      paymentDAO.completePaymentInTx(conn, payment.getPaymentId());
+      if (!paymentDAO.completePaymentInTx(conn, payment.getPaymentId())) {
+        conn.rollback();
+        logger.warn("processPayment() – Payment status changed before complete for auction {}", auctionId);
+        return false;
+      }
 
       conn.commit();
 
@@ -184,12 +200,12 @@ public class PaymentService {
 
       WalletDTO wallet = walletDAO.lockByUserId(conn, userId);
       if (wallet == null) {
-        int walletId = walletDAO.createWalletIfNotExists(userId);
+        int walletId = walletDAO.createWalletInTx(conn, userId);
         if (walletId <= 0) {
           conn.rollback();
           return null;
         }
-        // Sau khi tạo, lấy lại wallet đã lock để có balance chính xác (số dư 0)
+        // Sau khi tạo trong cùng transaction, lấy lại wallet đã lock để có balance chính xác.
         wallet = walletDAO.lockByUserId(conn, userId);
         if (wallet == null) {
           conn.rollback();
@@ -314,6 +330,22 @@ public class PaymentService {
       return null;
     }
     return payment;
+  }
+
+  /**
+   * Đảm bảo các user liên quan đều có wallet trước khi xử lý payment.
+   *
+   * <p>Một số database cũ có thể thiếu wallet cho seller/buyer dù tài khoản đã tồn tại.
+   * Tạo ví tại đây chỉ phục hồi invariant hạ tầng để PaymentService tiếp tục lock và
+   * chuyển tiền trong cùng transaction.</p>
+   */
+  private boolean ensureWalletsExist(Connection conn, int... userIds) throws SQLException {
+    for (int userId : userIds) {
+      if (userId <= 0 || walletDAO.createWalletInTx(conn, userId) <= 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

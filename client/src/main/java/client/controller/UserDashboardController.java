@@ -152,6 +152,7 @@ public class UserDashboardController extends BaseDashboardController {
   private boolean transactionsLoaded;
   private boolean transactionsLoading;
   private boolean transactionsReloadPending;
+  private final Map<String, Boolean> paymentSubmittingByAuction = new HashMap<>();
   private BigDecimal currentWalletBalance = BigDecimal.ZERO;
   private boolean walletBalanceKnown;
   private final Map<String, Long> auctionSecondsSyncedAtMillis = new HashMap<>();
@@ -871,6 +872,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("PAYMENT_SUCCESS")) {
       String[] parts = message.trim().split("\\s+", 3);
       String auctionId = parts.length > 1 ? parts[1] : "";
+      clearPaymentSubmitting(auctionId);
       notifUIHandler.showSuccess(
           "Payment completed",
           auctionId.isBlank()
@@ -885,9 +887,11 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("PAYMENT_FAIL")) {
       String[] parts = message.trim().split("\\s+", 3);
+      String auctionId = parts.length > 2 ? parts[1] : "";
       String reason = parts.length > 2
           ? parts[2]
           : parts.length > 1 ? parts[1] : "PAYMENT_NOT_COMPLETED";
+      clearPaymentSubmitting(auctionId);
       notifUIHandler.showError("Payment failed", readablePaymentFailure(reason));
       reloadTransactionsFromServer();
       return;
@@ -941,6 +945,8 @@ public class UserDashboardController extends BaseDashboardController {
       transactionsLoading = false;
       transactions.clear();
       transactions.addAll(incomingTransactions);
+      syncWalletBalanceFromTransactionRows();
+      dropResolvedPaymentSubmissions();
       transactionsLoaded = true;
       applyTransactionStatsIfVisible();
       if ("winners".equals(currentSectionKey)) {
@@ -954,6 +960,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("USER_TRANSACTIONS_ERROR")) {
       transactionsLoading = false;
       transactions.clear();
+      paymentSubmittingByAuction.clear();
       transactionsLoaded = true;
       applyTransactionStatsIfVisible();
       if ("winners".equals(currentSectionKey)) {
@@ -2067,6 +2074,53 @@ public class UserDashboardController extends BaseDashboardController {
     walletBalanceKnown = true;
   }
 
+  private void syncWalletBalanceFromTransactionRows() {
+    for (TransactionData transaction : transactions) {
+      if (transaction == null || transaction.balanceAfter.isBlank()) {
+        continue;
+      }
+      updateKnownWalletBalance(transaction.balanceAfter);
+      return;
+    }
+  }
+
+  private boolean isPaymentSubmitting(TransactionData transaction) {
+    return transaction != null && isPaymentSubmitting(transaction.auctionId);
+  }
+
+  private boolean isPaymentSubmitting(String auctionId) {
+    return paymentSubmittingByAuction.containsKey(normalizeAuctionKey(auctionId));
+  }
+
+  private void markPaymentSubmitting(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (!key.isBlank()) {
+      paymentSubmittingByAuction.put(key, Boolean.TRUE);
+    }
+  }
+
+  private void clearPaymentSubmitting(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (!key.isBlank()) {
+      paymentSubmittingByAuction.remove(key);
+    }
+  }
+
+  private void dropResolvedPaymentSubmissions() {
+    if (paymentSubmittingByAuction.isEmpty()) {
+      return;
+    }
+
+    paymentSubmittingByAuction.keySet().removeIf(key -> {
+      TransactionData latest = findTransactionByAuctionId(key);
+      return latest == null || !latest.isPayable();
+    });
+  }
+
+  private String normalizeAuctionKey(String auctionId) {
+    return auctionId == null ? "" : auctionId.trim();
+  }
+
   private void reloadTransactionsFromServer() {
     transactionsLoaded = false;
     if (transactionsLoading) {
@@ -2217,12 +2271,13 @@ public class UserDashboardController extends BaseDashboardController {
 
   private Node transactionActionCell(TransactionData transaction) {
     if (transaction.isPayable()) {
-      Button payButton = new Button("Pay");
+      boolean submitting = isPaymentSubmitting(transaction);
+      Button payButton = new Button(submitting ? "Paying" : "Pay");
       payButton.setMnemonicParsing(false);
       payButton.getStyleClass().addAll("mini-action-btn", "transaction-pay-btn");
       payButton.setMaxWidth(Double.MAX_VALUE);
+      payButton.setDisable(submitting);
       payButton.setOnAction(event -> {
-        payButton.setDisable(true);
         submitTransactionPayment(transaction);
         event.consume();
       });
@@ -2431,15 +2486,54 @@ public class UserDashboardController extends BaseDashboardController {
     return prettyStatus(transaction.paymentStatus);
   }
 
+  private TransactionData findTransactionByAuctionId(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (key.isBlank()) {
+      return null;
+    }
+    for (TransactionData transaction : transactions) {
+      if (transaction != null && key.equals(normalizeAuctionKey(transaction.auctionId))) {
+        return transaction;
+      }
+    }
+    return null;
+  }
+
   private void submitTransactionPayment(TransactionData transaction) {
-    if (transaction == null || !transaction.isPayable()) {
+    TransactionData latestTransaction = findTransactionByAuctionId(
+        transaction == null ? "" : transaction.auctionId
+    );
+    if (latestTransaction == null) {
+      latestTransaction = transaction;
+    }
+
+    if (latestTransaction == null || !latestTransaction.isPayable()) {
       showTemporaryDetail("Payment unavailable", "This transaction is not payable in its current state.");
       return;
     }
-    if (transaction.auctionId.isBlank() || "0".equals(transaction.auctionId)) {
+    if (latestTransaction.auctionId.isBlank() || "0".equals(latestTransaction.auctionId)) {
       showTemporaryDetail("Payment unavailable", "This payable row is missing auction information.");
       return;
     }
+    if (isPaymentSubmitting(latestTransaction)) {
+      showTemporaryDetail("Payment processing", "This payment request is already being sent to the server.");
+      return;
+    }
+
+    BigDecimal amount = moneyValue(latestTransaction.amount);
+    if (walletBalanceKnown && currentWalletBalance.compareTo(amount) < 0) {
+      notifUIHandler.showError(
+          "Payment blocked",
+          "Wallet balance is not enough for this payment. Please deposit before paying."
+      );
+      showTemporaryDetail(
+          "Payment blocked",
+          "Required: " + formatMoney(amount.toPlainString()) + "\n"
+              + "Available: " + formatMoney(currentWalletBalance.toPlainString())
+      );
+      return;
+    }
+
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
@@ -2447,7 +2541,22 @@ public class UserDashboardController extends BaseDashboardController {
       notifUIHandler.showError("Payment failed", "Cannot connect to the server.");
       return;
     }
-    networkManager.send("CONFIRM_PAYMENT " + transaction.auctionId + " " + transaction.itemName);
+
+    markPaymentSubmitting(latestTransaction.auctionId);
+    refreshTransactionWorkspaceIfVisible();
+    networkManager.send(buildConfirmPaymentCommand(latestTransaction));
+  }
+
+  private String buildConfirmPaymentCommand(TransactionData transaction) {
+    String auctionId = normalizeAuctionKey(transaction.auctionId);
+    String itemName = commandSafeText(fallback(transaction.itemName, "Auction #" + auctionId));
+    return itemName.isBlank()
+        ? "CONFIRM_PAYMENT " + auctionId
+        : "CONFIRM_PAYMENT " + auctionId + " " + itemName;
+  }
+
+  private String commandSafeText(String value) {
+    return value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").trim();
   }
 
 

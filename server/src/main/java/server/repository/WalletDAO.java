@@ -174,28 +174,41 @@ public class WalletDAO {
         }
     }
 
-//    /**
-//     * Tạo ví trong transaction đang mở.
-//     *
-//     * <p>Dùng khi service cần tạo ví rồi ghi biến động số dư trong cùng một commit.</p>
-//     *
-//     * @param conn   Connection đang trong transaction
-//     * @param userId ID người dùng cần tạo ví
-//     * @return walletId vừa tạo, hoặc {@code -1} nếu thất bại
-//     * @throws SQLException nếu DB trả lỗi
-//     */
-//    public int createWalletInTx(Connection conn, int userId) throws SQLException {
-//        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
-//            ps.setInt(1, userId);
-//            if (ps.executeUpdate() > 0) {
-//                try (ResultSet rs = ps.getGeneratedKeys()) {
-//                    if (rs.next()) return rs.getInt(1);
-//                }
-//                return findWalletIdByUserId(conn, userId);
-//            }
-//        }
-//        return -1;
-//    }
+    /**
+     * Tạo ví trong transaction đang mở.
+     *
+     * <p>Dùng cho các flow cần đảm bảo ví tồn tại trước khi lock và chuyển tiền.
+     * Method này dùng đúng {@code Connection} của caller nên không phá vỡ transaction
+     * thanh toán hiện tại.</p>
+     *
+     * @param conn   Connection đang trong transaction
+     * @param userId ID người dùng cần tạo ví
+     * @return walletId hiện có hoặc vừa tạo, {@code -1} nếu không tạo được
+     * @throws SQLException nếu DB trả lỗi
+     */
+    public int createWalletInTx(Connection conn, int userId) throws SQLException {
+        if (userId <= 0) {
+            return -1;
+        }
+        int existingWalletId = findWalletIdByUserId(conn, userId);
+        if (existingWalletId > 0) {
+            return existingWalletId;
+        }
+
+        try (PreparedStatement ps = conn.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, userId);
+            if (ps.executeUpdate() > 0) {
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        return rs.getInt(1);
+                    }
+                }
+            }
+        } catch (SQLIntegrityConstraintViolationException duplicateWallet) {
+            return findWalletIdByUserId(conn, userId);
+        }
+        return findWalletIdByUserId(conn, userId);
+    }
 
     // ============================================================
     // Standalone UPDATE Methods

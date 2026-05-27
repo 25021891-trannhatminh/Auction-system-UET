@@ -278,7 +278,7 @@ public class ClientHandler implements Runnable{
                 try {
                     int    auctionId = Integer.parseInt(request[1]);
                     String itemName  = request.length > 2
-                        ? String.join(" ", Arrays.copyOfRange(request, 2, request.length))
+                        ? commandSafeText(String.join(" ", Arrays.copyOfRange(request, 2, request.length)))
                         : "Auction #" + auctionId;
 
                     PaymentAuthorization authorization = resolvePaymentAuthorization(auctionId);
@@ -293,7 +293,7 @@ public class ClientHandler implements Runnable{
                         ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
                         ClientManager.broadcast("USER_AUCTIONS_DIRTY");
                     } else {
-                        send("PAYMENT_FAIL " + auctionId + " PAYMENT_NOT_COMPLETED");
+                        send("PAYMENT_FAIL " + auctionId + " " + resolvePaymentCompletionFailure(auctionId));
                         ClientManager.broadcast("USER_TRANSACTIONS_DIRTY");
                     }
                 } catch (NumberFormatException e) {
@@ -1029,6 +1029,59 @@ public class ClientHandler implements Runnable{
             case "REFUND" -> normalizedNote.contains("received") ? amount : amount.negate();
             default -> BigDecimal.ZERO;
         };
+    }
+
+    private String resolvePaymentCompletionFailure(int auctionId) {
+        String sql = """
+            SELECT p.status,
+                   p.amount,
+                   bw.wallet_id AS buyer_wallet_id,
+                   bw.balance AS buyer_balance,
+                   sw.wallet_id AS seller_wallet_id
+            FROM payments p
+            LEFT JOIN wallets bw ON bw.user_id = p.buyer_id
+            LEFT JOIN wallets sw ON sw.user_id = p.seller_id
+            WHERE p.auction_id = ?
+            """;
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return "PAYMENT_NOT_FOUND";
+                }
+
+                int buyerWalletId = rs.getInt("buyer_wallet_id");
+                if (rs.wasNull() || buyerWalletId <= 0) {
+                    return "BUYER_WALLET_NOT_FOUND";
+                }
+                int sellerWalletId = rs.getInt("seller_wallet_id");
+                if (rs.wasNull() || sellerWalletId <= 0) {
+                    return "SELLER_WALLET_NOT_FOUND";
+                }
+
+                BigDecimal amount = rs.getBigDecimal("amount");
+                BigDecimal buyerBalance = rs.getBigDecimal("buyer_balance");
+                String status = rs.getString("status");
+                boolean insufficientBalance = amount != null
+                    && buyerBalance != null
+                    && buyerBalance.compareTo(amount) < 0;
+                if (insufficientBalance) {
+                    return "INSUFFICIENT_BALANCE";
+                }
+                if (status != null && !"PENDING".equalsIgnoreCase(status)) {
+                    return "PAYMENT_" + status.toUpperCase();
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return "PAYMENT_DB_ERROR";
+        }
+        return "PAYMENT_NOT_COMPLETED";
+    }
+
+    private String commandSafeText(String value) {
+        return value == null ? "" : value.replaceAll("[\r\n\t]+", " ").trim();
     }
 
     private PaymentAuthorization resolvePaymentAuthorization(int auctionId) {
