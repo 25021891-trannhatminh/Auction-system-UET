@@ -132,7 +132,8 @@ CREATE TABLE notifications (
     type       ENUM(
         'BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_LOST',
         'AUCTION_STARTED', 'AUCTION_ENDED', 'PAYMENT_RECEIVED',
-        'PAYMENT_DUE', 'SYSTEM', 'ITEM_APPROVED', 'ITEM_REJECTED'
+        'PAYMENT_DUE', 'SYSTEM', 'ITEM_APPROVED', 'ITEM_REJECTED',
+        'TIME_EXTENDED'
         ) NOT NULL,
     title      VARCHAR(255) NOT NULL,
     content    TEXT         NOT NULL,
