@@ -2939,7 +2939,7 @@
     -fx-background-radius: 20;
     -fx-border-color: rgba(255, 255, 255, 0.055);
     -fx-border-radius: 20;
-    -fx-padding: 14 16 14 16;
+    -fx-padding: 12 14 12 14;
 }
 
 .user-dashboard-root .transaction-wallet-metric-label {
@@ -2950,7 +2950,7 @@
 
 .user-dashboard-root .transaction-wallet-metric-value {
     -fx-text-fill: #f7f3e9;
-    -fx-font-size: 22px;
+    -fx-font-size: 18px;
     -fx-font-weight: bold;
 }
 

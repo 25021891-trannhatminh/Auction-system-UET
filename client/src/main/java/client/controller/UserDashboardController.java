@@ -1048,7 +1048,6 @@ public class UserDashboardController extends BaseDashboardController {
       transactionsLoading = false;
       transactions.clear();
       transactions.addAll(incomingTransactions);
-      syncWalletBalanceFromTransactionRows();
       dropResolvedPaymentSubmissions();
       transactionsLoaded = true;
       applyTransactionStatsIfVisible();
@@ -2178,26 +2177,7 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void addTransactionOverviewCard() {
-    BigDecimal completedPayments = BigDecimal.ZERO;
-    BigDecimal pendingDue = BigDecimal.ZERO;
-
-    for (TransactionData transaction : transactions) {
-      if (transaction == null) {
-        continue;
-      }
-      BigDecimal amount = moneyValue(transaction.amount);
-      if (transaction.isWallet()) {
-        continue;
-      }
-      if (transaction.isPayable()) {
-        pendingDue = pendingDue.add(amount);
-      } else {
-        String status = normalize(resolveTransactionStatus(transaction));
-        if (status.equals("completed") || status.equals("refunded")) {
-          completedPayments = completedPayments.add(amount);
-        }
-      }
-    }
+    TransactionPaymentSummary paymentSummary = buildTransactionPaymentSummary();
 
     HBox card = new HBox(18);
     card.setAlignment(Pos.CENTER_LEFT);
@@ -2236,31 +2216,73 @@ public class UserDashboardController extends BaseDashboardController {
 
     VBox metrics = new VBox(12);
     metrics.setMinWidth(0);
-    metrics.setPrefWidth(360);
+    metrics.setPrefWidth(520);
     metrics.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(metrics, Priority.ALWAYS);
 
-    HBox topMetrics = new HBox(12);
-    topMetrics.setAlignment(Pos.CENTER_RIGHT);
-    Region topSpacer = new Region();
-    HBox.setHgrow(topSpacer, Priority.ALWAYS);
-    topMetrics.getChildren().addAll(
-        topSpacer,
-        transactionMetricCard("Paid", formatMoney(completedPayments.toPlainString())),
-        transactionMetricCard("Pending", formatMoney(pendingDue.toPlainString()))
-    );
+    GridPane metricGrid = new GridPane();
+    metricGrid.setHgap(12);
+    metricGrid.setVgap(12);
+    metricGrid.setAlignment(Pos.CENTER_RIGHT);
+    metricGrid.setMaxWidth(Double.MAX_VALUE);
+    metricGrid.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
+    metricGrid.add(transactionMetricCard(
+        "Paid",
+        formatMoney(paymentSummary.paidByBuyer.toPlainString())
+    ), 0, 0);
+    metricGrid.add(transactionMetricCard(
+        "Received",
+        formatMoney(paymentSummary.receivedBySeller.toPlainString())
+    ), 1, 0);
+    metricGrid.add(transactionMetricCard(
+        "To Pay",
+        formatMoney(paymentSummary.pendingBuyerPay.toPlainString())
+    ), 0, 1);
+    metricGrid.add(transactionMetricCard(
+        "To Receive",
+        formatMoney(paymentSummary.pendingSellerReceive.toPlainString())
+    ), 1, 1);
 
-    metrics.getChildren().add(topMetrics);
+    metrics.getChildren().add(metricGrid);
     card.getChildren().addAll(main, metrics);
     workspaceBox.getChildren().add(card);
+  }
+
+  private TransactionPaymentSummary buildTransactionPaymentSummary() {
+    TransactionPaymentSummary summary = new TransactionPaymentSummary();
+    for (TransactionData transaction : transactions) {
+      if (transaction == null || transaction.isWallet()) {
+        continue;
+      }
+
+      BigDecimal amount = moneyValue(transaction.amount).abs();
+      if (transaction.isPendingSettlement()) {
+        if (transaction.isBuyer()) {
+          summary.pendingBuyerPay = summary.pendingBuyerPay.add(amount);
+        } else if (transaction.isSeller()) {
+          summary.pendingSellerReceive = summary.pendingSellerReceive.add(amount);
+        }
+        continue;
+      }
+
+      if (transaction.isCompletedPayment()) {
+        if (transaction.isBuyer()) {
+          summary.paidByBuyer = summary.paidByBuyer.add(amount);
+        } else if (transaction.isSeller()) {
+          summary.receivedBySeller = summary.receivedBySeller.add(amount);
+        }
+      }
+    }
+    return summary;
   }
 
   private VBox transactionMetricCard(String labelText, String valueText) {
     VBox metric = new VBox(6);
     metric.setMinWidth(0);
-    metric.setPrefWidth(166);
+    metric.setPrefWidth(230);
     metric.setMaxWidth(Double.MAX_VALUE);
     HBox.setHgrow(metric, Priority.ALWAYS);
+    GridPane.setHgrow(metric, Priority.ALWAYS);
     metric.getStyleClass().add("transaction-wallet-metric");
 
     Label label = new Label(labelText);
@@ -2284,16 +2306,6 @@ public class UserDashboardController extends BaseDashboardController {
   private void updateKnownWalletBalance(String rawBalance) {
     currentWalletBalance = moneyValue(rawBalance);
     walletBalanceKnown = true;
-  }
-
-  private void syncWalletBalanceFromTransactionRows() {
-    for (TransactionData transaction : transactions) {
-      if (transaction == null || transaction.balanceAfter.isBlank()) {
-        continue;
-      }
-      updateKnownWalletBalance(transaction.balanceAfter);
-      return;
-    }
   }
 
   private boolean isPaymentSubmitting(TransactionData transaction) {
@@ -2508,9 +2520,17 @@ public class UserDashboardController extends BaseDashboardController {
     if (transaction.isWallet()) {
       return prettyStatus(transaction.walletTxType);
     }
-    if (normalize(transaction.paymentStatus).equals("refunded")
-        || normalize(transaction.walletTxType).equals("refund")) {
+    if (transaction.isRefundedPayment() || normalize(transaction.walletTxType).equals("refund")) {
       return "Refund";
+    }
+    if (transaction.isFailedPayment()) {
+      return "Failed";
+    }
+    if (transaction.isPendingSettlement()) {
+      return transaction.isBuyer() ? "To Pay" : "To Receive";
+    }
+    if (transaction.isCompletedPayment()) {
+      return transaction.isSeller() ? "Received" : "Paid";
     }
     return "Payment";
   }
@@ -2536,10 +2556,17 @@ public class UserDashboardController extends BaseDashboardController {
           ? "Refunded • " + itemName
           : "Refunded to buyer • " + itemName;
     }
-    if (transaction.isSeller()) {
-      return "Received from sold auction • " + itemName;
+    if (status.equals("failed")) {
+      return transaction.isBuyer()
+          ? "Payment failed • " + itemName
+          : "Buyer payment failed • " + itemName;
     }
-    return "Paid for winning auction • " + itemName;
+    if (status.equals("completed")) {
+      return transaction.isSeller()
+          ? "Received from sold auction • " + itemName
+          : "Paid for winning auction • " + itemName;
+    }
+    return prettyStatus(transaction.paymentStatus) + " • " + itemName;
   }
 
   private String cleanWalletNote(String note) {
@@ -2682,6 +2709,13 @@ public class UserDashboardController extends BaseDashboardController {
       return prettyStatus(fallback(transaction.paymentStatus, "COMPLETED"));
     }
     return prettyStatus(transaction.paymentStatus);
+  }
+
+  private static final class TransactionPaymentSummary {
+    private BigDecimal paidByBuyer = BigDecimal.ZERO;
+    private BigDecimal receivedBySeller = BigDecimal.ZERO;
+    private BigDecimal pendingBuyerPay = BigDecimal.ZERO;
+    private BigDecimal pendingSellerReceive = BigDecimal.ZERO;
   }
 
   private TransactionData findTransactionByAuctionId(String auctionId) {

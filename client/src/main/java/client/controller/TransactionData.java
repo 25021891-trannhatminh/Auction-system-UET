@@ -66,9 +66,25 @@ final class TransactionData {
   }
 
   boolean isPayable() {
-    return isBuyer()
+    return isBuyer() && isPendingSettlement();
+  }
+
+  boolean isPendingSettlement() {
+    return !isWallet()
         && "PENDING".equalsIgnoreCase(paymentStatus)
         && "FINISHED".equalsIgnoreCase(auctionStatus);
+  }
+
+  boolean isCompletedPayment() {
+    return !isWallet() && "COMPLETED".equalsIgnoreCase(paymentStatus);
+  }
+
+  boolean isRefundedPayment() {
+    return !isWallet() && "REFUNDED".equalsIgnoreCase(paymentStatus);
+  }
+
+  boolean isFailedPayment() {
+    return !isWallet() && "FAILED".equalsIgnoreCase(paymentStatus);
   }
 
   boolean isWallet() {

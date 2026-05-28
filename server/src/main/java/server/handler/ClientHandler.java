@@ -875,7 +875,7 @@ public class ClientHandler implements Runnable{
                 WHERE wt.user_id = ?
                   AND wt.type IN ('DEPOSIT', 'WITHDRAW')
             ) tx
-            ORDER BY tx.created_at DESC, tx.payment_id DESC, tx.wallet_tx_id DESC
+            ORDER BY COALESCE(tx.paid_at, tx.created_at) DESC, tx.payment_id DESC, tx.wallet_tx_id DESC
             """;
 
         try (Connection conn = DBConnection.getConnection();
