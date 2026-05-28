@@ -204,8 +204,9 @@ public class Auction extends Entity {
             throw new AuctionStateException(getId(), status);
         }
 
-        // Không cho phép seller tự bid vào phiên của mình
-        if (bidder.getId() == sellerId) {
+        // Không cho phép seller tự bid vào phiên của mình hoặc winner self bid
+        int winnerID = currentLeader.getId();
+        if (bidder.getId() == sellerId || bidder.getId() == winnerID) {
             throw new SelfBidException(sellerId, this.getId());
         }
 
