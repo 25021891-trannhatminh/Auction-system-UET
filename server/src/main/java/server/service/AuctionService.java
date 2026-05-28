@@ -211,13 +211,13 @@ public class AuctionService {
     // Nếu ném exception nghiệp vụ → re-throw thẳng lên BidHandler.
     // Nếu trả null → lỗi hạ tầng (DB/lock), không rollback thêm gì ở đây.
     BidTransactionService txService = new BidTransactionService();
-    BidTransaction manualTx = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
+    BidTransaction transaction = txService.executePlaceBidFlow(auctionId, userId, amount, isAutoBid);
     // Nếu persist Auto-Bid thì end không xử lý thêm
-    if (isAutoBid){
+    if (isAutoBid && transaction != null){
       logger.info("placeBid() – auto-bid for auction {} by user {}", auctionId, userId);
       return true;
     }
-    if (manualTx == null) {
+    if (transaction == null) {
       logger.error("placeBid() – infrastructure failure for auction {} by user {}", auctionId, userId);
       return false;
     }
