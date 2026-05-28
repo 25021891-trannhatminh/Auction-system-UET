@@ -3270,7 +3270,7 @@ public class UserDashboardController extends BaseDashboardController {
     VBox heading = new VBox(4);
     Label title = new Label("Bid visualisation");
     title.getStyleClass().add("auction-visualisation-title");
-    Label caption = new Label("Price movement is loaded from bid_transactions for this auction.");
+    Label caption = new Label("See how the auction price changed over time.");
     caption.getStyleClass().add("auction-visualisation-caption");
     caption.setWrapText(true);
     heading.getChildren().addAll(title, caption);
@@ -3952,7 +3952,29 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
     if (message.startsWith("JOIN_AUCTION_FAIL")) {
-      showBidFeedback(message, true);
+      handleJoinAuctionFail(message);
+    }
+  }
+
+  private void handleJoinAuctionFail(String message) {
+    String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 2);
+    String reason = parts.length > 1 ? parts[1] : "";
+    String readableMessage = readableJoinAuctionFailure(reason);
+
+    showAuctionRoomFeedback(readableMessage, true);
+    if (isClosedJoinFailure(reason)) {
+      notifUIHandler.showInfo("Auction closed", readableMessage);
+    } else {
+      notifUIHandler.showError("Auction unavailable", readableMessage);
+    }
+  }
+
+  private void showAuctionRoomFeedback(String message, boolean error) {
+    if (activeAuctionBidMessageLabel != null) {
+      activeAuctionBidMessageLabel.setText(message == null ? "" : message);
+      activeAuctionBidMessageLabel.setStyle(error
+          ? "-fx-text-fill: #a34f4f; -fx-font-size: 11px; -fx-font-weight: bold;"
+          : "-fx-text-fill: #738581; -fx-font-size: 11px;");
     }
   }
 
@@ -4263,6 +4285,29 @@ public class UserDashboardController extends BaseDashboardController {
         card.snipeWindowSeconds,
         card.snipeExtensionSeconds
     );
+  }
+
+  private String readableJoinAuctionFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim().toUpperCase();
+    return switch (normalized) {
+      case "NOT_LOGGED_IN" -> "Please sign in before opening this auction.";
+      case "INVALID_FORMAT", "INVALID_AUCTION_ID" -> "This auction link is invalid. Please go back and open it again.";
+      case "AUCTION_CLOSED", "AUCTION_FINISHED", "AUCTION_ENDED" ->
+          "This auction has already ended, so live bidding is no longer available.";
+      case "AUCTION_NOT_FOUND" ->
+          "This auction is no longer available for live viewing.";
+      case "SYSTEM_ERROR" -> "The server could not open this auction right now. Please try again.";
+      default -> normalized.isBlank()
+          ? "This auction cannot be joined right now."
+          : toSentenceCase(normalized.replace('_', ' '));
+    };
+  }
+
+  private boolean isClosedJoinFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim().toUpperCase();
+    return normalized.equals("AUCTION_CLOSED")
+        || normalized.equals("AUCTION_FINISHED")
+        || normalized.equals("AUCTION_ENDED");
   }
 
   private String readableAutoBidFailure(String reason) {
