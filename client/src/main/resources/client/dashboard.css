@@ -5341,3 +5341,24 @@
 .user-dashboard-root .auction-detail-side-panel .auction-detail-meta-row {
     -fx-padding: 10 0 10 0;
 }
+
+/* Admin home table simplification */
+.admin-dashboard-root .filter-chip-active {
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .overview-filter-chip {
+    -fx-font-size: 13px;
+    -fx-padding: 8 18 8 18;
+}
+
+.admin-dashboard-root .compact-action-btn {
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-font-size: 10px;
+    -fx-font-weight: 900;
+    -fx-padding: 4 8 4 8;
+    -fx-min-height: 24;
+    -fx-pref-height: 24;
+}

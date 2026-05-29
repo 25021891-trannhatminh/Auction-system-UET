@@ -48,7 +48,7 @@ public class AdminDashboardController extends BaseDashboardController {
     @FXML private Label detailDescriptionLabel;
     @FXML private Button primaryActionButton;
 
-    private static final double ACTION_PRIMARY_WIDTH = 86;
+    private static final double ACTION_PRIMARY_WIDTH = 88;
     private static final double ACTION_MORE_WIDTH = 28;
     private static final double ACTION_GAP = 6;
     private static final double REVIEW_IMAGE_HEIGHT = 265;
@@ -383,15 +383,15 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (msg.startsWith("ADMIN_CLOSE_SUCCESS")) {
             requestLiveAdminData();
-            notifUIHandler.showSuccess("Auction closed", "Auction has been force closed by the server.");
-            showDetail("Auction closed", "Server đã xử lý ADMIN_FORCE_CLOSE và refresh lại Auctions.");
+            notifUIHandler.showSuccess("Auction canceled", "Auction has been canceled by the server.");
+            showDetail("Auction canceled", "Server đã xử lý ADMIN_FORCE_CLOSE và refresh lại Auctions.");
             return;
         }
 
         if (msg.startsWith("ADMIN_CLOSE_FAIL")) {
             String reason = decodeJoinedPayload(msg.substring("ADMIN_CLOSE_FAIL".length()).trim());
-            notifUIHandler.showError("Force close failed", fallback(reason, "Server rejected the request."));
-            showDetail("Force close failed", fallback(reason, "Server không force close được auction."));
+            notifUIHandler.showError("Cancel failed", fallback(reason, "Server rejected the request."));
+            showDetail("Cancel failed", fallback(reason, "Server không cancel được auction."));
             return;
         }
 
@@ -648,7 +648,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
         String detail = "Auction AUC-" + auctionId
             + " is linked to ITEM-" + itemId
-            + " (" + itemName + "). Admin-home chỉ giám sát và force close khi cần, "
+            + " (" + itemName + "). Admin-home chỉ giám sát và cancel khi cần, "
             + "không sửa bid, giá, wallet hay payment.";
 
         if (isForceClosableStatus(status)) {
@@ -659,8 +659,7 @@ public class AdminDashboardController extends BaseDashboardController {
                 bidCount + " bids",
                 status,
                 detail,
-                "View",
-                "Force Close"
+                "Cancel"
             );
         }
 
@@ -670,8 +669,7 @@ public class AdminDashboardController extends BaseDashboardController {
             currentPrice,
             bidCount + " bids",
             status,
-            detail,
-            "View"
+            detail
         );
     }
 
@@ -681,18 +679,14 @@ public class AdminDashboardController extends BaseDashboardController {
         String normalizedStatus = normalize(status);
 
         if (normalizedRole.equals("admin")) {
-            return new String[]{"View"};
+            return new String[]{};
         }
 
         if (normalizedStatus.equals("active")) {
-            return new String[]{"View", "Ban"};
+            return new String[]{"Ban"};
         }
 
-        if (normalizedStatus.equals("suspended") || normalizedStatus.equals("banned")) {
-            return new String[]{"View", "Restore"};
-        }
-
-        return new String[]{"View"};
+        return new String[]{};
     }
 
 
@@ -766,8 +760,8 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private String getDefaultFilter(String sectionKey) {
         return switch (sectionKey) {
-            case "dashboard" -> "Overview";
-            default -> "All";
+            case "dashboard" -> "overview";
+            default -> "all";
         };
     }
 
@@ -834,7 +828,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderDashboard(String filter) {
         setTableTitle("Operational Queue");
-        renderChips(filter, "Overview", "PENDING_REVIEW", "RUNNING", "FINISHED", "Risk accounts");
+        renderChips(filter, "overview");
         updateDashboardStats();
 
         addHeader("Queue", "Count", "Signal");
@@ -880,7 +874,7 @@ public class AdminDashboardController extends BaseDashboardController {
             String.valueOf(riskUsers),
             "Moderate",
             "SUSPENDED",
-            "Open Users to ban or restore accounts through existing backend commands.",
+            "Open Users to inspect risk accounts and ban active users through existing backend commands.",
             "Open"
         ));
 
@@ -892,7 +886,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderUsers(String filter) {
         setTableTitle("User Accounts");
-        renderChips(filter, "All", "ACTIVE", "SUSPENDED", "BANNED", "USER", "ADMIN");
+        renderChips(filter, "all", "active", "suspended", "banned", "user", "admin");
 
         List<AdminRow> rows = currentUserRows();
         updateStats(
@@ -905,19 +899,19 @@ public class AdminDashboardController extends BaseDashboardController {
             new String[]{"Total Users", "Active", "Suspended", "Banned"}
         );
 
-        addHeader("Account", "Role", "Last Login");
+        addHeader("Account", "Role", "");
         addFilteredRows(rows, filter);
 
         showDetail(
             "User management",
-            dataSourceNote(usersLoaded) + " Ban/Restore là các action thật đang map vào backend."
+            dataSourceNote(usersLoaded) + " Ban là action thật đang map vào backend."
         );
     }
 
 
     private void renderAuctions(String filter) {
         setTableTitle("Auction Sessions");
-        renderChips(filter, "All", "OPEN", "RUNNING", "FINISHED", "PAID", "CANCELED");
+        renderChips(filter, "all", "open", "running", "finished", "paid", "canceled");
 
         List<AdminRow> rows = currentAuctionRows();
         updateStats(
@@ -935,7 +929,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
         showDetail(
             "Auction monitoring",
-            dataSourceNote(auctionsLoaded) + " OPEN/RUNNING có Force Close; FINISHED/PAID chỉ xem."
+            dataSourceNote(auctionsLoaded) + " OPEN/RUNNING có Cancel nối vào lệnh force close backend; FINISHED/PAID chỉ xem."
         );
     }
 
@@ -1020,8 +1014,7 @@ public class AdminDashboardController extends BaseDashboardController {
             "DB",
             "Waiting",
             "LOADING",
-            "Admin-home không render user giả; bảng này sẽ tự cập nhật khi server trả dữ liệu.",
-            "Refresh"
+            "Admin-home không render user giả; bảng này sẽ tự cập nhật khi server trả dữ liệu."
         ));
         return rows;
     }
@@ -1035,8 +1028,7 @@ public class AdminDashboardController extends BaseDashboardController {
             "DB",
             "Waiting",
             "LOADING",
-            "Admin-home không render auction giả; bảng này sẽ tự cập nhật khi server trả dữ liệu.",
-            "Refresh"
+            "Admin-home không render auction giả; bảng này sẽ tự cập nhật khi server trả dữ liệu."
         ));
         return rows;
     }
@@ -1162,6 +1154,10 @@ public class AdminDashboardController extends BaseDashboardController {
                 chip.getStyleClass().add("filter-chip");
             }
 
+            if (isDashboardTable()) {
+                chip.getStyleClass().add("overview-filter-chip");
+            }
+
             chip.setOnAction(event -> {
                 activeFilter = labelText;
                 resetPageForSection(currentSectionKey);
@@ -1193,9 +1189,18 @@ public class AdminDashboardController extends BaseDashboardController {
 
         header.add(mainHeader, 0, 0);
         header.add(firstHeader, 1, 0);
-        header.add(secondHeader, 2, 0);
-        header.add(statusHeader, 3, 0);
-        header.add(actionHeader, 4, 0);
+
+        if (isDashboardTable()) {
+            header.add(secondHeader, 2, 0);
+            header.add(statusHeader, 3, 0);
+        } else if (isUsersTable()) {
+            header.add(statusHeader, 2, 0);
+            header.add(actionHeader, 3, 0);
+        } else {
+            header.add(secondHeader, 2, 0);
+            header.add(statusHeader, 3, 0);
+            header.add(actionHeader, 4, 0);
+        }
 
         dataRowsBox.getChildren().add(header);
     }
@@ -1218,18 +1223,32 @@ public class AdminDashboardController extends BaseDashboardController {
         grid.setMaxWidth(Double.MAX_VALUE);
         grid.setMinWidth(0);
 
-        ColumnConstraints mainColumn = percentColumn(42);
-        ColumnConstraints firstColumn = percentColumn(13);
-        ColumnConstraints secondColumn = percentColumn(15);
-        ColumnConstraints statusColumn = percentColumn(15);
-        ColumnConstraints actionColumn = percentColumn(15);
+        if (isDashboardTable()) {
+            grid.getColumnConstraints().addAll(
+                percentColumn(50),
+                percentColumn(14),
+                percentColumn(18),
+                percentColumn(18)
+            );
+            return grid;
+        }
+
+        if (isUsersTable()) {
+            grid.getColumnConstraints().addAll(
+                percentColumn(52),
+                percentColumn(16),
+                percentColumn(16),
+                percentColumn(16)
+            );
+            return grid;
+        }
 
         grid.getColumnConstraints().addAll(
-            mainColumn,
-            firstColumn,
-            secondColumn,
-            statusColumn,
-            actionColumn
+            percentColumn(42),
+            percentColumn(13),
+            percentColumn(15),
+            percentColumn(15),
+            percentColumn(15)
         );
         return grid;
     }
@@ -1246,6 +1265,18 @@ public class AdminDashboardController extends BaseDashboardController {
         ColumnConstraints constraints = new ColumnConstraints(width, width, width);
         constraints.setHgrow(Priority.NEVER);
         return constraints;
+    }
+
+    private boolean isDashboardTable() {
+        return "dashboard".equals(currentSectionKey);
+    }
+
+    private boolean isUsersTable() {
+        return "users".equals(currentSectionKey);
+    }
+
+    private int tableColumnCount() {
+        return isDashboardTable() || isUsersTable() ? 4 : 5;
     }
 
     private AdminRow row(
@@ -1319,6 +1350,13 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
+        if (isDashboardTable()) {
+            for (AdminRow row : filteredRows) {
+                addRow(row);
+            }
+            return;
+        }
+
         int totalPages = totalPages(filteredRows.size(), ADMIN_ROWS_PER_PAGE);
         int currentPage = clampPage(getPageForSection(currentSectionKey), totalPages);
         setPageForSection(currentSectionKey, currentPage);
@@ -1327,9 +1365,11 @@ public class AdminDashboardController extends BaseDashboardController {
             addRow(row);
         }
 
-        dataRowsBox.getChildren().add(
-            buildSectionPagination(currentSectionKey, totalPages, filteredRows.size())
-        );
+        if (totalPages > 1) {
+            dataRowsBox.getChildren().add(
+                buildSectionPagination(currentSectionKey, totalPages, filteredRows.size())
+            );
+        }
     }
 
     private HBox buildSectionPagination(String sectionKey, int totalPages, int totalItems) {
@@ -1573,13 +1613,23 @@ public class AdminDashboardController extends BaseDashboardController {
         empty.getStyleClass().add("row-meta");
         empty.setWrapText(true);
         empty.setMaxWidth(Double.MAX_VALUE);
-        GridPane.setColumnSpan(empty, 5);
+        GridPane.setColumnSpan(empty, tableColumnCount());
 
         row.add(empty, 0, 0);
         dataRowsBox.getChildren().add(row);
     }
 
     private void addRow(AdminRow data) {
+        if (isDashboardTable()) {
+            addDashboardRow(data);
+            return;
+        }
+
+        if (isUsersTable()) {
+            addUserRow(data);
+            return;
+        }
+
         GridPane row = createTableGrid("data-row");
         row.setOnMouseClicked(event -> {
             if (data.itemData) {
@@ -1589,12 +1639,75 @@ public class AdminDashboardController extends BaseDashboardController {
             showDetail(data.title, data.detail);
         });
 
+        VBox mainCell = buildMainCell(data);
+        Label firstMetric = rowMetric(data.firstValue);
+        Label secondMetric = rowMetric(data.secondValue);
+        Label status = statusBadge(data.status);
+        GridPane actions = rowActions(data);
+
+        row.add(mainCell, 0, 0);
+        row.add(firstMetric, 1, 0);
+        row.add(secondMetric, 2, 0);
+        row.add(status, 3, 0);
+        row.add(actions, 4, 0);
+
+        GridPane.setHalignment(firstMetric, HPos.CENTER);
+        GridPane.setHalignment(secondMetric, HPos.CENTER);
+        GridPane.setHalignment(status, HPos.CENTER);
+        GridPane.setHalignment(actions, HPos.CENTER);
+
+        dataRowsBox.getChildren().add(row);
+    }
+
+    private void addDashboardRow(AdminRow data) {
+        GridPane row = createTableGrid("data-row");
+        row.setOnMouseClicked(event -> openDashboardQueue(data));
+
+        VBox mainCell = buildMainCell(data);
+        Label countMetric = rowMetric(data.firstValue);
+        Label signalMetric = rowMetric(data.secondValue);
+        Label status = statusBadge(data.status);
+
+        row.add(mainCell, 0, 0);
+        row.add(countMetric, 1, 0);
+        row.add(signalMetric, 2, 0);
+        row.add(status, 3, 0);
+
+        GridPane.setHalignment(countMetric, HPos.CENTER);
+        GridPane.setHalignment(signalMetric, HPos.CENTER);
+        GridPane.setHalignment(status, HPos.CENTER);
+
+        dataRowsBox.getChildren().add(row);
+    }
+
+    private void addUserRow(AdminRow data) {
+        GridPane row = createTableGrid("data-row");
+        row.setOnMouseClicked(event -> showDetail(data.title, data.detail));
+
+        VBox mainCell = buildMainCell(data);
+        Label roleMetric = rowMetric(data.firstValue);
+        Label status = statusBadge(data.status);
+        GridPane actions = rowActions(data);
+
+        row.add(mainCell, 0, 0);
+        row.add(roleMetric, 1, 0);
+        row.add(status, 2, 0);
+        row.add(actions, 3, 0);
+
+        GridPane.setHalignment(roleMetric, HPos.CENTER);
+        GridPane.setHalignment(status, HPos.CENTER);
+        GridPane.setHalignment(actions, HPos.CENTER);
+
+        dataRowsBox.getChildren().add(row);
+    }
+
+    private VBox buildMainCell(AdminRow data) {
         VBox mainCell = new VBox(2);
         mainCell.setMinWidth(0);
         mainCell.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(mainCell, Priority.ALWAYS);
 
-        if (data.actions.length > 0) {
+        if (shouldRenderTitleButton(data)) {
             Button link = new Button(data.title);
             link.setMnemonicParsing(false);
             link.getStyleClass().add("row-link");
@@ -1620,24 +1733,19 @@ public class AdminDashboardController extends BaseDashboardController {
         meta.setTextOverrun(OverrunStyle.ELLIPSIS);
 
         mainCell.getChildren().add(meta);
+        return mainCell;
+    }
 
-        Label firstMetric = rowMetric(data.firstValue);
-        Label secondMetric = rowMetric(data.secondValue);
-        Label status = statusBadge(data.status);
-        GridPane actions = rowActions(data);
+    private boolean shouldRenderTitleButton(AdminRow data) {
+        if (data == null || data.actions.length == 0) {
+            return false;
+        }
 
-        row.add(mainCell, 0, 0);
-        row.add(firstMetric, 1, 0);
-        row.add(secondMetric, 2, 0);
-        row.add(status, 3, 0);
-        row.add(actions, 4, 0);
-
-        GridPane.setHalignment(firstMetric, HPos.CENTER);
-        GridPane.setHalignment(secondMetric, HPos.CENTER);
-        GridPane.setHalignment(status, HPos.CENTER);
-        GridPane.setHalignment(actions, HPos.CENTER);
-
-        dataRowsBox.getChildren().add(row);
+        String action = normalize(resolvePrimaryAction(data));
+        return action.equals("open")
+            || action.equals("view")
+            || action.equals("review")
+            || action.equals("view auction");
     }
 
     private String resolvePrimaryAction(AdminRow data) {
@@ -1651,18 +1759,19 @@ public class AdminDashboardController extends BaseDashboardController {
         actions.setMinWidth(0);
         actions.setMaxWidth(Double.MAX_VALUE);
 
-        actions.getColumnConstraints().addAll(
-            fixedColumn(ACTION_PRIMARY_WIDTH),
-            fixedColumn(ACTION_MORE_WIDTH)
-        );
-
         if (data.actions.length == 0) {
+            actions.getColumnConstraints().add(fixedColumn(ACTION_PRIMARY_WIDTH));
             Region emptyAction = new Region();
-            emptyAction.setMinWidth(ACTION_PRIMARY_WIDTH + ACTION_MORE_WIDTH + ACTION_GAP);
-            emptyAction.setPrefWidth(ACTION_PRIMARY_WIDTH + ACTION_MORE_WIDTH + ACTION_GAP);
-            GridPane.setColumnSpan(emptyAction, 2);
+            emptyAction.setMinWidth(ACTION_PRIMARY_WIDTH);
+            emptyAction.setPrefWidth(ACTION_PRIMARY_WIDTH);
             actions.add(emptyAction, 0, 0);
             return actions;
+        }
+
+        boolean hasMoreActions = data.actions.length > 1;
+        actions.getColumnConstraints().add(fixedColumn(ACTION_PRIMARY_WIDTH));
+        if (hasMoreActions) {
+            actions.getColumnConstraints().add(fixedColumn(ACTION_MORE_WIDTH));
         }
 
         String primaryAction = resolvePrimaryAction(data);
@@ -1670,6 +1779,9 @@ public class AdminDashboardController extends BaseDashboardController {
         Button primary = new Button(primaryAction);
         primary.setMnemonicParsing(false);
         primary.getStyleClass().add("mini-action-btn");
+        if (isUsersTable() || "auctions".equals(currentSectionKey)) {
+            primary.getStyleClass().add("compact-action-btn");
+        }
         primary.setMinWidth(ACTION_PRIMARY_WIDTH);
         primary.setPrefWidth(ACTION_PRIMARY_WIDTH);
         primary.setMaxWidth(ACTION_PRIMARY_WIDTH);
@@ -1679,7 +1791,7 @@ public class AdminDashboardController extends BaseDashboardController {
         actions.add(primary, 0, 0);
         GridPane.setHalignment(primary, HPos.CENTER);
 
-        if (data.actions.length > 1) {
+        if (hasMoreActions) {
             MenuButton more = new MenuButton("...");
             more.setMnemonicParsing(false);
             more.getStyleClass().add("more-action-btn");
@@ -1696,13 +1808,6 @@ public class AdminDashboardController extends BaseDashboardController {
 
             actions.add(more, 1, 0);
             GridPane.setHalignment(more, HPos.CENTER);
-        } else {
-            Region placeholder = new Region();
-            placeholder.setMinWidth(ACTION_MORE_WIDTH);
-            placeholder.setPrefWidth(ACTION_MORE_WIDTH);
-            placeholder.setMaxWidth(ACTION_MORE_WIDTH);
-            placeholder.setOpacity(0);
-            actions.add(placeholder, 1, 0);
         }
 
         return actions;
@@ -1725,7 +1830,7 @@ public class AdminDashboardController extends BaseDashboardController {
             return;
         }
 
-        if (normalizedAction.equals("force close")) {
+        if (normalizedAction.equals("force close") || normalizedAction.equals("cancel")) {
             forceCloseAuction(data);
             return;
         }
@@ -1938,7 +2043,7 @@ public class AdminDashboardController extends BaseDashboardController {
             "Status: " + data.status,
             "Current price: " + data.firstValue,
             "Bids: " + data.secondValue,
-            "Admin-home chỉ dùng để giám sát session và can thiệp force close khi cần."
+            "Admin-home chỉ dùng để giám sát session và cancel khi cần."
         );
         addDetailBlock(
             "Linked item",
@@ -1949,13 +2054,13 @@ public class AdminDashboardController extends BaseDashboardController {
         addDetailBlock(
             "Allowed admin action",
             isForceClosableStatus(data.status)
-                ? "Force Close maps to ADMIN_FORCE_CLOSE with a fixed audit reason."
+                ? "Cancel maps to ADMIN_FORCE_CLOSE with a fixed audit reason."
                 : "Auction này ở trạng thái view-only; payment/bid/wallet flow không sửa từ admin-home."
         );
 
         showDetail(
             data.title,
-            "Auction detail đã được thu gọn: chỉ xem trạng thái và force close khi backend cho phép."
+            "Auction detail đã được thu gọn: chỉ xem trạng thái và cancel khi backend cho phép."
         );
     }
 
@@ -2569,7 +2674,7 @@ public class AdminDashboardController extends BaseDashboardController {
         if (adminActionBar == null) {
             return;
         }
-        Button button = new Button("Force Close");
+        Button button = new Button("Cancel");
         button.setMnemonicParsing(false);
         button.getStyleClass().add("filter-chip-active");
         button.setOnAction(event -> forceCloseAuction(data));
