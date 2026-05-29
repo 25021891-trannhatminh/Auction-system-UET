@@ -169,10 +169,12 @@
                                         <ImageView fx:id="overlayImageView"
                                                    fitHeight="540.0"
                                                    fitWidth="860.0"
-                                                   opacity="0.96"
+                                                   opacity="0.92"
                                                    pickOnBounds="true"
                                                    preserveRatio="false"
                                                    smooth="true" />
+
+                                        <Region mouseTransparent="true" styleClass="overlay-scrim" />
 
                                         <VBox fx:id="overlayWelcomePane" alignment="TOP_LEFT" fillWidth="true" spacing="0.0">
                                             <children>

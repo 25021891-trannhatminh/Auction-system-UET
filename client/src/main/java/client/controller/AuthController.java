@@ -1,5 +1,10 @@
 package client.controller;
 
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 import client.SceneNavigator;
 import client.enums.AccountStatus;
 import client.enums.SystemRole;
@@ -7,10 +12,6 @@ import client.model.User;
 import client.service.AuthService;
 import client.service.NetworkManager;
 import client.service.SessionManager;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -39,8 +40,8 @@ public class AuthController {
     private static final double OVERLAY_DISTANCE = 430.0;
     private static final Duration SLIDE_DURATION = Duration.millis(520);
 
-    private static final String OVERLAY_IMAGE_PATH = "/client/images/overlay.jpg";
-    private static final String OVERLAY_IMAGE_FALLBACK_PATH = "/client/images/bg.png";
+    private static final String OVERLAY_IMAGE_PATH = "/client/images/newo.jpg";
+    private static final String OVERLAY_IMAGE_FALLBACK_PATH = "/client/images/newbg.jpg";
 
     @FXML private AnchorPane overlayPane;
     @FXML private StackPane overlayViewport;
