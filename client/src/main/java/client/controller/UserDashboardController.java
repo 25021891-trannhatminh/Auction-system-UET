@@ -80,7 +80,7 @@ public class UserDashboardController extends BaseDashboardController {
   @FXML private Button depositFloatingButton;
 
   private static final int AUCTIONS_PER_PAGE = 6;
-  private static final int TABLE_ROWS_PER_PAGE = 5;
+  private static final int TABLE_ROWS_PER_PAGE = 7;
   private static final double USER_ACTION_PRIMARY_WIDTH = 84;
   private static final double USER_ACTION_MORE_WIDTH = 28;
   private static final double USER_ACTION_GAP = 6;
@@ -3138,7 +3138,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     gallery.getChildren().addAll(mainImage, thumbnails);
-    mediaColumn.getChildren().add(gallery);
+    mediaColumn.getChildren().addAll(gallery, buildAuctionPlainDescription(displayData));
 
     VBox sidePanel = new VBox(14);
     sidePanel.getStyleClass().add("auction-detail-side-panel");
@@ -3236,7 +3236,6 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidMessageLabel = sellerView ? null : bidMessage;
 
     detailContent.getChildren().addAll(mediaColumn, sidePanel);
-    detailShell.getChildren().add(buildAuctionPlainDescription(displayData));
     detailShell.getChildren().add(detailContent);
     detailShell.getChildren().add(buildAuctionVisualisationSection(displayData.auctionId));
     if (sellerView) {
@@ -5562,9 +5561,20 @@ public class UserDashboardController extends BaseDashboardController {
       headerTitleLabel.setManaged(false);
     }
 
+    Button backToItemsButton = new Button("\u2190");
+    backToItemsButton.setMnemonicParsing(false);
+    backToItemsButton.getStyleClass().add("auction-back-button");
+    backToItemsButton.setOnAction(event -> showSection("myItems"));
+
     Label formTitle = new Label(editItem == null ? "Create Listing" : "Edit Draft Item");
     formTitle.getStyleClass().add("create-listing-title");
     formTitle.setStyle("-fx-text-fill: #102339; -fx-font-size: 31px; -fx-font-weight: bold;");
+
+    HBox formHeader = new HBox(12);
+    formHeader.getStyleClass().add("create-listing-header");
+    formHeader.setAlignment(Pos.CENTER_LEFT);
+    formHeader.setMaxWidth(Double.MAX_VALUE);
+    formHeader.getChildren().addAll(backToItemsButton, formTitle);
 
     Label formNote = new Label(editItem == null
         ? "Submit an item for admin review. Approved items become available for auction creation."
@@ -5952,7 +5962,7 @@ public class UserDashboardController extends BaseDashboardController {
         fieldBox("Description", descriptionArea),
         actions
     );
-    formShell.getChildren().addAll(formTitle, formNote, topRow, detailsPanel);
+    formShell.getChildren().addAll(formHeader, formNote, topRow, detailsPanel);
     workspaceBox.getChildren().add(formShell);
 
     if (primaryActionButton != null) {

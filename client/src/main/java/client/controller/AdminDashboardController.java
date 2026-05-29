@@ -50,8 +50,8 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private static final double ACTION_PRIMARY_WIDTH = 88;
     private static final double ACTION_MORE_WIDTH = 28;
-    private static final double ITEM_ACTION_PRIMARY_WIDTH = 88;
-    private static final double ITEM_ACTION_MORE_WIDTH = 24;
+    private static final double ITEM_ACTION_PRIMARY_WIDTH = 132;
+    private static final double ITEM_ACTION_MORE_WIDTH = 30;
     private static final double ACTION_GAP = 6;
     private static final double REVIEW_IMAGE_HEIGHT = 265;
     private static final double AUCTION_IMAGE_HEIGHT = 310;
@@ -1245,6 +1245,17 @@ public class AdminDashboardController extends BaseDashboardController {
             return grid;
         }
 
+        if (isItemReviewTable()) {
+            grid.getColumnConstraints().addAll(
+                percentColumn(38),
+                percentColumn(13),
+                percentColumn(15),
+                percentColumn(14),
+                percentColumn(20)
+            );
+            return grid;
+        }
+
         grid.getColumnConstraints().addAll(
             percentColumn(42),
             percentColumn(13),
@@ -1637,13 +1648,6 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         GridPane row = createTableGrid("data-row");
-        row.setOnMouseClicked(event -> {
-            if (data.itemData) {
-                openItemReview(data);
-                return;
-            }
-            showDetail(data.title, data.detail);
-        });
 
         VBox mainCell = buildMainCell(data);
         Label firstMetric = rowMetric(data.firstValue);
@@ -1667,7 +1671,6 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void addDashboardRow(AdminRow data) {
         GridPane row = createTableGrid("data-row");
-        row.setOnMouseClicked(event -> openDashboardQueue(data));
 
         VBox mainCell = buildMainCell(data);
         Label countMetric = rowMetric(data.firstValue);
@@ -1688,7 +1691,6 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void addUserRow(AdminRow data) {
         GridPane row = createTableGrid("data-row");
-        row.setOnMouseClicked(event -> showDetail(data.title, data.detail));
 
         VBox mainCell = buildMainCell(data);
         Label roleMetric = rowMetric(data.firstValue);
@@ -1743,15 +1745,7 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private boolean shouldRenderTitleButton(AdminRow data) {
-        if (data == null || data.actions.length == 0) {
-            return false;
-        }
-
-        String action = normalize(resolvePrimaryAction(data));
-        return action.equals("open")
-            || action.equals("view")
-            || action.equals("review")
-            || action.equals("view auction");
+        return false;
     }
 
     private String resolvePrimaryAction(AdminRow data) {

@@ -145,7 +145,7 @@
                 styleClass="floating-create-btn"
                 text="Create Listing"
                 visible="false"
-                AnchorPane.bottomAnchor="24.0"
-                AnchorPane.rightAnchor="28.0" />
+                AnchorPane.rightAnchor="28.0"
+                AnchorPane.topAnchor="24.0" />
     </children>
 </AnchorPane>
