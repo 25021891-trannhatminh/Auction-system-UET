@@ -99,36 +99,37 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double CREATE_FILE_ROW_HEIGHT = 52;
   private static final double CREATE_FILE_LIST_MAX_HEIGHT = 118;
   private static final double CREATE_FILE_LIST_GAP = 8;
-  private static final String CREATE_CARD_STYLE = "-fx-background-color: #171717; "
-      + "-fx-background-radius: 20; -fx-border-color: #303030; -fx-border-radius: 20; "
+  private static final String CREATE_CARD_STYLE = "-fx-background-color: #f1e4d2; "
+      + "-fx-background-radius: 20; -fx-border-color: #e5cfb5; -fx-border-radius: 20; "
       + "-fx-padding: 16;";
-  private static final String CREATE_SECTION_TITLE_STYLE = "-fx-text-fill: #f7f3e9; "
+  private static final String CREATE_SECTION_TITLE_STYLE = "-fx-text-fill: #1c2127; "
       + "-fx-font-size: 15px; -fx-font-weight: bold;";
-  private static final String CREATE_MUTED_TEXT_STYLE = "-fx-text-fill: #a7a7a7; "
+  private static final String CREATE_MUTED_TEXT_STYLE = "-fx-text-fill: #625b53; "
       + "-fx-font-size: 11px;";
-  private static final String CREATE_FORM_FIELD_STYLE = "-fx-background-color: #202020; "
-      + "-fx-background-radius: 15; -fx-border-color: #3a3a3a; -fx-border-radius: 15; "
-      + "-fx-padding: 10 13 10 13; -fx-text-fill: #f7f3e9; "
-      + "-fx-prompt-text-fill: #858585; -fx-min-height: 50; -fx-pref-height: 50;";
-  private static final String CREATE_TEXT_AREA_STYLE = "-fx-background-color: #202020; "
-      + "-fx-control-inner-background: #202020; -fx-background-insets: 0; "
-      + "-fx-background-radius: 15; -fx-border-color: transparent; "
+  private static final String CREATE_FORM_FIELD_STYLE = "-fx-background-color: #f8f0e5; "
+      + "-fx-background-radius: 15; -fx-border-color: #d8bd98; -fx-border-radius: 15; "
+      + "-fx-padding: 10 13 10 13; -fx-text-fill: #1c2127; "
+      + "-fx-prompt-text-fill: #9b8874; -fx-min-height: 50; -fx-pref-height: 50;";
+  private static final String CREATE_TEXT_AREA_STYLE = "-fx-background-color: #f8f0e5; "
+      + "-fx-control-inner-background: #f8f0e5; -fx-background-insets: 0; "
+      + "-fx-background-radius: 15; -fx-border-color: #d8bd98; "
       + "-fx-border-radius: 15; -fx-padding: 10 13 10 13; "
-      + "-fx-text-fill: #f7f3e9; -fx-prompt-text-fill: #858585;";
-  private static final String CREATE_COMBO_STYLE = "-fx-background-color: #202020; "
-      + "-fx-background-radius: 15; -fx-border-color: #3a3a3a; -fx-border-radius: 15; "
+      + "-fx-text-fill: #1c2127; -fx-prompt-text-fill: #9b8874;";
+  private static final String CREATE_COMBO_STYLE = "-fx-background-color: #f8f0e5; "
+      + "-fx-background-radius: 15; -fx-border-color: #d8bd98; -fx-border-radius: 15; "
       + "-fx-padding: 0 12 0 12; -fx-min-height: 50; -fx-pref-height: 50;";
-  private static final String CREATE_DARK_BUTTON_STYLE = "-fx-background-color: #2a2a2a; "
-      + "-fx-text-fill: #f7f3e9; -fx-background-radius: 16; -fx-padding: 10 16 10 16; "
-      + "-fx-border-color: #3f3f3f; -fx-border-radius: 16; "
+  private static final String CREATE_DARK_BUTTON_STYLE = "-fx-background-color: #e0b571; "
+      + "-fx-text-fill: #102339; -fx-background-radius: 16; -fx-padding: 10 16 10 16; "
+      + "-fx-border-color: #d5a466; -fx-border-radius: 16; "
       + "-fx-font-size: 11px; -fx-font-weight: bold; -fx-cursor: hand;";
   private static final String CREATE_PRIMARY_BUTTON_STYLE = "-fx-background-color: "
-      + "linear-gradient(to right, #d1b15d, #a78634); "
-      + "-fx-text-fill: #111111; -fx-background-radius: 16; -fx-padding: 10 16 10 16; "
+      + "linear-gradient(to right, #f3cc8c, #e1b572); "
+      + "-fx-text-fill: #102339; -fx-background-radius: 16; -fx-padding: 10 16 10 16; "
+      + "-fx-border-color: #d5a466; -fx-border-radius: 16; "
       + "-fx-font-size: 11px; -fx-font-weight: bold; -fx-cursor: hand;";
-  private static final String CREATE_SECONDARY_BUTTON_STYLE = "-fx-background-color: transparent; "
-      + "-fx-border-color: #444444; -fx-border-radius: 16; -fx-background-radius: 16; "
-      + "-fx-text-fill: #f7f3e9; -fx-padding: 10 16 10 16; "
+  private static final String CREATE_SECONDARY_BUTTON_STYLE = "-fx-background-color: #f8f0e5; "
+      + "-fx-border-color: #d8bd98; -fx-border-radius: 16; -fx-background-radius: 16; "
+      + "-fx-text-fill: #102339; -fx-padding: 10 16 10 16; "
       + "-fx-font-size: 11px; -fx-font-weight: bold; -fx-cursor: hand;";
   private static final DecimalFormat MONEY_FORMAT = new DecimalFormat("#,##0.##");
   private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
@@ -394,7 +395,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     dialog.setOnShown(event -> {
       if (dialogPane.getScene() != null) {
-        dialogPane.getScene().setFill(Color.web("#171717"));
+        dialogPane.getScene().setFill(Color.web("#f8f0e5"));
       }
       amountField.requestFocus();
     });
@@ -3914,7 +3915,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (activeAuctionBidMessageLabel != null) {
       activeAuctionBidMessageLabel.setText(message == null ? "" : message);
       activeAuctionBidMessageLabel.setStyle(error
-          ? "-fx-text-fill: #a34f4f; -fx-font-size: 11px; -fx-font-weight: bold;"
+          ? "-fx-text-fill: #9f4f45; -fx-font-size: 11px; -fx-font-weight: bold;"
           : "-fx-text-fill: #738581; -fx-font-size: 11px;");
     }
     if (error) {
@@ -4007,7 +4008,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (activeAuctionBidMessageLabel != null) {
       activeAuctionBidMessageLabel.setText(message == null ? "" : message);
       activeAuctionBidMessageLabel.setStyle(error
-          ? "-fx-text-fill: #a34f4f; -fx-font-size: 11px; -fx-font-weight: bold;"
+          ? "-fx-text-fill: #9f4f45; -fx-font-size: 11px; -fx-font-weight: bold;"
           : "-fx-text-fill: #738581; -fx-font-size: 11px;");
     }
   }
@@ -5334,12 +5335,12 @@ public class UserDashboardController extends BaseDashboardController {
     thumbnail.setMinSize(54, 46);
     thumbnail.setPrefSize(54, 46);
     thumbnail.setMaxSize(54, 46);
-    thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #d1b15d, " +
-        "#8fb1a4); -fx-background-radius: 14; -fx-border-color: rgba(39, 75, 69, 0.16); " +
+    thumbnail.setStyle("-fx-background-color: linear-gradient(to bottom right, #f3cc8c, " +
+        "#e1b572); -fx-background-radius: 14; -fx-border-color: rgba(16, 35, 57, 0.16); " +
         "-fx-border-radius: 14;");
 
     Label label = new Label(text == null || text.isBlank() ? "IT" : text);
-    label.setStyle("-fx-text-fill: #17352c; -fx-font-size: 12px; -fx-font-weight: bold;");
+    label.setStyle("-fx-text-fill: #102339; -fx-font-size: 12px; -fx-font-weight: bold;");
 
     thumbnail.getChildren().add(label);
     return thumbnail;
@@ -5462,14 +5463,14 @@ public class UserDashboardController extends BaseDashboardController {
 
     Label formTitle = new Label(editItem == null ? "Create Listing" : "Edit Draft Item");
     formTitle.getStyleClass().add("create-listing-title");
-    formTitle.setStyle("-fx-text-fill: #1f3e37; -fx-font-size: 24px; -fx-font-weight: bold;");
+    formTitle.setStyle("-fx-text-fill: #102339; -fx-font-size: 24px; -fx-font-weight: bold;");
 
     Label formNote = new Label(editItem == null
         ? "Submit an item for admin review. Approved items become available for auction creation."
         : "Only DRAFT items are editable here. Save keeps it as DRAFT; "
             + "Submit sends it to admin review.");
     formNote.getStyleClass().add("create-listing-note");
-    formNote.setStyle("-fx-text-fill: #a7a7a7; -fx-font-size: 11px;");
+    formNote.setStyle("-fx-text-fill: #625b53; -fx-font-size: 11px;");
     formNote.setWrapText(true);
 
     GridPane topRow = new GridPane();
@@ -5501,8 +5502,8 @@ public class UserDashboardController extends BaseDashboardController {
 
     StackPane uploadZone = new StackPane();
     uploadZone.getStyleClass().add("create-upload-zone");
-    uploadZone.setStyle("-fx-background-color: linear-gradient(to bottom right, #1b1b1b, #222222); "
-        + "-fx-background-radius: 18; -fx-border-color: #3a3a3a; "
+    uploadZone.setStyle("-fx-background-color: linear-gradient(to bottom right, #f8f0e5, #f1e4d2); "
+        + "-fx-background-radius: 18; -fx-border-color: #d8bd98; "
         + "-fx-border-style: segments(8, 8); -fx-border-radius: 18; -fx-padding: 24 34 24 34;"
         + "-fx-cursor: hand;");
     uploadZone.setMinHeight(CREATE_UPLOAD_ZONE_HEIGHT);
@@ -5515,13 +5516,13 @@ public class UserDashboardController extends BaseDashboardController {
 
     Label uploadIcon = new Label("↑");
     uploadIcon.getStyleClass().add("create-upload-icon");
-    uploadIcon.setStyle("-fx-background-color: #2a2a2a; -fx-background-radius: 12; "
-        + "-fx-text-fill: #f7f3e9; -fx-font-size: 18px; -fx-font-weight: bold; "
+    uploadIcon.setStyle("-fx-background-color: #e0b571; -fx-background-radius: 12; "
+        + "-fx-text-fill: #102339; -fx-font-size: 18px; -fx-font-weight: bold; "
         + "-fx-padding: 7 12 7 12;");
 
     Label uploadHint = new Label("Drop your files here or browse");
     uploadHint.getStyleClass().add("create-upload-title");
-    uploadHint.setStyle("-fx-text-fill: #f7f3e9; -fx-font-size: 12px; -fx-font-weight: bold;");
+    uploadHint.setStyle("-fx-text-fill: #1c2127; -fx-font-size: 12px; -fx-font-weight: bold;");
 
     Label selectedFileLabel = new Label("No file selected");
     selectedFileLabel.getStyleClass().add("create-muted-text");
@@ -5584,8 +5585,8 @@ public class UserDashboardController extends BaseDashboardController {
 
     StackPane previewImageWrap = new StackPane();
     previewImageWrap.getStyleClass().add("create-preview-image-wrap");
-    previewImageWrap.setStyle("-fx-background-color: #111111; -fx-background-radius: 18; "
-        + "-fx-border-color: #303030; -fx-border-radius: 18; -fx-padding: 0;");
+    previewImageWrap.setStyle("-fx-background-color: #eadbc7; -fx-background-radius: 18; "
+        + "-fx-border-color: #d8bd98; -fx-border-radius: 18; -fx-padding: 0;");
     previewImageWrap.setMinWidth(0);
     previewImageWrap.setMaxWidth(Double.MAX_VALUE);
     previewImageWrap.setMinHeight(CREATE_PREVIEW_IMAGE_HEIGHT);
@@ -5625,7 +5626,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     Label previewName = new Label("Untitled listing");
     previewName.getStyleClass().add("create-preview-title");
-    previewName.setStyle("-fx-text-fill: #f7f3e9; -fx-font-size: 17px; -fx-font-weight: bold;");
+    previewName.setStyle("-fx-text-fill: #1c2127; -fx-font-size: 17px; -fx-font-weight: bold;");
     previewName.setWrapText(true);
 
     Label previewPrice = new Label("Starting price: 0 VND");
@@ -5881,7 +5882,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
     Label label = new Label(labelText);
     label.getStyleClass().add("create-field-label");
-    label.setStyle("-fx-text-fill: #f7f3e9; -fx-font-size: 11px; -fx-font-weight: bold;");
+    label.setStyle("-fx-text-fill: #1c2127; -fx-font-size: 11px; -fx-font-weight: bold;");
     box.getChildren().addAll(label, input);
     return box;
   }
@@ -6014,20 +6015,20 @@ public class UserDashboardController extends BaseDashboardController {
       fileRow.setPrefHeight(CREATE_FILE_ROW_HEIGHT);
       fileRow.setMaxHeight(CREATE_FILE_ROW_HEIGHT);
       fileRow.setMaxWidth(Double.MAX_VALUE);
-      fileRow.setStyle("-fx-background-color: #202020; -fx-background-radius: 12; "
-          + "-fx-border-color: #343434; -fx-border-radius: 12; -fx-padding: 8 10 8 10;");
+      fileRow.setStyle("-fx-background-color: #f8f0e5; -fx-background-radius: 12; "
+          + "-fx-border-color: #d8bd98; -fx-border-radius: 12; -fx-padding: 8 10 8 10;");
 
       Label typeBadge = new Label(getFileExtension(upload.fileName));
       typeBadge.getStyleClass().add("create-file-type");
-      typeBadge.setStyle("-fx-background-color: #2a2a2a; -fx-background-radius: 8; "
-          + "-fx-border-color: #444444; -fx-border-radius: 8; -fx-text-fill: #d1b15d; "
+      typeBadge.setStyle("-fx-background-color: #f1e4d2; -fx-background-radius: 8; "
+          + "-fx-border-color: #d8bd98; -fx-border-radius: 8; -fx-text-fill: #8b6230; "
           + "-fx-font-size: 9px; -fx-font-weight: bold; -fx-padding: 8 9 8 9;");
 
       Label fileName = new Label(upload.fileName);
       fileName.getStyleClass().add("create-file-name");
       fileName.setTextOverrun(OverrunStyle.ELLIPSIS);
       fileName.setMaxWidth(Double.MAX_VALUE);
-      fileName.setStyle("-fx-text-fill: #f7f3e9; -fx-font-size: 12px; -fx-font-weight: bold;");
+      fileName.setStyle("-fx-text-fill: #1c2127; -fx-font-size: 12px; -fx-font-weight: bold;");
 
       Label fileSize = new Label(formatFileSize(upload.sizeBytes));
       fileSize.getStyleClass().add("create-muted-text");
@@ -6042,7 +6043,7 @@ public class UserDashboardController extends BaseDashboardController {
       Button removeButton = new Button("×");
       removeButton.setMnemonicParsing(false);
       removeButton.getStyleClass().add("create-file-remove-btn");
-      removeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #f7f3e9; "
+      removeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #102339; "
           + "-fx-font-size: 16px; -fx-font-weight: bold; -fx-cursor: hand;");
       removeButton.setOnAction(event -> {
         pendingCreateItemUploads.remove(imageIndex);
@@ -6925,7 +6926,7 @@ public class UserDashboardController extends BaseDashboardController {
     label.getStyleClass().removeAll("create-message-error", "create-message-info");
     label.getStyleClass().add(error ? "create-message-error" : "create-message-info");
     label.setStyle(error
-        ? "-fx-text-fill: #a34f4f; -fx-font-size: 11px; -fx-font-weight: bold;"
+        ? "-fx-text-fill: #9f4f45; -fx-font-size: 11px; -fx-font-weight: bold;"
         : CREATE_MUTED_TEXT_STYLE);
   }
 

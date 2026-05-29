@@ -4205,3 +4205,682 @@
 .wallet-deposit-secondary-btn:hover {
     -fx-background-color: #403d38;
 }
+
+/* User-home exact tone pass based on the provided navy / warm ivory reference. */
+.user-dashboard-root,
+.user-dashboard-root .label,
+.user-dashboard-root .button,
+.user-dashboard-root .text-field,
+.user-dashboard-root .text-area,
+.user-dashboard-root .combo-box,
+.user-dashboard-root .menu-button,
+.wallet-deposit-dialog-pane,
+.wallet-deposit-dialog-pane .label,
+.wallet-deposit-dialog-pane .button,
+.wallet-deposit-dialog-pane .text-field {
+    -fx-font-family: "Times New Roman";
+}
+
+.user-dashboard-root {
+    -fx-background-color: #0f2238;
+}
+
+.user-dashboard-root .app-shell {
+    -fx-background-color: #0f2238;
+    -fx-background-radius: 0;
+    -fx-padding: 10;
+}
+
+.user-dashboard-root .content-shell {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 24;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+    -fx-padding: 18 20 18 20;
+    -fx-effect: dropshadow(gaussian, rgba(20, 18, 14, 0.12), 18, 0.14, 0, 5);
+}
+
+.user-dashboard-root .content-scroll,
+.user-dashboard-root .content-scroll > .viewport,
+.user-dashboard-root .sidebar-scroll,
+.user-dashboard-root .sidebar-scroll > .viewport,
+.user-dashboard-root .content-scroll > .corner,
+.user-dashboard-root .sidebar-scroll > .corner {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+
+.user-dashboard-root .sidebar-shell {
+    -fx-background-color: linear-gradient(to bottom, #102339, #0f2031);
+    -fx-background-radius: 24;
+    -fx-border-color: rgba(224, 181, 113, 0.72);
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+    -fx-padding: 16 12 16 12;
+}
+
+.user-dashboard-root .profile-card {
+    -fx-background-color: linear-gradient(to bottom right, #152a43, #11253c);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(224, 181, 113, 0.48);
+    -fx-border-radius: 20;
+    -fx-border-width: 1;
+    -fx-padding: 16 14 16 14;
+}
+
+.user-dashboard-root .avatar-circle {
+    -fx-background-color: #102339;
+    -fx-background-radius: 999;
+    -fx-border-color: #f1c17e;
+    -fx-border-radius: 999;
+    -fx-border-width: 2.2;
+    -fx-min-width: 76;
+    -fx-min-height: 76;
+    -fx-pref-width: 76;
+    -fx-pref-height: 76;
+    -fx-max-width: 76;
+    -fx-max-height: 76;
+}
+
+.user-dashboard-root .avatar-text {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 24px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .notification-bell-btn {
+    -fx-background-color: #f3cc8c;
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(255, 249, 236, 0.62);
+    -fx-border-radius: 999;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .notification-bell-btn:hover {
+    -fx-background-color: #f8db9e;
+    -fx-border-color: #fff1c9;
+}
+
+.user-dashboard-root .notification-badge {
+    -fx-background-color: #f3cc8c;
+    -fx-border-color: #102339;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .sidebar-name,
+.user-dashboard-root .mini-text {
+    -fx-text-fill: #f8f0e5;
+}
+
+.user-dashboard-root .sidebar-name {
+    -fx-font-size: 18px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .sidebar-email,
+.user-dashboard-root .mini-subtext {
+    -fx-text-fill: rgba(248, 240, 229, 0.78);
+}
+
+.user-dashboard-root .menu-title {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 11px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .role-pill {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-text-fill: #f3cc8c;
+}
+
+.user-dashboard-root .sidebar-mini-card {
+    -fx-background-color: rgba(21, 42, 67, 0.76);
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(224, 181, 113, 0.36);
+    -fx-border-radius: 18;
+}
+
+.user-dashboard-root .nav-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 14;
+    -fx-text-fill: #f8f0e5;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-padding: 11 14 11 14;
+}
+
+.user-dashboard-root .nav-btn:hover {
+    -fx-background-color: rgba(243, 204, 140, 0.14);
+}
+
+.user-dashboard-root .nav-btn-active {
+    -fx-background-color: linear-gradient(to right, #f3cc8c, #e0b571);
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(255, 249, 236, 0.46);
+    -fx-border-radius: 14;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .logout-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 14;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 14;
+    -fx-border-width: 1;
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-padding: 12 16 12 16;
+}
+
+.user-dashboard-root .logout-btn:hover {
+    -fx-background-color: rgba(243, 204, 140, 0.12);
+}
+
+.user-dashboard-root .top-title,
+.user-dashboard-root .create-listing-title,
+.user-dashboard-root .auction-detail-page-title {
+    -fx-text-fill: #102339;
+    -fx-font-size: 34px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .top-subtitle,
+.user-dashboard-root .section-subtitle,
+.user-dashboard-root .create-listing-note,
+.user-dashboard-root .create-muted-text,
+.user-dashboard-root .listing-flow-text,
+.user-dashboard-root .create-message {
+    -fx-text-fill: #756d63;
+}
+
+.user-dashboard-root .surface-card {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .filter-chip,
+.user-dashboard-root .ghost-chip,
+.user-dashboard-root .sort-pill,
+.user-dashboard-root .pagination-btn {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 999;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-text-fill: #102339;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .filter-chip:hover,
+.user-dashboard-root .ghost-chip:hover,
+.user-dashboard-root .pagination-btn:hover {
+    -fx-background-color: #f2e5d5;
+    -fx-border-color: #d5b58d;
+}
+
+.user-dashboard-root .filter-chip-active,
+.user-dashboard-root .gold-chip,
+.user-dashboard-root .pagination-active {
+    -fx-background-color: linear-gradient(to right, #caa26c, #e0b571);
+    -fx-border-color: #d5b58d;
+    -fx-text-fill: #ffffff;
+}
+
+.user-dashboard-root .light-chip {
+    -fx-background-color: rgba(202, 162, 108, 0.14);
+    -fx-text-fill: #4a3c2f;
+}
+
+.user-dashboard-root .section-title,
+.user-dashboard-root .section-mini-title,
+.user-dashboard-root .surface-title,
+.user-dashboard-root .table-title,
+.user-dashboard-root .placeholder-title,
+.user-dashboard-root .stat-value,
+.user-dashboard-root .row-link,
+.user-dashboard-root .row-metric,
+.user-dashboard-root .product-title,
+.user-dashboard-root .category-title,
+.user-dashboard-root .create-section-title,
+.user-dashboard-root .create-field-label,
+.user-dashboard-root .create-preview-title,
+.user-dashboard-root .create-upload-title,
+.user-dashboard-root .create-file-name,
+.user-dashboard-root .auction-market-title,
+.user-dashboard-root .auction-detail-heading,
+.user-dashboard-root .auction-detail-section-title,
+.user-dashboard-root .auction-detail-panel-title,
+.user-dashboard-root .auction-detail-description-title,
+.user-dashboard-root .auction-detail-meta-value,
+.user-dashboard-root .auction-detail-price,
+.user-dashboard-root .auction-live-fact-value,
+.user-dashboard-root .auction-visualisation-title,
+.user-dashboard-root .auction-visualisation-amount {
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .surface-desc,
+.user-dashboard-root .placeholder-desc,
+.user-dashboard-root .activity-line,
+.user-dashboard-root .row-meta,
+.user-dashboard-root .product-meta,
+.user-dashboard-root .product-category,
+.user-dashboard-root .category-desc,
+.user-dashboard-root .stat-label,
+.user-dashboard-root .category-count,
+.user-dashboard-root .table-header-label,
+.user-dashboard-root .auction-market-meta,
+.user-dashboard-root .auction-market-label,
+.user-dashboard-root .auction-market-small-fact,
+.user-dashboard-root .auction-detail-description-seller,
+.user-dashboard-root .auction-detail-description-line,
+.user-dashboard-root .auction-detail-text,
+.user-dashboard-root .auction-detail-end-note,
+.user-dashboard-root .auction-detail-meta-key,
+.user-dashboard-root .auction-visualisation-caption,
+.user-dashboard-root .auction-visualisation-empty,
+.user-dashboard-root .auction-visualisation-time {
+    -fx-text-fill: #625b53;
+}
+
+.user-dashboard-root .surface-card,
+.user-dashboard-root .table-card,
+.user-dashboard-root .activity-card,
+.user-dashboard-root .stat-card,
+.user-dashboard-root .aside-card,
+.user-dashboard-root .insight-card,
+.user-dashboard-root .placeholder-card,
+.user-dashboard-root .create-listing-card,
+.user-dashboard-root .listing-flow-card,
+.user-dashboard-root .category-card,
+.user-dashboard-root .data-header,
+.user-dashboard-root .data-row,
+.user-dashboard-root .auction-detail-description-card,
+.user-dashboard-root .auction-detail-side-panel,
+.user-dashboard-root .auction-detail-price-panel,
+.user-dashboard-root .auction-detail-info-column,
+.user-dashboard-root .auction-detail-card,
+.user-dashboard-root .auction-detail-auto-bid-panel,
+.user-dashboard-root .auction-visualisation-card,
+.user-dashboard-root .seller-performance-panel,
+.user-dashboard-root .seller-bid-history-card,
+.user-dashboard-root .transaction-wallet-card,
+.user-dashboard-root .transaction-deposit-card {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18;
+    -fx-border-color: #e5cfb5;
+    -fx-border-radius: 18;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.14), 14, 0.16, 0, 5);
+}
+
+.user-dashboard-root .surface-card {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-effect: none;
+}
+
+.user-dashboard-root .data-header {
+    -fx-background-color: #eadbc7;
+}
+
+.user-dashboard-root .data-row:hover,
+.user-dashboard-root .category-card:hover {
+    -fx-background-color: #eadbc7;
+}
+
+.user-dashboard-root .search-field,
+.user-dashboard-root .create-form-field,
+.user-dashboard-root .create-combo-box,
+.user-dashboard-root .create-text-area,
+.user-dashboard-root .create-text-area .content,
+.user-dashboard-root .auction-detail-bid-input {
+    -fx-background-color: #f8f0e5;
+    -fx-control-inner-background: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #1c2127;
+    -fx-prompt-text-fill: #9b8874;
+}
+
+.user-dashboard-root .create-combo-box .list-cell {
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .create-combo-box .arrow {
+    -fx-background-color: #102339;
+}
+
+.user-dashboard-root .create-upload-zone {
+    -fx-background-color: linear-gradient(to bottom right, #f8f0e5, #f1e4d2);
+    -fx-border-color: #d8bd98;
+}
+
+.user-dashboard-root .create-preview-image-wrap,
+.user-dashboard-root .create-file-row,
+.user-dashboard-root .seller-performance-metric,
+.user-dashboard-root .seller-bid-history-header,
+.user-dashboard-root .seller-bid-history-row,
+.user-dashboard-root .transaction-wallet-metric,
+.user-dashboard-root .transaction-metric-card,
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown,
+.user-dashboard-root .auction-live-fact,
+.user-dashboard-root .auction-visualisation-metric,
+.user-dashboard-root .auction-visualisation-row {
+    -fx-background-color: #eadbc7;
+    -fx-border-color: #d8bd98;
+}
+
+.user-dashboard-root .create-file-type,
+.user-dashboard-root .create-upload-icon {
+    -fx-background-color: #e0b571;
+    -fx-border-color: #d5a466;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .create-dark-btn,
+.user-dashboard-root .create-primary-btn,
+.user-dashboard-root .floating-create-btn,
+.user-dashboard-root .action-btn,
+.user-dashboard-root .mini-action-btn,
+.user-dashboard-root .more-action-btn,
+.user-dashboard-root .user-primary-action-btn,
+.user-dashboard-root .transaction-pay-btn,
+.user-dashboard-root .auction-market-bid-btn,
+.user-dashboard-root .auction-view-btn,
+.user-dashboard-root .auction-detail-side-panel .auction-market-bid-btn,
+.user-dashboard-root .auction-detail-auto-bid-panel .auction-market-bid-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 14;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 14;
+    -fx-text-fill: #102339;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+}
+
+.user-dashboard-root .create-dark-btn:hover,
+.user-dashboard-root .create-primary-btn:hover,
+.user-dashboard-root .floating-create-btn:hover,
+.user-dashboard-root .action-btn:hover,
+.user-dashboard-root .mini-action-btn:hover,
+.user-dashboard-root .more-action-btn:hover,
+.user-dashboard-root .user-primary-action-btn:hover,
+.user-dashboard-root .transaction-pay-btn:hover,
+.user-dashboard-root .auction-market-bid-btn:hover,
+.user-dashboard-root .auction-view-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+    -fx-opacity: 1;
+}
+
+.user-dashboard-root .create-secondary-btn,
+.user-dashboard-root .auction-detail-secondary-btn {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .create-secondary-btn:hover,
+.user-dashboard-root .auction-detail-secondary-btn:hover {
+    -fx-background-color: #f2e5d5;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #d8bd98;
+}
+
+.combo-box-popup .list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1c2127;
+    -fx-font-family: "Times New Roman";
+}
+
+.combo-box-popup .list-view .list-cell:hover,
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #eadbc7;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .auction-market-card,
+.user-dashboard-root .auction-product-card,
+.user-dashboard-root .auction-live-card {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18;
+    -fx-border-color: #e5cfb5;
+    -fx-border-radius: 18;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.14), 14, 0.16, 0, 5);
+}
+
+.user-dashboard-root .auction-market-card:hover,
+.user-dashboard-root .auction-product-card:hover,
+.user-dashboard-root .auction-live-card:hover {
+    -fx-background-color: #f3e4d3;
+    -fx-border-color: #d5b58d;
+}
+
+.user-dashboard-root .auction-market-image-wrap,
+.user-dashboard-root .product-image-wrap,
+.user-dashboard-root .auction-live-image-wrap {
+    -fx-background-color: #eadbc7;
+    -fx-border-color: #d8bd98;
+}
+
+.user-dashboard-root .auction-market-badge,
+.user-dashboard-root .product-badge,
+.user-dashboard-root .auction-live-badge {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #e1c5a1;
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .auction-market-time,
+.user-dashboard-root .auction-live-timer {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #e1c5a1;
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .auction-market-price,
+.user-dashboard-root .product-price,
+.user-dashboard-root .auction-live-price {
+    -fx-text-fill: #2c2823;
+}
+
+.user-dashboard-root .auction-market-bid-btn:disabled,
+.user-dashboard-root .auction-disabled-bid-btn,
+.user-dashboard-root .transaction-pay-btn:disabled,
+.user-dashboard-root .auction-detail-secondary-btn:disabled {
+    -fx-background-color: #d4c0a7;
+    -fx-border-color: #c4a984;
+    -fx-text-fill: #7b6a59;
+    -fx-opacity: 1;
+}
+
+.user-dashboard-root .auction-breadcrumb-muted,
+.user-dashboard-root .auction-breadcrumb-separator,
+.user-dashboard-root .auction-detail-countdown-label,
+.user-dashboard-root .auction-detail-countdown-separator,
+.user-dashboard-root .auction-live-fact-key,
+.user-dashboard-root .auction-live-timer-label {
+    -fx-text-fill: #756d63;
+}
+
+.user-dashboard-root .auction-breadcrumb-current,
+.user-dashboard-root .auction-breadcrumb-link {
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .auction-breadcrumb-link:hover {
+    -fx-text-fill: #8b6230;
+}
+
+.user-dashboard-root .auction-back-button {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-border-color: #d5a466;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .auction-back-button:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+}
+
+.user-dashboard-root .auction-detail-description-divider {
+    -fx-fill: #e5cfb5;
+    -fx-background-color: #e5cfb5;
+}
+
+.user-dashboard-root .auction-detail-countdown-number,
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-number,
+.user-dashboard-root .auction-live-timer-value {
+    -fx-text-fill: #b65a4d;
+}
+
+.user-dashboard-root .auction-detail-thumb {
+    -fx-background-color: #eadbc7;
+    -fx-border-color: #d8bd98;
+}
+
+.user-dashboard-root .auction-detail-thumb:hover,
+.user-dashboard-root .auction-detail-thumb-active {
+    -fx-border-color: #caa26c;
+}
+
+.user-dashboard-root .auction-visualisation-chart .chart-plot-background {
+    -fx-background-color: #eadbc7;
+}
+
+.user-dashboard-root .auction-visualisation-chart .chart-vertical-grid-lines,
+.user-dashboard-root .auction-visualisation-chart .chart-horizontal-grid-lines {
+    -fx-stroke: rgba(98, 91, 83, 0.18);
+}
+
+.user-dashboard-root .auction-visualisation-chart .axis {
+    -fx-tick-label-fill: #756d63;
+}
+
+.user-dashboard-root .auction-visualisation-chart .axis-label {
+    -fx-text-fill: #625b53;
+}
+
+.user-dashboard-root .auction-visualisation-chart .default-color0.chart-series-line {
+    -fx-stroke: #caa26c;
+    -fx-stroke-width: 2.2px;
+}
+
+.user-dashboard-root .auction-visualisation-chart .default-color0.chart-line-symbol {
+    -fx-background-color: #caa26c, #f8f0e5;
+}
+
+.user-dashboard-root .transaction-wallet-title,
+.user-dashboard-root .transaction-wallet-total,
+.user-dashboard-root .transaction-wallet-metric-value,
+.user-dashboard-root .transaction-deposit-title,
+.user-dashboard-root .transaction-deposit-total,
+.user-dashboard-root .transaction-metric-value {
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .transaction-wallet-icon,
+.user-dashboard-root .transaction-deposit-icon {
+    -fx-text-fill: #caa26c;
+}
+
+.user-dashboard-root .transaction-wallet-status,
+.user-dashboard-root .transaction-deposit-status {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #e1c5a1;
+    -fx-text-fill: #102339;
+}
+
+.user-dashboard-root .transaction-wallet-caption,
+.user-dashboard-root .transaction-wallet-metric-label,
+.user-dashboard-root .transaction-deposit-caption,
+.user-dashboard-root .transaction-metric-label,
+.user-dashboard-root .transaction-description-cell,
+.user-dashboard-root .transaction-time-cell,
+.user-dashboard-root .transaction-status-cell,
+.user-dashboard-root .transaction-table-row .table-header-label {
+    -fx-text-fill: #625b53;
+}
+
+.user-dashboard-root .transaction-type-cell,
+.user-dashboard-root .transaction-amount-cell,
+.user-dashboard-root .transaction-balance-cell {
+    -fx-text-fill: #1c2127;
+}
+
+.wallet-deposit-dialog-pane,
+.wallet-deposit-dialog-pane > .content,
+.wallet-deposit-dialog-pane:header .header-panel,
+.wallet-deposit-shell,
+.wallet-deposit-card {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 22;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 22;
+}
+
+.wallet-deposit-title,
+.wallet-deposit-balance {
+    -fx-text-fill: #1c2127;
+}
+
+.wallet-deposit-eyebrow,
+.wallet-deposit-caption,
+.wallet-deposit-field-label {
+    -fx-text-fill: #625b53;
+}
+
+.wallet-deposit-input {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #1c2127;
+    -fx-prompt-text-fill: #9b8874;
+}
+
+.wallet-deposit-input:focused {
+    -fx-background-color: #fff9ec;
+    -fx-border-color: #caa26c;
+}
+
+.wallet-deposit-currency-pill {
+    -fx-background-color: #eadbc7;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #102339;
+}
+
+.wallet-deposit-error {
+    -fx-text-fill: #9f4f45;
+}
+
+.wallet-deposit-action-row {
+    -fx-border-color: #e5cfb5 transparent transparent transparent;
+}
+
+.wallet-deposit-primary-btn,
+.wallet-deposit-secondary-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-border-color: #d5a466;
+    -fx-text-fill: #102339;
+}
+
+.wallet-deposit-primary-btn:hover,
+.wallet-deposit-secondary-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+}
+
+.user-dashboard-root .profile-top-row {
+    -fx-min-height: 88;
+    -fx-pref-height: 88;
+}
