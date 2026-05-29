@@ -56,6 +56,7 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double PREVIEW_IMAGE_WIDTH_RATIO = 1.55;
     private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 28;
     private static final double THUMB_SIZE = 58;
+    private static final int ADMIN_ROWS_PER_PAGE = 5;
     private static final Pattern MONEY_PATTERN = Pattern.compile("^[0-9]+(?:\\.[0-9]{1,2})?$");
 
     private final Map<String, SectionContent> sections = AdminDashboardSections.buildSections();
@@ -73,6 +74,12 @@ public class AdminDashboardController extends BaseDashboardController {
     private boolean auctionsLoaded;
     private String currentSectionKey = "dashboard";
     private String activeFilter = "All";
+    private int dashboardPage = 1;
+    private int usersPage = 1;
+    private int auctionsPage = 1;
+    private int itemsPage = 1;
+    private int reportsPage = 1;
+    private int settingsPage = 1;
 
     private NetworkManager adminNetworkManager;
     private Consumer<String> adminNetworkHandler;
@@ -87,6 +94,7 @@ public class AdminDashboardController extends BaseDashboardController {
             searchField.textProperty().addListener((observable, oldValue, newValue) -> {
                 String query = newValue == null ? "" : newValue.trim();
                 activeFilter = query.isEmpty() ? getDefaultFilter(currentSectionKey) : query;
+                resetPageForSection(currentSectionKey);
                 renderWorkspace(currentSectionKey, activeFilter);
             });
         }
@@ -130,6 +138,7 @@ public class AdminDashboardController extends BaseDashboardController {
     protected void showSection(String sectionKey) {
         currentSectionKey = sectionKey;
         activeFilter = getDefaultFilter(sectionKey);
+        resetPageForSection(sectionKey);
 
         String currentSearch = searchField == null ? "" : searchField.getText();
         if (currentSearch != null && !currentSearch.isBlank()) {
@@ -1261,6 +1270,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
             chip.setOnAction(event -> {
                 activeFilter = labelText;
+                resetPageForSection(currentSectionKey);
                 renderWorkspace(currentSectionKey, activeFilter);
                 showDetail("Filter: " + activeFilter, "Table đã được lọc theo: " + activeFilter);
             });
@@ -1402,17 +1412,160 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void addFilteredRows(List<AdminRow> rows, String filter) {
-        int count = 0;
+        List<AdminRow> filteredRows = new ArrayList<>();
 
         for (AdminRow row : rows) {
             if (matchesFilter(row, filter)) {
-                addRow(row);
-                count++;
+                filteredRows.add(row);
             }
         }
 
-        if (count == 0) {
+        if (filteredRows.isEmpty()) {
             addEmptyRow(filter);
+            return;
+        }
+
+        int totalPages = totalPages(filteredRows.size(), ADMIN_ROWS_PER_PAGE);
+        int currentPage = clampPage(getPageForSection(currentSectionKey), totalPages);
+        setPageForSection(currentSectionKey, currentPage);
+
+        for (AdminRow row : pageSlice(filteredRows, currentPage, ADMIN_ROWS_PER_PAGE)) {
+            addRow(row);
+        }
+
+        dataRowsBox.getChildren().add(
+            buildSectionPagination(currentSectionKey, totalPages, filteredRows.size())
+        );
+    }
+
+    private HBox buildSectionPagination(String sectionKey, int totalPages, int totalItems) {
+        HBox pagination = new HBox(7);
+        pagination.setAlignment(Pos.CENTER_RIGHT);
+        pagination.getStyleClass().add("pagination-bar");
+
+        int currentPage = clampPage(getPageForSection(sectionKey), totalPages);
+        setPageForSection(sectionKey, currentPage);
+
+        Label total = new Label(totalItems + " results");
+        total.getStyleClass().add("row-meta");
+        HBox.setHgrow(total, Priority.ALWAYS);
+
+        Button previous = paginationButton("< Previous", currentPage <= 1);
+        previous.setOnAction(event -> {
+            int page = getPageForSection(sectionKey);
+            if (page > 1) {
+                setPageForSection(sectionKey, page - 1);
+                renderWorkspace(sectionKey, activeFilter);
+            }
+        });
+
+        pagination.getChildren().addAll(total, previous);
+
+        addCompactPageButtons(pagination, sectionKey, currentPage, totalPages);
+
+        Button next = paginationButton("Next >", currentPage >= totalPages);
+        next.setOnAction(event -> {
+            int page = getPageForSection(sectionKey);
+            if (page < totalPages) {
+                setPageForSection(sectionKey, page + 1);
+                renderWorkspace(sectionKey, activeFilter);
+            }
+        });
+
+        pagination.getChildren().add(next);
+        return pagination;
+    }
+
+    private void addCompactPageButtons(
+        HBox pagination, String sectionKey, int currentPage, int totalPages) {
+        if (totalPages <= 7) {
+            for (int page = 1; page <= totalPages; page++) {
+                addPaginationPageButton(pagination, sectionKey, page, currentPage);
+            }
+            return;
+        }
+
+        int start = Math.max(2, currentPage - 1);
+        int end = Math.min(totalPages - 1, currentPage + 1);
+
+        addPaginationPageButton(pagination, sectionKey, 1, currentPage);
+        if (start > 2) {
+            pagination.getChildren().add(paginationDots());
+        }
+
+        for (int page = start; page <= end; page++) {
+            addPaginationPageButton(pagination, sectionKey, page, currentPage);
+        }
+
+        if (end < totalPages - 1) {
+            pagination.getChildren().add(paginationDots());
+        }
+        addPaginationPageButton(pagination, sectionKey, totalPages, currentPage);
+    }
+
+    private void addPaginationPageButton(
+        HBox pagination, String sectionKey, int targetPage, int currentPage) {
+        Button button = paginationButton(String.valueOf(targetPage), false);
+        button.getStyleClass().add(targetPage == currentPage ? "pagination-active" : "pagination-btn");
+        button.setOnAction(event -> {
+            setPageForSection(sectionKey, targetPage);
+            renderWorkspace(sectionKey, activeFilter);
+        });
+        pagination.getChildren().add(button);
+    }
+
+    private Label paginationDots() {
+        Label dots = new Label("...");
+        dots.getStyleClass().add("row-meta");
+        return dots;
+    }
+
+    private Button paginationButton(String text, boolean disabled) {
+        Button button = new Button(text);
+        button.setMnemonicParsing(false);
+        button.getStyleClass().add("pagination-btn");
+        button.setDisable(disabled);
+        return button;
+    }
+
+    private int totalPages(int totalItems, int pageSize) {
+        return Math.max(1, (int) Math.ceil(totalItems / (double) pageSize));
+    }
+
+    private int clampPage(int page, int totalPages) {
+        return Math.max(1, Math.min(page, totalPages));
+    }
+
+    private List<AdminRow> pageSlice(List<AdminRow> items, int page, int pageSize) {
+        int fromIndex = Math.max(0, (page - 1) * pageSize);
+        int toIndex = Math.min(fromIndex + pageSize, items.size());
+        return items.subList(fromIndex, toIndex);
+    }
+
+    private void resetPageForSection(String sectionKey) {
+        setPageForSection(sectionKey, 1);
+    }
+
+    private int getPageForSection(String sectionKey) {
+        return switch (sectionKey) {
+            case "users" -> usersPage;
+            case "auctions" -> auctionsPage;
+            case "items" -> itemsPage;
+            case "reports" -> reportsPage;
+            case "settings" -> settingsPage;
+            default -> dashboardPage;
+        };
+    }
+
+    private void setPageForSection(String sectionKey, int page) {
+        int safePage = Math.max(1, page);
+        switch (sectionKey) {
+            case "users" -> usersPage = safePage;
+            case "auctions" -> auctionsPage = safePage;
+            case "items" -> itemsPage = safePage;
+            case "reports" -> reportsPage = safePage;
+            case "settings" -> settingsPage = safePage;
+            default -> dashboardPage = safePage;
         }
     }
 

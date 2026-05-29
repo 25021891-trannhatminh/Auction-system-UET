@@ -24,10 +24,10 @@ public class NotificationUIHandler {
   private static final double TOAST_TOP_MARGIN = 56;
 
   private enum ToastType {
-    SUCCESS("\u2713", "#f7f3e9", "#d1b15d", "#17352c", "#183b34", "#536961"),
-    INFO("i", "#edf3ef", "#315d52", "#f7f3e9", "#183b34", "#536961"),
-    WARNING("!", "#fff7e1", "#caa64d", "#17352c", "#4b3b15", "#746437"),
-    ERROR("x", "#fff0eb", "#b86d5c", "#fff7f0", "#6a2f25", "#86584f");
+    SUCCESS("\u2713", "#f1e4d2", "#e1b572", "#102339", "#1c2127", "#625b53"),
+    INFO("i", "#f8f0e5", "#102339", "#f3cc8c", "#1c2127", "#625b53"),
+    WARNING("!", "#fff4df", "#caa26c", "#102339", "#1c2127", "#625b53"),
+    ERROR("x", "#f8e0d5", "#b65a4d", "#fff9ec", "#1c2127", "#6f4f44");
 
     final String icon;
     final String background;
@@ -193,7 +193,8 @@ public class NotificationUIHandler {
             + "-fx-border-color: " + type.accent + ";"
             + "-fx-border-width: 0 0 0 4;"
             + "-fx-border-radius: 18;"
-            + "-fx-effect: dropshadow(gaussian, rgba(18, 35, 30, 0.22), 22, 0.18, 0, 8);"
+            + "-fx-font-family: \"Times New Roman\";"
+            + "-fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.16), 18, 0.16, 0, 6);"
     );
 
     Label icon = new Label(type.icon);

@@ -212,3 +212,158 @@
     -fx-font-weight: 700;
     -fx-text-fill: #255549;
 }
+
+/* Final tone sync with user-home navy / warm ivory theme. */
+.create-item-root,
+.create-item-root .label,
+.create-item-root .button,
+.create-item-root .text-field,
+.create-item-root .text-area,
+.create-item-root .combo-box,
+.create-item-root .radio-button {
+    -fx-font-family: "Times New Roman";
+}
+
+.create-item-root {
+    -fx-background-color: #0f2238;
+}
+
+.content-shell {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 24;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+}
+
+.topbar {
+    -fx-background-color: #102339;
+    -fx-border-color: rgba(224, 181, 113, 0.72);
+    -fx-border-width: 0 0 1 0;
+}
+
+.page-title {
+    -fx-font-size: 34px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #f8f0e5;
+}
+
+.breadcrumb-label,
+.seller-role-label {
+    -fx-text-fill: rgba(248, 240, 229, 0.78);
+}
+
+.seller-name-label {
+    -fx-text-fill: #f8f0e5;
+    -fx-font-weight: 900;
+}
+
+.seller-badge {
+    -fx-background-color: #102339;
+    -fx-border-color: #f1c17e;
+    -fx-border-radius: 999;
+    -fx-border-width: 2.2;
+}
+
+.seller-badge-text {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-weight: 900;
+}
+
+.card-panel,
+.purchase-card,
+.preview-panel {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18px;
+    -fx-border-radius: 18px;
+    -fx-border-color: #e5cfb5;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.14), 14, 0.16, 0, 5);
+}
+
+.purchase-card-active {
+    -fx-border-color: #d5a466;
+    -fx-background-color: #eadbc7;
+}
+
+.section-title,
+.side-title,
+.upload-headline,
+.radio-card-title,
+.field-label,
+.preview-title,
+.preview-price {
+    -fx-text-fill: #1c2127;
+    -fx-font-weight: 900;
+}
+
+.upload-subtext,
+.upload-file-name,
+.purchase-card-text,
+.message-label,
+.preview-seller {
+    -fx-text-fill: #625b53;
+}
+
+.upload-dropzone,
+.preview-image-shell {
+    -fx-background-color: linear-gradient(to bottom right, #f8f0e5, #f1e4d2);
+    -fx-border-color: #d8bd98;
+}
+
+.form-field,
+.form-text-area,
+.form-text-area .content {
+    -fx-background-color: #f8f0e5;
+    -fx-control-inner-background: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #1c2127;
+    -fx-prompt-text-fill: #9b8874;
+}
+
+.form-field:focused,
+.form-text-area:focused {
+    -fx-border-color: #caa26c;
+    -fx-background-color: #fff9ec;
+}
+
+.primary-btn,
+.dark-btn,
+.small-primary-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 14px;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #102339;
+    -fx-font-weight: 900;
+}
+
+.primary-btn:hover,
+.dark-btn:hover,
+.small-primary-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+    -fx-opacity: 1;
+}
+
+.secondary-btn,
+.ghost-btn,
+.small-ghost-btn {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #102339;
+    -fx-font-weight: 900;
+}
+
+.secondary-btn:hover,
+.ghost-btn:hover,
+.small-ghost-btn:hover {
+    -fx-background-color: #f2e5d5;
+}
+
+.preview-status-badge {
+    -fx-background-color: #102339;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #f3cc8c;
+}

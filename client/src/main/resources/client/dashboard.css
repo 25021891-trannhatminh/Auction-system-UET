@@ -4884,3 +4884,401 @@
     -fx-min-height: 88;
     -fx-pref-height: 88;
 }
+
+/* Final system tone sync: admin-home, notification popup, and lighter scroll lists. */
+.admin-dashboard-root,
+.admin-dashboard-root .label,
+.admin-dashboard-root .button,
+.admin-dashboard-root .text-field,
+.admin-dashboard-root .text-area,
+.admin-dashboard-root .combo-box,
+.admin-dashboard-root .menu-button,
+.notification-popup,
+.notification-popup .label,
+.notification-popup .button {
+    -fx-font-family: "Times New Roman";
+}
+
+.admin-dashboard-root {
+    -fx-background-color: #0f2238;
+}
+
+.admin-dashboard-root .app-shell {
+    -fx-background-color: #0f2238;
+    -fx-background-radius: 0;
+    -fx-padding: 10;
+}
+
+.admin-dashboard-root .content-shell {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 24;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+    -fx-padding: 18 20 18 20;
+    -fx-effect: dropshadow(gaussian, rgba(20, 18, 14, 0.12), 18, 0.14, 0, 5);
+}
+
+.admin-dashboard-root .content-scroll,
+.admin-dashboard-root .content-scroll > .viewport,
+.admin-dashboard-root .sidebar-scroll,
+.admin-dashboard-root .sidebar-scroll > .viewport,
+.admin-dashboard-root .content-scroll > .corner,
+.admin-dashboard-root .sidebar-scroll > .corner {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+
+.admin-dashboard-root .sidebar-shell {
+    -fx-background-color: linear-gradient(to bottom, #102339, #0f2031);
+    -fx-background-radius: 24;
+    -fx-border-color: rgba(224, 181, 113, 0.72);
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+    -fx-padding: 16 12 16 12;
+}
+
+.admin-dashboard-root .profile-card {
+    -fx-background-color: linear-gradient(to bottom right, #152a43, #11253c);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(224, 181, 113, 0.48);
+    -fx-border-radius: 20;
+    -fx-border-width: 1;
+    -fx-padding: 16 14 16 14;
+}
+
+.admin-dashboard-root .avatar-circle {
+    -fx-background-color: #102339;
+    -fx-background-radius: 999;
+    -fx-border-color: #f1c17e;
+    -fx-border-radius: 999;
+    -fx-border-width: 2.2;
+    -fx-min-width: 76;
+    -fx-min-height: 76;
+    -fx-pref-width: 76;
+    -fx-pref-height: 76;
+    -fx-max-width: 76;
+    -fx-max-height: 76;
+}
+
+.admin-dashboard-root .avatar-text {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 24px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .profile-top-row {
+    -fx-min-height: 88;
+    -fx-pref-height: 88;
+}
+
+.admin-dashboard-root .sidebar-name {
+    -fx-text-fill: #f8f0e5;
+    -fx-font-size: 18px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .sidebar-email,
+.admin-dashboard-root .menu-title {
+    -fx-text-fill: rgba(248, 240, 229, 0.78);
+}
+
+.admin-dashboard-root .menu-title {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 11px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .role-pill {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-text-fill: #f3cc8c;
+}
+
+.admin-dashboard-root .notification-bell-btn {
+    -fx-background-color: #f3cc8c;
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(255, 249, 236, 0.62);
+    -fx-border-radius: 999;
+    -fx-text-fill: #102339;
+}
+
+.admin-dashboard-root .notification-bell-btn:hover {
+    -fx-background-color: #f8db9e;
+    -fx-border-color: #fff1c9;
+}
+
+.admin-dashboard-root .notification-badge {
+    -fx-background-color: #f3cc8c;
+    -fx-border-color: #102339;
+    -fx-text-fill: #102339;
+}
+
+.admin-dashboard-root .nav-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 14;
+    -fx-text-fill: #f8f0e5;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-padding: 11 14 11 14;
+}
+
+.admin-dashboard-root .nav-btn:hover {
+    -fx-background-color: rgba(243, 204, 140, 0.14);
+}
+
+.admin-dashboard-root .nav-btn-active {
+    -fx-background-color: linear-gradient(to right, #f3cc8c, #e0b571);
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(255, 249, 236, 0.46);
+    -fx-border-radius: 14;
+    -fx-text-fill: #102339;
+}
+
+.admin-dashboard-root .logout-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 14;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 14;
+    -fx-border-width: 1;
+    -fx-text-fill: #f3cc8c;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-padding: 12 16 12 16;
+}
+
+.admin-dashboard-root .logout-btn:hover {
+    -fx-background-color: rgba(243, 204, 140, 0.12);
+}
+
+.admin-dashboard-root .top-title {
+    -fx-text-fill: #102339;
+    -fx-font-size: 34px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .top-subtitle,
+.admin-dashboard-root .surface-desc,
+.admin-dashboard-root .placeholder-desc,
+.admin-dashboard-root .activity-line,
+.admin-dashboard-root .row-meta,
+.admin-dashboard-root .stat-label,
+.admin-dashboard-root .table-header-label {
+    -fx-text-fill: #625b53;
+}
+
+.admin-dashboard-root .surface-card,
+.admin-dashboard-root .table-card,
+.admin-dashboard-root .activity-card,
+.admin-dashboard-root .stat-card,
+.admin-dashboard-root .aside-card,
+.admin-dashboard-root .insight-card,
+.admin-dashboard-root .placeholder-card,
+.admin-dashboard-root .data-header,
+.admin-dashboard-root .data-row,
+.admin-dashboard-root .auction-create-card,
+.admin-dashboard-root .admin-workspace-shell {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18;
+    -fx-border-color: #e5cfb5;
+    -fx-border-radius: 18;
+    -fx-border-width: 1;
+}
+
+.admin-dashboard-root .surface-card {
+    -fx-padding: 14 16 16 16;
+}
+
+.admin-dashboard-root .data-header {
+    -fx-background-color: #eadbc7;
+}
+
+.admin-dashboard-root .data-row:hover {
+    -fx-background-color: #eadbc7;
+}
+
+.admin-dashboard-root .section-title,
+.admin-dashboard-root .section-mini-title,
+.admin-dashboard-root .surface-title,
+.admin-dashboard-root .table-title,
+.admin-dashboard-root .placeholder-title,
+.admin-dashboard-root .stat-value,
+.admin-dashboard-root .row-link,
+.admin-dashboard-root .row-metric,
+.admin-dashboard-root .admin-page-title {
+    -fx-text-fill: #1c2127;
+}
+
+.admin-dashboard-root .search-field,
+.admin-dashboard-root .admin-auction-field {
+    -fx-background-color: #f8f0e5;
+    -fx-control-inner-background: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #1c2127;
+    -fx-prompt-text-fill: #9b8874;
+}
+
+.admin-dashboard-root .filter-chip,
+.admin-dashboard-root .ghost-chip,
+.admin-dashboard-root .sort-pill,
+.admin-dashboard-root .pagination-btn {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 999;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-text-fill: #102339;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .filter-chip:hover,
+.admin-dashboard-root .ghost-chip:hover,
+.admin-dashboard-root .pagination-btn:hover {
+    -fx-background-color: #f2e5d5;
+    -fx-border-color: #d5b58d;
+}
+
+.admin-dashboard-root .filter-chip-active,
+.admin-dashboard-root .gold-chip,
+.admin-dashboard-root .pagination-active {
+    -fx-background-color: linear-gradient(to right, #caa26c, #e0b571);
+    -fx-border-color: #d5b58d;
+    -fx-text-fill: #ffffff;
+}
+
+.admin-dashboard-root .action-btn,
+.admin-dashboard-root .mini-action-btn,
+.admin-dashboard-root .more-action-btn,
+.admin-dashboard-root .admin-primary-action-btn,
+.admin-dashboard-root .admin-disabled-primary-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 14;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 14;
+    -fx-text-fill: #102339;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+}
+
+.admin-dashboard-root .action-btn:hover,
+.admin-dashboard-root .mini-action-btn:hover,
+.admin-dashboard-root .more-action-btn:hover,
+.admin-dashboard-root .admin-primary-action-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+    -fx-opacity: 1;
+}
+
+.admin-dashboard-root .status-good,
+.admin-dashboard-root .status-neutral,
+.admin-dashboard-root .status-warning,
+.admin-dashboard-root .status-bad {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #e1c5a1;
+    -fx-text-fill: #102339;
+}
+
+.notification-popup {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 22;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 22;
+    -fx-border-width: 1;
+    -fx-padding: 14;
+    -fx-pref-width: 334;
+    -fx-max-width: 334;
+    -fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.14), 14, 0.16, 0, 5);
+}
+
+.notification-popup-title {
+    -fx-text-fill: #102339;
+    -fx-font-size: 17px;
+    -fx-font-weight: 900;
+}
+
+.notification-clear-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 999;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 999;
+    -fx-text-fill: #102339;
+    -fx-font-size: 11px;
+    -fx-font-weight: 900;
+}
+
+.notification-clear-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+}
+
+.notification-empty,
+.notification-item {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 16;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 16;
+    -fx-text-fill: #625b53;
+}
+
+.notification-item:hover {
+    -fx-background-color: #f2e5d5;
+    -fx-border-color: #d5b58d;
+}
+
+.notification-item-icon {
+    -fx-background-color: #102339;
+    -fx-border-color: #e0b571;
+    -fx-text-fill: #f3cc8c;
+}
+
+.notification-item-title {
+    -fx-text-fill: #1c2127;
+    -fx-font-size: 13px;
+    -fx-font-weight: 900;
+}
+
+.notification-item-message {
+    -fx-text-fill: #625b53;
+    -fx-font-size: 12px;
+}
+
+.notification-item-time {
+    -fx-text-fill: #756d63;
+}
+
+.user-dashboard-root .transaction-wallet-deposit-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 999;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 999;
+    -fx-text-fill: #102339;
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-padding: 9 18 9 18;
+    -fx-cursor: hand;
+}
+
+.user-dashboard-root .transaction-wallet-deposit-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+}
+
+.user-dashboard-root .auction-market-card,
+.user-dashboard-root .auction-product-card,
+.user-dashboard-root .auction-live-card,
+.user-dashboard-root .data-header,
+.user-dashboard-root .data-row,
+.user-dashboard-root .category-card,
+.admin-dashboard-root .data-header,
+.admin-dashboard-root .data-row,
+.admin-dashboard-root .stat-card,
+.admin-dashboard-root .surface-card {
+    -fx-effect: none;
+}
+
+.user-dashboard-root .auction-market-card,
+.user-dashboard-root .auction-product-card,
+.user-dashboard-root .auction-live-card {
+    -fx-background-insets: 0;
+}

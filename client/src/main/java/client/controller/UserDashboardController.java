@@ -80,7 +80,7 @@ public class UserDashboardController extends BaseDashboardController {
   @FXML private Button depositFloatingButton;
 
   private static final int AUCTIONS_PER_PAGE = 6;
-  private static final int TABLE_ROWS_PER_PAGE = 8;
+  private static final int TABLE_ROWS_PER_PAGE = 5;
   private static final double USER_ACTION_PRIMARY_WIDTH = 84;
   private static final double USER_ACTION_MORE_WIDTH = 28;
   private static final double USER_ACTION_GAP = 6;
@@ -1346,7 +1346,7 @@ public class UserDashboardController extends BaseDashboardController {
     resetActivityLinesToLiveDataState();
     updatePrimaryAction(sectionKey);
     setCreateListingFloatingButtonVisible("myItems".equals(sectionKey));
-    setDepositFloatingButtonVisible("winners".equals(sectionKey));
+    setDepositFloatingButtonVisible(false);
 
     if ("myItems".equals(sectionKey)) {
       if (!sellerItemsLoaded && !sellerItemsLoading) {
@@ -1810,8 +1810,8 @@ public class UserDashboardController extends BaseDashboardController {
     imageView.setPreserveRatio(false);
     imageView.setFitWidth(54);
     imageView.setFitHeight(46);
-    imageView.setSmooth(true);
-    imageView.setCache(true);
+    imageView.setSmooth(false);
+    imageView.setCache(false);
     Rectangle clip = new Rectangle(54, 46);
     clip.setArcWidth(18);
     clip.setArcHeight(18);
@@ -2205,9 +2205,11 @@ public class UserDashboardController extends BaseDashboardController {
         : "Updating...");
     total.getStyleClass().add("transaction-wallet-total");
     total.setTextOverrun(OverrunStyle.ELLIPSIS);
-    Label status = new Label(walletBalanceKnown ? "Ready to bid" : "Updating");
-    status.getStyleClass().add("transaction-wallet-status");
-    amountRow.getChildren().addAll(total, status);
+    Button depositButton = new Button("Deposit");
+    depositButton.setMnemonicParsing(false);
+    depositButton.getStyleClass().add("transaction-wallet-deposit-btn");
+    depositButton.setOnAction(event -> handleOpenDepositDialog());
+    amountRow.getChildren().addAll(total, depositButton);
 
     Label caption = new Label(walletBalanceKnown
         ? "Available for bidding and payments"
@@ -3002,8 +3004,8 @@ public class UserDashboardController extends BaseDashboardController {
     if (image != null && !image.isError()) {
       ImageView imageView = new ImageView(image);
       imageView.getStyleClass().add("product-image");
-      imageView.setSmooth(true);
-      imageView.setCache(true);
+      imageView.setSmooth(false);
+      imageView.setCache(false);
       imageView.setPreserveRatio(false);
       imageView.setFitWidth(PRODUCT_IMAGE_INITIAL_WIDTH);
       imageView.setFitHeight(height);
@@ -3013,9 +3015,12 @@ public class UserDashboardController extends BaseDashboardController {
           updateCoverViewport(imageView, imageWrap));
       imageWrap.heightProperty().addListener((observable, oldValue, newValue) ->
           updateCoverViewport(imageView, imageWrap));
+      image.progressProperty().addListener((observable, oldValue, newValue) -> {
+        if (newValue != null && newValue.doubleValue() >= 1.0) {
+          updateCoverViewport(imageView, imageWrap);
+        }
+      });
       imageWrap.getChildren().add(imageView);
-      imageWrap.applyCss();
-      imageWrap.layout();
       updateCoverViewport(imageView, imageWrap);
     } else {
       imageWrap.getChildren().add(buildThumbnail("IMG"));
@@ -4764,16 +4769,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     pagination.getChildren().addAll(total, previous);
 
-    for (int page = 1; page <= totalPages; page++) {
-      final int targetPage = page;
-      Button button = paginationButton(String.valueOf(page), false);
-      button.getStyleClass().add(page == currentPage ? "pagination-active" : "pagination-btn");
-      button.setOnAction(event -> {
-        setPageForSection(sectionKey, targetPage);
-        renderWorkspace(sectionKey, activeFilter);
-      });
-      pagination.getChildren().add(button);
-    }
+    addCompactPageButtons(pagination, sectionKey, currentPage, totalPages);
 
     Button next = paginationButton("Next >", currentPage >= totalPages);
     next.setOnAction(event -> {
@@ -4786,6 +4782,50 @@ public class UserDashboardController extends BaseDashboardController {
 
     pagination.getChildren().add(next);
     return pagination;
+  }
+
+  private void addCompactPageButtons(
+      HBox pagination, String sectionKey, int currentPage, int totalPages) {
+    if (totalPages <= 7) {
+      for (int page = 1; page <= totalPages; page++) {
+        addPaginationPageButton(pagination, sectionKey, page, currentPage);
+      }
+      return;
+    }
+
+    int start = Math.max(2, currentPage - 1);
+    int end = Math.min(totalPages - 1, currentPage + 1);
+
+    addPaginationPageButton(pagination, sectionKey, 1, currentPage);
+    if (start > 2) {
+      pagination.getChildren().add(paginationDots());
+    }
+
+    for (int page = start; page <= end; page++) {
+      addPaginationPageButton(pagination, sectionKey, page, currentPage);
+    }
+
+    if (end < totalPages - 1) {
+      pagination.getChildren().add(paginationDots());
+    }
+    addPaginationPageButton(pagination, sectionKey, totalPages, currentPage);
+  }
+
+  private void addPaginationPageButton(
+      HBox pagination, String sectionKey, int targetPage, int currentPage) {
+    Button button = paginationButton(String.valueOf(targetPage), false);
+    button.getStyleClass().add(targetPage == currentPage ? "pagination-active" : "pagination-btn");
+    button.setOnAction(event -> {
+      setPageForSection(sectionKey, targetPage);
+      renderWorkspace(sectionKey, activeFilter);
+    });
+    pagination.getChildren().add(button);
+  }
+
+  private Label paginationDots() {
+    Label dots = new Label("...");
+    dots.getStyleClass().add("row-meta");
+    return dots;
   }
 
   private int totalPages(int totalItems, int pageSize) {
