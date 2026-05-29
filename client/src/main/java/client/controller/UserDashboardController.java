@@ -3061,6 +3061,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     stopAuctionDetailCountdown();
     currentSectionKey = sellerView ? "myItems" : "auctions";
+    setCreateListingFloatingButtonVisible(false);
     setDepositFloatingButtonVisible(false);
     workspaceBox.getChildren().clear();
 
@@ -4473,7 +4474,7 @@ public class UserDashboardController extends BaseDashboardController {
     row.setAlignment(Pos.CENTER);
     row.setMaxWidth(Double.MAX_VALUE);
 
-    addAuctionMetaCell(row, "Category", data.category);
+    addAuctionCategoryMetaCell(row, data.category, sizeConditionValue(data.attributes));
     if (isArtCategory(data.category)) {
       addAuctionMetaCell(row, "Artist", attributeValue(data.attributes, "artist"));
       addAuctionMetaCell(row, "Year", attributeValue(data.attributes, "year_created", "year"));
@@ -4482,27 +4483,52 @@ public class UserDashboardController extends BaseDashboardController {
     return row;
   }
 
+  private void addAuctionCategoryMetaCell(HBox row, String category, String sizeCondition) {
+    VBox cell = baseAuctionMetaCell();
+
+    Label label = auctionMetaLabel("Category", "auction-detail-meta-key");
+    Label value = auctionMetaLabel(fallback(category, "not available"), "auction-detail-meta-value");
+    cell.getChildren().addAll(label, value);
+
+    if (sizeCondition != null && !sizeCondition.isBlank()) {
+      Label sizeLine = auctionMetaLabel("Size / Condition: " + sizeCondition, "auction-detail-meta-extra");
+      cell.getChildren().add(sizeLine);
+    }
+
+    HBox.setHgrow(cell, Priority.ALWAYS);
+    row.getChildren().add(cell);
+  }
+
   private void addAuctionMetaCell(HBox row, String labelText, String valueText) {
+    VBox cell = baseAuctionMetaCell();
+    cell.getChildren().addAll(
+        auctionMetaLabel(labelText, "auction-detail-meta-key"),
+        auctionMetaLabel(fallback(valueText, "not available"), "auction-detail-meta-value")
+    );
+    HBox.setHgrow(cell, Priority.ALWAYS);
+    row.getChildren().add(cell);
+  }
+
+  private VBox baseAuctionMetaCell() {
     VBox cell = new VBox(5);
     cell.getStyleClass().add("auction-detail-meta-cell");
     cell.setAlignment(Pos.CENTER);
     cell.setMinWidth(0);
     cell.setMaxWidth(Double.MAX_VALUE);
+    return cell;
+  }
 
-    Label label = new Label(labelText);
-    label.getStyleClass().add("auction-detail-meta-key");
+  private Label auctionMetaLabel(String text, String styleClass) {
+    Label label = new Label(text);
+    label.getStyleClass().add(styleClass);
     label.setAlignment(Pos.CENTER);
+    label.setWrapText(true);
     label.setMaxWidth(Double.MAX_VALUE);
+    return label;
+  }
 
-    Label value = new Label(fallback(valueText, "not available"));
-    value.getStyleClass().add("auction-detail-meta-value");
-    value.setAlignment(Pos.CENTER);
-    value.setWrapText(true);
-    value.setMaxWidth(Double.MAX_VALUE);
-
-    cell.getChildren().addAll(label, value);
-    HBox.setHgrow(cell, Priority.ALWAYS);
-    row.getChildren().add(cell);
+  private String sizeConditionValue(String attributes) {
+    return attributeValue(attributes, "size_condition", "size condition", "condition", "size");
   }
 
   private boolean isArtCategory(String category) {

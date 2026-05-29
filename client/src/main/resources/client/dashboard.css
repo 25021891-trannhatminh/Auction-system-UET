@@ -5496,3 +5496,61 @@
     -fx-font-size: 10px;
     -fx-padding: 4 10 4 10;
 }
+
+/* Latest admin review/create-auction tone alignment. */
+.admin-dashboard-root .item-gallery-card,
+.admin-dashboard-root .item-review-card,
+.admin-dashboard-root .auction-create-card {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18;
+    -fx-border-color: #f1e4d2;
+    -fx-border-radius: 18;
+    -fx-border-width: 1;
+}
+
+.admin-dashboard-root .item-main-image-wrap {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 16;
+    -fx-border-color: #f1e4d2;
+    -fx-border-radius: 16;
+    -fx-border-width: 1;
+}
+
+.admin-dashboard-root .item-thumb,
+.admin-dashboard-root .item-thumb-empty,
+.admin-dashboard-root .auction-info-cell,
+.admin-dashboard-root .item-attributes-box {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 14;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 14;
+    -fx-border-width: 1;
+}
+
+.admin-dashboard-root .auction-info-key,
+.admin-dashboard-root .auction-kicker {
+    -fx-text-fill: #8a6415;
+}
+
+.admin-dashboard-root .auction-info-value,
+.admin-dashboard-root .item-info-title,
+.admin-dashboard-root .item-info-price {
+    -fx-text-fill: #102339;
+}
+
+.admin-dashboard-root .item-review-action-btn,
+.admin-dashboard-root .compact-action-btn.item-review-action-btn {
+    -fx-font-size: 10px;
+    -fx-padding: 4 14 4 14;
+    -fx-min-width: 158;
+    -fx-pref-width: 158;
+    -fx-max-width: 158;
+}
+
+.user-dashboard-root .auction-detail-meta-extra {
+    -fx-text-fill: #625b53;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}

@@ -50,7 +50,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private static final double ACTION_PRIMARY_WIDTH = 88;
     private static final double ACTION_MORE_WIDTH = 28;
-    private static final double ITEM_ACTION_PRIMARY_WIDTH = 132;
+    private static final double ITEM_ACTION_PRIMARY_WIDTH = 158;
     private static final double ITEM_ACTION_MORE_WIDTH = 30;
     private static final double ACTION_GAP = 6;
     private static final double REVIEW_IMAGE_HEIGHT = 265;
@@ -694,19 +694,12 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private String[] actionsForItem(String status, String auctionId) {
         String normalizedStatus = normalize(status);
-        boolean hasAuction = auctionId != null && !auctionId.isBlank();
-
         if (normalizedStatus.equals("pending review")) {
             return new String[]{"Review"};
         }
 
         if (normalizedStatus.equals("available")) {
             return new String[]{"Create Auction"};
-        }
-
-        if ((normalizedStatus.equals("in auction") || normalizedStatus.equals("sold"))
-            && hasAuction) {
-            return new String[]{"View Auction"};
         }
 
         return new String[]{};
@@ -1247,11 +1240,11 @@ public class AdminDashboardController extends BaseDashboardController {
 
         if (isItemReviewTable()) {
             grid.getColumnConstraints().addAll(
-                percentColumn(38),
+                percentColumn(35),
                 percentColumn(13),
                 percentColumn(15),
                 percentColumn(14),
-                percentColumn(20)
+                percentColumn(23)
             );
             return grid;
         }
@@ -2180,15 +2173,6 @@ public class AdminDashboardController extends BaseDashboardController {
             createAuction.getStyleClass().add("create-primary-btn");
             createAuction.setOnAction(event -> openCreateAuctionDraft(data));
             actions.getChildren().add(createAuction);
-            return actions;
-        }
-
-        if (data.auctionId != null && !data.auctionId.isBlank()) {
-            Button viewAuction = new Button("View Auction");
-            viewAuction.setMnemonicParsing(false);
-            viewAuction.getStyleClass().add("create-primary-btn");
-            viewAuction.setOnAction(event -> openLinkedAuctionDetail(data));
-            actions.getChildren().add(viewAuction);
             return actions;
         }
 
