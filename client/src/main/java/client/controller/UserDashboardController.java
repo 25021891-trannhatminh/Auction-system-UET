@@ -86,7 +86,7 @@ public class UserDashboardController extends BaseDashboardController {
   private static final double USER_ACTION_GAP = 6;
   private static final double PRODUCT_IMAGE_INITIAL_WIDTH = 360;
   private static final double PRODUCT_IMAGE_HEIGHT = 155;
-  private static final double AUCTION_DETAIL_INFO_WIDTH = 382;
+  private static final double AUCTION_DETAIL_INFO_WIDTH = 360;
   private static final double AUCTION_DETAIL_GAP = 22;
   private static final double AUCTION_DETAIL_IMAGE_HEIGHT = 380;
   private static final double AUCTION_DETAIL_THUMB_WIDTH = 86;
@@ -1452,6 +1452,26 @@ public class UserDashboardController extends BaseDashboardController {
     return "All";
   }
 
+  private String[] auctionCategoryFilters() {
+    List<String> labels = new ArrayList<>();
+    labels.add("All");
+
+    Map<String, String> categoryLabels = new LinkedHashMap<>();
+    for (AuctionCardData card : liveAuctionCards) {
+      if (isOwnAuction(card)) {
+        continue;
+      }
+      String category = fallback(prettyStatus(card.category), "").trim();
+      if (category.isBlank()) {
+        continue;
+      }
+      categoryLabels.putIfAbsent(normalize(category), category);
+    }
+
+    labels.addAll(categoryLabels.values());
+    return labels.toArray(new String[0]);
+  }
+
   private void updatePrimaryAction(String sectionKey) {
     if (primaryActionButton == null) {
       return;
@@ -1496,18 +1516,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void renderDashboard(String filter) {
     setWorkspaceTitle("Live Auction Rooms");
-    renderChips(
-        filter,
-        "All",
-        "Open",
-        "Running",
-        "Finished",
-        "Paid",
-        "Canceled",
-        "Vehicle",
-        "Art",
-        "Electronic"
-    );
+    renderChips(filter, auctionCategoryFilters());
 
     addHeader("Auction", "Current Bid", "Time Left");
 
@@ -1549,18 +1558,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void renderAuctions(String filter) {
     setWorkspaceTitle("Live Auctions From Database");
-    renderChips(
-        filter,
-        "All",
-        "Open",
-        "Running",
-        "Finished",
-        "Paid",
-        "Canceled",
-        "Vehicle",
-        "Art",
-        "Electronic"
-    );
+    renderChips(filter, auctionCategoryFilters());
 
     HBox browseHeader = new HBox(10);
     browseHeader.setAlignment(Pos.CENTER_RIGHT);
@@ -1726,18 +1724,21 @@ public class UserDashboardController extends BaseDashboardController {
     Label firstMetric = rowMetric(item.startingPrice);
     Label secondMetric = rowMetric(item.createdAt);
     Label status = statusBadge(prettyStatus(item.status));
-    GridPane actions = sellerItemActions(item);
 
     row.add(mainCell, 0, 0);
     row.add(firstMetric, 1, 0);
     row.add(secondMetric, 2, 0);
     row.add(status, 3, 0);
-    row.add(actions, 4, 0);
 
     GridPane.setHalignment(firstMetric, HPos.CENTER);
     GridPane.setHalignment(secondMetric, HPos.CENTER);
     GridPane.setHalignment(status, HPos.CENTER);
-    GridPane.setHalignment(actions, HPos.CENTER);
+
+    if (tableShowsActionColumn()) {
+      GridPane actions = sellerItemActions(item);
+      row.add(actions, 4, 0);
+      GridPane.setHalignment(actions, HPos.CENTER);
+    }
 
     workspaceBox.getChildren().add(row);
   }
@@ -1921,7 +1922,7 @@ public class UserDashboardController extends BaseDashboardController {
     loading.getStyleClass().add("row-meta");
     loading.setWrapText(true);
     loading.setMaxWidth(Double.MAX_VALUE);
-    GridPane.setColumnSpan(loading, 5);
+    GridPane.setColumnSpan(loading, tableShowsActionColumn() ? 5 : 4);
     row.add(loading, 0, 0);
     workspaceBox.getChildren().add(row);
   }
@@ -3203,7 +3204,15 @@ public class UserDashboardController extends BaseDashboardController {
     endNote.getStyleClass().add("auction-detail-end-note");
     endNote.setWrapText(true);
 
-    sidePanel.getChildren().addAll(timeTitle, countdown, metaRow, priceBox);
+    VBox timeNotes = new VBox(3);
+    timeNotes.getStyleClass().add("auction-detail-time-notes");
+    timeNotes.setMaxWidth(Double.MAX_VALUE);
+    if (!sellerView) {
+      timeNotes.getChildren().add(bidMessage);
+    }
+    timeNotes.getChildren().add(endNote);
+
+    sidePanel.getChildren().addAll(timeTitle, countdown, timeNotes, metaRow, priceBox);
     if (sellerView) {
       sidePanel.getChildren().add(buildSellerPerformancePanel(displayData));
     } else {
@@ -3211,9 +3220,7 @@ public class UserDashboardController extends BaseDashboardController {
       if (autoBidPanel != null) {
         sidePanel.getChildren().add(autoBidPanel);
       }
-      sidePanel.getChildren().add(bidMessage);
     }
-    sidePanel.getChildren().add(endNote);
 
     activeAuctionDetailId = displayData.auctionId;
     activeAuctionPriceLabel = price;
@@ -3353,7 +3360,6 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     section.getChildren().add(buildAuctionVisualisationChart(data));
-    section.getChildren().add(buildAuctionVisualisationRecentRows(data));
   }
 
   private VBox visualisationMetric(String labelText, String valueText) {
@@ -4550,13 +4556,13 @@ public class UserDashboardController extends BaseDashboardController {
     updateCountdownLabels(dayNumber, hourNumber, minuteNumber, secondNumber, activeAuctionCountdownSeconds);
 
     box.getChildren().addAll(
-        countdownUnit(dayNumber, "Day"),
+        countdownUnit(dayNumber, "Days"),
         countdownSeparator(),
         countdownUnit(hourNumber, "Hours"),
         countdownSeparator(),
-        countdownUnit(minuteNumber, "Minutes"),
+        countdownUnit(minuteNumber, "Mins"),
         countdownSeparator(),
-        countdownUnit(secondNumber, "Seconds")
+        countdownUnit(secondNumber, "Secs")
     );
 
     startActiveCountdownTimeline();
@@ -5064,13 +5070,15 @@ public class UserDashboardController extends BaseDashboardController {
     Label firstHeader = headerLabel(first, HPos.CENTER);
     Label secondHeader = headerLabel(second, HPos.CENTER);
     Label statusHeader = headerLabel("Status", HPos.CENTER);
-    Label actionHeader = headerLabel("Action", HPos.CENTER);
 
     header.add(mainHeader, 0, 0);
     header.add(firstHeader, 1, 0);
     header.add(secondHeader, 2, 0);
     header.add(statusHeader, 3, 0);
-    header.add(actionHeader, 4, 0);
+    if (tableShowsActionColumn()) {
+      Label actionHeader = headerLabel("Action", HPos.CENTER);
+      header.add(actionHeader, 4, 0);
+    }
 
     workspaceBox.getChildren().add(header);
   }
@@ -5100,20 +5108,43 @@ public class UserDashboardController extends BaseDashboardController {
     grid.setMaxWidth(Double.MAX_VALUE);
     grid.setMinWidth(0);
 
-    ColumnConstraints mainColumn = percentColumn(42);
-    ColumnConstraints firstColumn = percentColumn(13);
-    ColumnConstraints secondColumn = percentColumn(15);
-    ColumnConstraints statusColumn = percentColumn(14);
-    ColumnConstraints actionColumn = percentColumn(16);
+    ColumnConstraints mainColumn;
+    ColumnConstraints firstColumn;
+    ColumnConstraints secondColumn;
+    ColumnConstraints statusColumn;
 
-    grid.getColumnConstraints().addAll(
-        mainColumn,
-        firstColumn,
-        secondColumn,
-        statusColumn,
-        actionColumn
-    );
+    if (tableShowsActionColumn()) {
+      mainColumn = percentColumn(42);
+      firstColumn = percentColumn(13);
+      secondColumn = percentColumn(15);
+      statusColumn = percentColumn(14);
+      ColumnConstraints actionColumn = percentColumn(16);
+      grid.getColumnConstraints().addAll(
+          mainColumn,
+          firstColumn,
+          secondColumn,
+          statusColumn,
+          actionColumn
+      );
+    } else {
+      mainColumn = percentColumn(52);
+      firstColumn = percentColumn(16);
+      secondColumn = percentColumn(16);
+      statusColumn = percentColumn(16);
+      grid.getColumnConstraints().addAll(
+          mainColumn,
+          firstColumn,
+          secondColumn,
+          statusColumn
+      );
+    }
     return grid;
+  }
+
+  private boolean tableShowsActionColumn() {
+    return !("myItems".equals(currentSectionKey)
+        || "myBids".equals(currentSectionKey)
+        || "autoBids".equals(currentSectionKey));
   }
 
   private ColumnConstraints percentColumn(double percent) {
@@ -5226,7 +5257,7 @@ public class UserDashboardController extends BaseDashboardController {
     empty.getStyleClass().add("row-meta");
     empty.setWrapText(true);
     empty.setMaxWidth(Double.MAX_VALUE);
-    GridPane.setColumnSpan(empty, 5);
+    GridPane.setColumnSpan(empty, tableShowsActionColumn() ? 5 : 4);
 
     row.add(empty, 0, 0);
     workspaceBox.getChildren().add(row);
@@ -5234,7 +5265,13 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void addRow(UserRow data) {
     GridPane row = createTableGrid("data-row");
-    row.setOnMouseClicked(event -> showTemporaryDetail(data.title, data.detail));
+    row.setOnMouseClicked(event -> {
+      if (data.linkedAuction != null && !tableShowsActionColumn()) {
+        renderAuctionDetailPage(latestAuctionCard(data.linkedAuction));
+        return;
+      }
+      showTemporaryDetail(data.title, data.detail);
+    });
 
     HBox mainCell = new HBox(9);
     mainCell.setAlignment(Pos.CENTER_LEFT);
@@ -5275,18 +5312,21 @@ public class UserDashboardController extends BaseDashboardController {
     Label firstMetric = rowMetric(data.firstValue);
     Label secondMetric = rowMetric(data.secondValue);
     Label status = statusBadge(data.status);
-    GridPane actions = rowActions(data);
 
     row.add(mainCell, 0, 0);
     row.add(firstMetric, 1, 0);
     row.add(secondMetric, 2, 0);
     row.add(status, 3, 0);
-    row.add(actions, 4, 0);
 
     GridPane.setHalignment(firstMetric, HPos.CENTER);
     GridPane.setHalignment(secondMetric, HPos.CENTER);
     GridPane.setHalignment(status, HPos.CENTER);
-    GridPane.setHalignment(actions, HPos.CENTER);
+
+    if (tableShowsActionColumn()) {
+      GridPane actions = rowActions(data);
+      row.add(actions, 4, 0);
+      GridPane.setHalignment(actions, HPos.CENTER);
+    }
 
     workspaceBox.getChildren().add(row);
   }

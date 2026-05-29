@@ -5282,3 +5282,62 @@
 .user-dashboard-root .auction-live-card {
     -fx-background-insets: 0;
 }
+
+/* Final auction-detail cleanup: compact time panel and plain note lines. */
+.user-dashboard-root .auction-detail-side-panel {
+    -fx-padding: 18 18 16 18;
+    -fx-spacing: 10;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown {
+    -fx-padding: 12 10 12 10;
+    -fx-spacing: 5;
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-unit {
+    -fx-min-width: 42;
+    -fx-pref-width: 44;
+    -fx-max-width: 46;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-number {
+    -fx-font-size: 24px;
+    -fx-text-fill: #b65a4d;
+}
+
+.user-dashboard-root .auction-detail-countdown-label,
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-label,
+.user-dashboard-root .auction-detail-countdown-separator,
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-separator {
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-label {
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-separator {
+    -fx-font-size: 16px;
+    -fx-padding: 0 0 12 0;
+}
+
+.user-dashboard-root .auction-detail-time-notes {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0 2 4 2;
+    -fx-spacing: 3;
+}
+
+.user-dashboard-root .auction-detail-time-notes .auction-detail-end-note {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-text-fill: #4d453d;
+    -fx-font-size: 12px;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-meta-row {
+    -fx-padding: 10 0 10 0;
+}
