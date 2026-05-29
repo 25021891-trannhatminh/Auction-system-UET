@@ -79,8 +79,6 @@
                                         <Button fx:id="usersBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Users" />
                                         <Button fx:id="auctionsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Auctions" />
                                         <Button fx:id="itemsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Item Review" />
-                                        <Button fx:id="reportsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Reports" />
-                                        <Button fx:id="settingsBtn" mnemonicParsing="false" onAction="#handleSidebarNavigation" styleClass="nav-btn" text="Settings" />
                                     </children>
                                 </VBox>
 
@@ -108,7 +106,7 @@
                                         <VBox spacing="3.0" HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Label fx:id="headerTitleLabel" styleClass="top-title" text="Admin Dashboard" />
-                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Monitor live auctions, users, items, reports, and system settings." wrapText="true" />
+                                                <Label fx:id="headerSubtitleLabel" styleClass="top-subtitle" text="Review items, monitor auctions, and moderate users." wrapText="true" />
                                             </children>
                                         </VBox>
 

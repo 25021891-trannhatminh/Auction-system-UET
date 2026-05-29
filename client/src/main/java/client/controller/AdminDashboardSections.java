@@ -4,10 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Static section copy for the administrator dashboard.
- *
- * <p>Keeping this text outside {@link AdminDashboardController} makes the controller focus on
- * data loading, rendering, and user actions instead of long page metadata blocks.</p>
+ * Static section copy for the administrator operation console.
  */
 final class AdminDashboardSections {
 
@@ -19,134 +16,79 @@ final class AdminDashboardSections {
 
         map.put("dashboard", page(
             "Admin Dashboard",
-            "Monitor live auctions, pending item reviews, user accounts, and platform activity.",
-            "Control Center",
-            "A practical admin workspace for auction health, review queues, " +
-                "and recent operational events.",
+            "Monitor the queues that really need admin action.",
+            "Operation Console",
             new String[]{"0", "0", "0", "0"},
-            new String[]{"Users", "Running Auctions", "Listed Items", "Total Bids"},
-            new String[]{"Live auction health", "Moderation queue", "Recent activity"},
+            new String[]{"Pending Review", "Running Auctions", "Payment Due", "Risk Accounts"},
+            new String[]{"Item review", "Auction supervision", "Account moderation"},
             new String[]{
-                "Track RUNNING auctions, current prices, bid counts, and ending-soon sessions.",
-                "Review AVAILABLE items, flagged auctions, suspended accounts, " +
-                    "and payment follow-ups.",
-                "Surface audit events, bid events, auction status changes, and item updates."
+                "Approve or reject seller listings before they can become auction rooms.",
+                "Watch OPEN/RUNNING auctions and force close only when intervention is needed.",
+                "Ban or restore user accounts without changing wallet/payment logic from admin."
             },
             new String[]{
-                "Admin tables now prefer shared database data when the server is available.",
-                "Item Review and Auction Sessions stay linked by ITEM/AUC IDs.",
-                "User Accounts are requested from the shared cloud database.",
-                "Fallback demo rows stay available when the server is offline."
-            }
-        ));
-
-        map.put("users", page(
-            "Users",
-            "Manage user accounts, role scopes, and status actions from one screen.",
-            "User Management",
-            "Inspect accounts from the shared cloud database with ACTIVE, SUSPENDED, and BANNED " +
-                "states.",
-            new String[]{"0", "0", "0", "0"},
-            new String[]{"Total Users", "Active", "Suspended", "Banned"},
-            new String[]{"Account table", "Role controls", "Risk review"},
-            new String[]{
-                "Search users by username, email, role, or account status.",
-                "Rows are populated from the server database instead of static fake accounts.",
-                "Keep SUSPENDED and BANNED accounts visible for audit and restore workflows."
-            },
-            new String[]{
-                "Filter by ACTIVE, SUSPENDED, or BANNED before batch review.",
-                "Open a user row to inspect wallet, auctions, bids, and account history.",
-                "Use Suspend, Restore, or Ban only after checking recent activity.",
-                "Role changes stay inside the user detail flow, not as a quick row action."
-            }
-        ));
-
-        map.put("auctions", page(
-            "Auctions",
-            "Supervise auction sessions, timing, bid activity, and intervention actions.",
-            "Auction Monitoring",
-            "The list is for quick monitoring. Use View to open a focused auction detail screen " +
-                "with edit, payment, bids, and logs.",
-            new String[]{"0", "0", "0", "0"},
-            new String[]{"Auctions", "Running", "Open", "Finished/Paid"},
-            new String[]{"Auction table", "Linked item", "Bid history"},
-            new String[]{
-                "Auction rows are linked to item rows by ITEM ID.",
-                "Every auction row keeps item ID and seller visible so admin can trace ownership.",
-                "Bid count and current price are surfaced for abnormal bidding checks."
-            },
-            new String[]{
-                "RUNNING auctions show current price, bid count, and end-time pressure.",
-                "OPEN auctions are scheduled or ready before the bidding window starts.",
-                "FINISHED and PAID auctions need winner/payment follow-up.",
-                "CANCELED auctions remain visible for audit and dispute review."
+                "Pending Review shows item rows waiting for admin approval.",
+                "Running Auctions shows sessions currently receiving bids.",
+                "Payment Due follows FINISHED auctions without adding manual payment controls.",
+                "Risk Accounts keeps SUSPENDED/BANNED users visible for audit."
             }
         ));
 
         map.put("items", page(
             "Item Review",
-            "Review listed items, item statuses, categories, seller links, and auction readiness.",
-            "Item Review & Catalog",
-            "Items are seller listings. Auctions are bidding sessions created from approved items.",
+            "Approve listings, reject invalid items, and create auctions from approved items.",
+            "Item Review",
             new String[]{"0", "0", "0", "0"},
-            new String[]{"Items", "Available", "In Auction", "Sold/Removed"},
-            new String[]{"Item table", "Auction linkage", "Catalog quality"},
+            new String[]{"Items", "Pending", "Available", "In Auction"},
+            new String[]{"Review queue", "Auction readiness", "Seller trace"},
             new String[]{
-                "Manage DRAFT, AVAILABLE, IN_AUCTION, SOLD, and REMOVED item states.",
-                "Approved AVAILABLE items can be converted into OPEN auction sessions.",
-                "Flagged or REMOVED items stay visible for moderation notes and seller review."
+                "PENDING_REVIEW items can be approved or rejected.",
+                "AVAILABLE items can be converted into OPEN auction rooms.",
+                "IN_AUCTION and SOLD items stay linked to their auction detail."
             },
             new String[]{
-                "AVAILABLE items are ready for Create Auction after admin inspection.",
-                "IN_AUCTION items should link back to their active auction session.",
-                "SOLD items should match a FINISHED or PAID auction record.",
-                "REMOVED items should keep a reason for audit history."
+                "Review image, seller, category, attributes, and starting price before approval.",
+                "Create Auction uses the real item_id and seller_id returned by the server.",
+                "Removed or sold items remain visible for audit instead of extra admin tools."
             }
         ));
 
-        map.put("reports", page(
-            "Reports",
-            "Track auction KPIs, bidding activity, growth signals, and export-ready summaries.",
-            "Reporting Workspace",
-            "Reports focus on analytics: date range, KPIs, trends, top records, and exports.",
-            new String[]{"7d", "912", "92%", "+14%"},
-            new String[]{"Range", "Bid Volume", "Completion", "Growth"},
-            new String[]{"KPI review", "Trend breakdown", "Export tools"},
+        map.put("auctions", page(
+            "Auctions",
+            "Supervise auction sessions and use force close only for exceptional cases.",
+            "Auction Monitoring",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Auctions", "Running", "Open", "Finished/Paid"},
+            new String[]{"Session table", "Linked item", "Safe intervention"},
             new String[]{
-                "Use weekly and monthly ranges to compare auction volume and closing health.",
-                "Summarize bids, completed auctions, revenue proxy, and flagged cases.",
-                "Prepare CSV/PDF export hooks once backend report endpoints are available."
+                "Rows show auction, seller, current price, bid count, status, and end time.",
+                "OPEN/RUNNING auctions can be force closed through the existing backend command.",
+                "FINISHED/PAID auctions are view-only so payment flow stays with user/backend logic."
             },
             new String[]{
-                "Bid volume increased by 14% compared with the previous 7-day range.",
-                "92% of ending auctions reached FINISHED, PAID, or payment follow-up states.",
-                "Top sellers and top categories should sit below KPI cards for quick review.",
-                "Exports should use the selected date range and current filters."
+                "Use View for a compact auction detail instead of a full admin editor.",
+                "Force Close maps to ADMIN_FORCE_CLOSE with a simple audit reason.",
+                "No manual bid, price, wallet, or payment editing is exposed here."
             }
         ));
 
-        map.put("settings", page(
-            "Settings",
-            "Configure auction rules, access controls, item rules, moderation, " +
-                "and admin preferences.",
-            "System Settings",
-            "Settings are configuration groups with clear Edit/Save workflows instead of " +
-                "dashboard-style row menus.",
-            new String[]{"05", "05", "03", "04"},
-            new String[]{"Auction States", "Item States", "User Roles", "Bid States"},
-            new String[]{"Auction rules", "Access control", "Moderation rules"},
+        map.put("users", page(
+            "Users",
+            "Moderate user accounts with only the status actions backed by server logic.",
+            "User Management",
+            new String[]{"0", "0", "0", "0"},
+            new String[]{"Total Users", "Active", "Suspended", "Banned"},
+            new String[]{"Account table", "Status control", "Activity signal"},
             new String[]{
-                "Minimum bid increment, reserve price, anti-sniping window, " +
-                    "and auto-close behaviour.",
-                "ADMIN and USER scopes should be explicit and easy to audit.",
-                "Flag suspicious bidding, removed items, and suspended accounts for review."
+                "Rows are loaded from the accounts table through ADMIN_LIST_USERS.",
+                "ACTIVE users can be banned; SUSPENDED/BANNED users can be restored.",
+                "Item, running auction, and bid counts help moderation without extra screens."
             },
             new String[]{
-                "Auction status flow: OPEN -> RUNNING -> FINISHED -> PAID or CANCELED.",
-                "Item status flow: DRAFT -> AVAILABLE -> IN_AUCTION -> SOLD or REMOVED.",
-                "User statuses remain ACTIVE, SUSPENDED, and BANNED for account control.",
-                "Bid statuses remain WINNING, OUTBID, WON, and LOST."
+                "Admin accounts are view-only from this screen.",
+                "Ban maps to ADMIN_BAN_USER.",
+                "Restore maps to ADMIN_UNBAN_USER.",
+                "Wallet/payment edits are intentionally not part of admin-home."
             }
         ));
 
@@ -157,7 +99,6 @@ final class AdminDashboardSections {
         String title,
         String subtitle,
         String surfaceTitle,
-        String surfaceDescription,
         String[] statValues,
         String[] statLabels,
         String[] featureTitles,
@@ -165,7 +106,7 @@ final class AdminDashboardSections {
         String[] activityLines) {
         return new BaseDashboardController.SectionContent(
             title,
-            "",
+            subtitle,
             surfaceTitle,
             "",
             "",
@@ -180,5 +121,4 @@ final class AdminDashboardSections {
             new String[0]
         );
     }
-
 }
