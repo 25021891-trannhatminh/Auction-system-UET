@@ -3138,7 +3138,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     gallery.getChildren().addAll(mainImage, thumbnails);
-    mediaColumn.getChildren().addAll(gallery, buildAuctionDescriptionCard(displayData));
+    mediaColumn.getChildren().add(gallery);
 
     VBox sidePanel = new VBox(14);
     sidePanel.getStyleClass().add("auction-detail-side-panel");
@@ -3236,6 +3236,7 @@ public class UserDashboardController extends BaseDashboardController {
     activeAuctionBidMessageLabel = sellerView ? null : bidMessage;
 
     detailContent.getChildren().addAll(mediaColumn, sidePanel);
+    detailShell.getChildren().add(buildAuctionPlainDescription(displayData));
     detailShell.getChildren().add(detailContent);
     detailShell.getChildren().add(buildAuctionVisualisationSection(displayData.auctionId));
     if (sellerView) {
@@ -3258,33 +3259,23 @@ public class UserDashboardController extends BaseDashboardController {
     }
   }
 
-  private VBox buildAuctionDescriptionCard(AuctionCardData data) {
-    VBox card = new VBox(10);
-    card.getStyleClass().add("auction-detail-description-card");
-    card.setMaxWidth(Double.MAX_VALUE);
+  private VBox buildAuctionPlainDescription(AuctionCardData data) {
+    VBox content = new VBox(6);
+    content.getStyleClass().add("auction-detail-plain-description");
+    content.setMaxWidth(Double.MAX_VALUE);
 
     Label title = new Label(fallback(data.title, "Auction detail"));
     title.getStyleClass().add("auction-detail-description-title");
     title.setWrapText(true);
-
-    Label seller = new Label(fallback(data.seller, "Seller not available"));
-    seller.getStyleClass().add("auction-detail-description-seller");
-    seller.setWrapText(true);
-
-    Region divider = new Region();
-    divider.getStyleClass().add("auction-detail-description-divider");
-    divider.setMinHeight(1);
-    divider.setPrefHeight(1);
-    divider.setMaxHeight(1);
-    divider.setMaxWidth(Double.MAX_VALUE);
+    title.setMaxWidth(Double.MAX_VALUE);
 
     Label description = new Label(fallback(data.description, "No description stored for this item."));
     description.getStyleClass().add("auction-detail-description-line");
     description.setWrapText(true);
     description.setMaxWidth(Double.MAX_VALUE);
 
-    card.getChildren().addAll(title, seller, divider, description);
-    return card;
+    content.getChildren().addAll(title, description);
+    return content;
   }
 
 
@@ -4480,7 +4471,7 @@ public class UserDashboardController extends BaseDashboardController {
   private HBox buildAuctionMetaRow(AuctionCardData data) {
     HBox row = new HBox(18);
     row.getStyleClass().add("auction-detail-meta-row");
-    row.setAlignment(Pos.CENTER_LEFT);
+    row.setAlignment(Pos.CENTER);
     row.setMaxWidth(Double.MAX_VALUE);
 
     addAuctionMetaCell(row, "Category", data.category);
@@ -4495,11 +4486,21 @@ public class UserDashboardController extends BaseDashboardController {
   private void addAuctionMetaCell(HBox row, String labelText, String valueText) {
     VBox cell = new VBox(5);
     cell.getStyleClass().add("auction-detail-meta-cell");
+    cell.setAlignment(Pos.CENTER);
+    cell.setMinWidth(0);
+    cell.setMaxWidth(Double.MAX_VALUE);
+
     Label label = new Label(labelText);
     label.getStyleClass().add("auction-detail-meta-key");
+    label.setAlignment(Pos.CENTER);
+    label.setMaxWidth(Double.MAX_VALUE);
+
     Label value = new Label(fallback(valueText, "not available"));
     value.getStyleClass().add("auction-detail-meta-value");
+    value.setAlignment(Pos.CENTER);
     value.setWrapText(true);
+    value.setMaxWidth(Double.MAX_VALUE);
+
     cell.getChildren().addAll(label, value);
     HBox.setHgrow(cell, Priority.ALWAYS);
     row.getChildren().add(cell);

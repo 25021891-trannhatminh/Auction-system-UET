@@ -50,13 +50,15 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private static final double ACTION_PRIMARY_WIDTH = 88;
     private static final double ACTION_MORE_WIDTH = 28;
+    private static final double ITEM_ACTION_PRIMARY_WIDTH = 88;
+    private static final double ITEM_ACTION_MORE_WIDTH = 24;
     private static final double ACTION_GAP = 6;
     private static final double REVIEW_IMAGE_HEIGHT = 265;
     private static final double AUCTION_IMAGE_HEIGHT = 310;
     private static final double PREVIEW_IMAGE_WIDTH_RATIO = 1.55;
     private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 28;
     private static final double THUMB_SIZE = 58;
-    private static final int ADMIN_ROWS_PER_PAGE = 7;
+    private static final int ADMIN_ROWS_PER_PAGE = 6;
     private static final Pattern MONEY_PATTERN = Pattern.compile("^[0-9]+(?:\\.[0-9]{1,2})?$");
 
     private final Map<String, SectionContent> sections = AdminDashboardSections.buildSections();
@@ -1275,6 +1277,10 @@ public class AdminDashboardController extends BaseDashboardController {
         return "users".equals(currentSectionKey);
     }
 
+    private boolean isItemReviewTable() {
+        return "items".equals(currentSectionKey);
+    }
+
     private int tableColumnCount() {
         return isDashboardTable() || isUsersTable() ? 4 : 5;
     }
@@ -1754,24 +1760,27 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private GridPane rowActions(AdminRow data) {
         GridPane actions = new GridPane();
-        actions.setHgap(ACTION_GAP);
+        actions.setHgap(isItemReviewTable() ? 4 : ACTION_GAP);
         actions.setAlignment(Pos.CENTER);
         actions.setMinWidth(0);
         actions.setMaxWidth(Double.MAX_VALUE);
 
+        double primaryWidth = isItemReviewTable() ? ITEM_ACTION_PRIMARY_WIDTH : ACTION_PRIMARY_WIDTH;
+        double moreWidth = isItemReviewTable() ? ITEM_ACTION_MORE_WIDTH : ACTION_MORE_WIDTH;
+
         if (data.actions.length == 0) {
-            actions.getColumnConstraints().add(fixedColumn(ACTION_PRIMARY_WIDTH));
+            actions.getColumnConstraints().add(fixedColumn(primaryWidth));
             Region emptyAction = new Region();
-            emptyAction.setMinWidth(ACTION_PRIMARY_WIDTH);
-            emptyAction.setPrefWidth(ACTION_PRIMARY_WIDTH);
+            emptyAction.setMinWidth(primaryWidth);
+            emptyAction.setPrefWidth(primaryWidth);
             actions.add(emptyAction, 0, 0);
             return actions;
         }
 
         boolean hasMoreActions = data.actions.length > 1;
-        actions.getColumnConstraints().add(fixedColumn(ACTION_PRIMARY_WIDTH));
+        actions.getColumnConstraints().add(fixedColumn(primaryWidth));
         if (hasMoreActions) {
-            actions.getColumnConstraints().add(fixedColumn(ACTION_MORE_WIDTH));
+            actions.getColumnConstraints().add(fixedColumn(moreWidth));
         }
 
         String primaryAction = resolvePrimaryAction(data);
@@ -1779,12 +1788,15 @@ public class AdminDashboardController extends BaseDashboardController {
         Button primary = new Button(primaryAction);
         primary.setMnemonicParsing(false);
         primary.getStyleClass().add("mini-action-btn");
-        if (isUsersTable() || "auctions".equals(currentSectionKey)) {
+        if (isUsersTable() || "auctions".equals(currentSectionKey) || isItemReviewTable()) {
             primary.getStyleClass().add("compact-action-btn");
         }
-        primary.setMinWidth(ACTION_PRIMARY_WIDTH);
-        primary.setPrefWidth(ACTION_PRIMARY_WIDTH);
-        primary.setMaxWidth(ACTION_PRIMARY_WIDTH);
+        if (isItemReviewTable()) {
+            primary.getStyleClass().add("item-review-action-btn");
+        }
+        primary.setMinWidth(primaryWidth);
+        primary.setPrefWidth(primaryWidth);
+        primary.setMaxWidth(primaryWidth);
         primary.setTextOverrun(OverrunStyle.ELLIPSIS);
         primary.setOnAction(event -> handlePrimaryAction(primaryAction, data));
 
@@ -1795,9 +1807,12 @@ public class AdminDashboardController extends BaseDashboardController {
             MenuButton more = new MenuButton("...");
             more.setMnemonicParsing(false);
             more.getStyleClass().add("more-action-btn");
-            more.setMinWidth(ACTION_MORE_WIDTH);
-            more.setPrefWidth(ACTION_MORE_WIDTH);
-            more.setMaxWidth(ACTION_MORE_WIDTH);
+            if (isItemReviewTable()) {
+                more.getStyleClass().add("item-review-action-btn");
+            }
+            more.setMinWidth(moreWidth);
+            more.setPrefWidth(moreWidth);
+            more.setMaxWidth(moreWidth);
 
             for (int i = 1; i < data.actions.length; i++) {
                 String action = data.actions[i];

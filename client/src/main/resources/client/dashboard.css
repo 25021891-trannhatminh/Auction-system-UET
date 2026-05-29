@@ -5436,3 +5436,63 @@
     -fx-border-width: 0;
     -fx-border-color: transparent;
 }
+
+/* Latest auction/detail and admin table refinements. */
+.user-dashboard-root .auction-detail-shell {
+    -fx-spacing: 12;
+}
+
+.user-dashboard-root .auction-detail-plain-description {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0 0 2 0;
+    -fx-spacing: 5;
+}
+
+.user-dashboard-root .auction-detail-plain-description .auction-detail-description-title {
+    -fx-font-size: 23px;
+    -fx-text-fill: #1c2127;
+}
+
+.user-dashboard-root .auction-detail-plain-description .auction-detail-description-line {
+    -fx-font-size: 14px;
+    -fx-text-fill: #4d453d;
+    -fx-line-spacing: 3px;
+}
+
+.user-dashboard-root .auction-detail-meta-row {
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-meta-cell {
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-meta-cell .auction-detail-meta-key,
+.user-dashboard-root .auction-detail-meta-cell .auction-detail-meta-value {
+    -fx-alignment: center;
+    -fx-text-alignment: center;
+}
+
+.user-dashboard-root .auction-back-button {
+    -fx-min-width: 30;
+    -fx-min-height: 30;
+    -fx-pref-width: 30;
+    -fx-pref-height: 30;
+    -fx-max-width: 30;
+    -fx-max-height: 30;
+    -fx-font-size: 15px;
+}
+
+.admin-dashboard-root .item-review-action-btn {
+    -fx-font-size: 9px;
+    -fx-padding: 4 6 4 6;
+    -fx-min-height: 24;
+    -fx-pref-height: 24;
+    -fx-max-height: 24;
+}
+
+.admin-dashboard-root .compact-action-btn.item-review-action-btn {
+    -fx-font-size: 9px;
+    -fx-padding: 4 6 4 6;
+}
