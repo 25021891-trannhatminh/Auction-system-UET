@@ -3212,14 +3212,16 @@ public class UserDashboardController extends BaseDashboardController {
     }
     timeNotes.getChildren().add(endNote);
 
-    sidePanel.getChildren().addAll(timeTitle, countdown, timeNotes, metaRow, priceBox);
+    sidePanel.getChildren().addAll(timeTitle, countdown, metaRow, priceBox);
     if (sellerView) {
       sidePanel.getChildren().add(buildSellerPerformancePanel(displayData));
+      sidePanel.getChildren().add(timeNotes);
     } else {
       sidePanel.getChildren().add(bidRow);
       if (autoBidPanel != null) {
         sidePanel.getChildren().add(autoBidPanel);
       }
+      sidePanel.getChildren().add(timeNotes);
     }
 
     activeAuctionDetailId = displayData.auctionId;
@@ -3466,23 +3468,28 @@ public class UserDashboardController extends BaseDashboardController {
     incrementInput.setText(normalize(latestData.minimumIncrement).equals("0 vnd") ? "" : latestData.minimumIncrement);
     inputRow.getChildren().addAll(maxInput, incrementInput);
 
-    HBox actions = new HBox(8);
+    GridPane actions = new GridPane();
+    actions.setHgap(8);
     actions.setMaxWidth(Double.MAX_VALUE);
+    actions.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
     registerButton.setMnemonicParsing(false);
     registerButton.getStyleClass().add("auction-market-bid-btn");
     registerButton.setDisable(!isAuctionBidEnabled(latestData));
+    registerButton.setMaxWidth(Double.MAX_VALUE);
     registerButton.setOnAction(event -> submitAutoBid(latestData, maxInput, incrementInput));
 
     cancelButton.setMnemonicParsing(false);
     cancelButton.getStyleClass().add("auction-detail-secondary-btn");
     cancelButton.setDisable(!isAuctionBidEnabled(latestData));
+    cancelButton.setMaxWidth(Double.MAX_VALUE);
     cancelButton.setOnAction(event -> cancelAutoBid(latestData));
 
-    HBox.setHgrow(registerButton, Priority.ALWAYS);
-    HBox.setHgrow(cancelButton, Priority.ALWAYS);
-    registerButton.setMaxWidth(Double.MAX_VALUE);
-    cancelButton.setMaxWidth(Double.MAX_VALUE);
-    actions.getChildren().addAll(registerButton, cancelButton);
+    actions.add(registerButton, 0, 0);
+    actions.add(cancelButton, 1, 0);
+    GridPane.setHgrow(registerButton, Priority.ALWAYS);
+    GridPane.setHgrow(cancelButton, Priority.ALWAYS);
+    GridPane.setFillWidth(registerButton, true);
+    GridPane.setFillWidth(cancelButton, true);
 
     panel.getChildren().addAll(title, hint, inputRow, actions);
     return panel;
@@ -3674,7 +3681,8 @@ public class UserDashboardController extends BaseDashboardController {
     return latestData != null
         && normalize(latestData.status).equals("running")
         && currentSecondsLeft(latestData) > 0
-        && !isOwnAuction(latestData);
+        && !isOwnAuction(latestData)
+        && !isCurrentUserWinning(latestData);
   }
 
   private String bidDisabledReason(AuctionCardData data) {
@@ -3689,7 +3697,7 @@ public class UserDashboardController extends BaseDashboardController {
       return "You cannot bid on your own auction.";
     }
     if (isCurrentUserWinning(latestData)) {
-      return "You are currently leading this auction.";
+      return "You are currently leading this auction, so you cannot place another bid right now.";
     }
     return "This auction is not accepting bids right now.";
   }
@@ -4539,7 +4547,7 @@ public class UserDashboardController extends BaseDashboardController {
   private HBox buildCountdown(long secondsLeft) {
     activeAuctionCountdownSeconds = Math.max(0, secondsLeft);
 
-    HBox box = new HBox(6);
+    HBox box = new HBox(0);
     box.getStyleClass().add("auction-detail-countdown");
     box.setAlignment(Pos.CENTER);
     box.setMinWidth(0);
@@ -4632,6 +4640,7 @@ public class UserDashboardController extends BaseDashboardController {
   private Label countdownNumberLabel() {
     Label number = new Label("00");
     number.getStyleClass().add("auction-detail-countdown-number");
+    number.setAlignment(Pos.CENTER);
     number.setMinWidth(0);
     number.setMaxWidth(Double.MAX_VALUE);
     return number;
@@ -4641,16 +4650,21 @@ public class UserDashboardController extends BaseDashboardController {
     VBox unit = new VBox(2);
     unit.getStyleClass().add("auction-detail-countdown-unit");
     unit.setAlignment(Pos.CENTER);
-    unit.setMinWidth(0);
-    unit.setMaxWidth(Double.MAX_VALUE);
+    lockRegionWidth(unit, 52);
     Label label = new Label(labelText);
     label.getStyleClass().add("auction-detail-countdown-label");
+    label.setAlignment(Pos.CENTER);
+    label.setMaxWidth(Double.MAX_VALUE);
     unit.getChildren().addAll(number, label);
     return unit;
   }
   private Label countdownSeparator() {
     Label separator = new Label(":");
     separator.getStyleClass().add("auction-detail-countdown-separator");
+    separator.setAlignment(Pos.CENTER);
+    separator.setMinWidth(16);
+    separator.setPrefWidth(16);
+    separator.setMaxWidth(16);
     return separator;
   }
 
@@ -5541,9 +5555,15 @@ public class UserDashboardController extends BaseDashboardController {
     formShell.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
     formShell.setMaxWidth(Double.MAX_VALUE);
 
+    if (headerTitleLabel != null) {
+      headerTitleLabel.setText("");
+      headerTitleLabel.setVisible(false);
+      headerTitleLabel.setManaged(false);
+    }
+
     Label formTitle = new Label(editItem == null ? "Create Listing" : "Edit Draft Item");
     formTitle.getStyleClass().add("create-listing-title");
-    formTitle.setStyle("-fx-text-fill: #102339; -fx-font-size: 24px; -fx-font-weight: bold;");
+    formTitle.setStyle("-fx-text-fill: #102339; -fx-font-size: 31px; -fx-font-weight: bold;");
 
     Label formNote = new Label(editItem == null
         ? "Submit an item for admin review. Approved items become available for auction creation."
@@ -5597,6 +5617,7 @@ public class UserDashboardController extends BaseDashboardController {
     Label uploadIcon = new Label("↑");
     uploadIcon.getStyleClass().add("create-upload-icon");
     uploadIcon.setStyle("-fx-background-color: #e0b571; -fx-background-radius: 12; "
+        + "-fx-border-width: 0; -fx-border-color: transparent; "
         + "-fx-text-fill: #102339; -fx-font-size: 18px; -fx-font-weight: bold; "
         + "-fx-padding: 7 12 7 12;");
 

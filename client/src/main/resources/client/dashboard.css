@@ -5362,3 +5362,77 @@
     -fx-min-height: 24;
     -fx-pref-height: 24;
 }
+
+/* Final requested UI adjustments. */
+.user-dashboard-root .auction-back-button {
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-pref-width: 34;
+    -fx-pref-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+    -fx-font-size: 18px;
+}
+
+.user-dashboard-root .auction-detail-side-panel {
+    -fx-spacing: 8;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown {
+    -fx-spacing: 0;
+    -fx-padding: 12 10 12 10;
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-unit {
+    -fx-min-width: 52;
+    -fx-pref-width: 52;
+    -fx-max-width: 52;
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-number {
+    -fx-font-size: 24px;
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-label {
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-countdown-separator {
+    -fx-min-width: 16;
+    -fx-pref-width: 16;
+    -fx-max-width: 16;
+    -fx-padding: 0 0 12 0;
+    -fx-alignment: center;
+}
+
+.user-dashboard-root .auction-detail-side-panel .auction-detail-meta-row {
+    -fx-padding: 8 0 8 0;
+}
+
+.user-dashboard-root .auction-detail-time-notes {
+    -fx-padding: 6 2 0 2;
+}
+
+.user-dashboard-root .auction-detail-auto-bid-panel .auction-market-bid-btn,
+.user-dashboard-root .auction-detail-auto-bid-panel .auction-detail-secondary-btn {
+    -fx-font-size: 12px;
+    -fx-padding: 9 10 9 10;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+}
+
+.user-dashboard-root .create-listing-shell {
+    -fx-padding: 0;
+}
+
+.user-dashboard-root .create-listing-title {
+    -fx-font-size: 31px;
+}
+
+.user-dashboard-root .create-upload-icon {
+    -fx-border-width: 0;
+    -fx-border-color: transparent;
+}

@@ -56,7 +56,7 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double PREVIEW_IMAGE_WIDTH_RATIO = 1.55;
     private static final double PREVIEW_CARD_HORIZONTAL_PADDING = 28;
     private static final double THUMB_SIZE = 58;
-    private static final int ADMIN_ROWS_PER_PAGE = 5;
+    private static final int ADMIN_ROWS_PER_PAGE = 7;
     private static final Pattern MONEY_PATTERN = Pattern.compile("^[0-9]+(?:\\.[0-9]{1,2})?$");
 
     private final Map<String, SectionContent> sections = AdminDashboardSections.buildSections();
@@ -699,7 +699,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (normalizedStatus.equals("available")) {
-            return new String[]{"Create Auction", "View"};
+            return new String[]{"Create Auction"};
         }
 
         if ((normalizedStatus.equals("in auction") || normalizedStatus.equals("sold"))
@@ -707,7 +707,7 @@ public class AdminDashboardController extends BaseDashboardController {
             return new String[]{"View Auction"};
         }
 
-        return new String[]{"View"};
+        return new String[]{};
     }
 
 
@@ -828,7 +828,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderDashboard(String filter) {
         setTableTitle("Operational Queue");
-        renderChips(filter, "overview");
+        renderChips(filter, "Overview");
         updateDashboardStats();
 
         addHeader("Queue", "Count", "Signal");
@@ -886,7 +886,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderUsers(String filter) {
         setTableTitle("User Accounts");
-        renderChips(filter, "all", "active", "suspended", "banned", "user", "admin");
+        renderChips(filter, "All", "Active", "Suspended", "Banned", "User", "Admin");
 
         List<AdminRow> rows = currentUserRows();
         updateStats(
@@ -911,7 +911,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
     private void renderAuctions(String filter) {
         setTableTitle("Auction Sessions");
-        renderChips(filter, "all", "open", "running", "finished", "paid", "canceled");
+        renderChips(filter, "All", "Open", "Running", "Finished", "Paid", "Canceled");
 
         List<AdminRow> rows = currentAuctionRows();
         updateStats(
@@ -939,12 +939,12 @@ public class AdminDashboardController extends BaseDashboardController {
         renderChips(
             filter,
             "All",
-            "PENDING_REVIEW",
-            "AVAILABLE",
-            "IN_AUCTION",
-            "SOLD",
-            "REMOVED",
-            "DRAFT",
+            "Pending Review",
+            "Available",
+            "In Auction",
+            "Sold",
+            "Removed",
+            "Draft",
             "No Auction"
         );
 
@@ -2183,11 +2183,6 @@ public class AdminDashboardController extends BaseDashboardController {
             return actions;
         }
 
-        Button noAction = new Button("View only");
-        noAction.setMnemonicParsing(false);
-        noAction.getStyleClass().add("admin-disabled-primary-btn");
-        noAction.setDisable(true);
-        actions.getChildren().add(noAction);
         return actions;
     }
 
