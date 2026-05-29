@@ -3,7 +3,7 @@
 
 # Online Auction System - Hệ thống đấu giá trực tuyến
 Advanced Programming Project - Computer Science - UET
-## 1. Mô tả bài toán
+## 1. Mô tả hệ thống
 Dự án xây dựng một hệ thống đấu giá trực tuyến
 - Hệ thống hỗ trợ các vai trò chính gồm **Bidder**, **Seller** và **Admin**, đồng thời cho phép quản lý sản phẩm, tham gia đấu giá, cập nhật realtime và xử lý kết thúc phiên đấu giá theo thời gian quy định.
 - Cho phép nhiều người dùng tham gia mua/bán sản phẩm theo cơ chế đặt giá thời gian thực.
@@ -18,17 +18,17 @@ Phạm vi hệ thống tập trung vào các chức năng cốt lõi của một
 - **Ngôn ngữ lập trình:** `Java`
 - **GUI:** `JavaFx, SceneBuilder`
 - **Kiến trúc:** `Client–Server`
-- **Giao tiếp client-server:** `________________`
+- **Networking:** `Socket`
 - **Build tool:** `Maven multi-module`
 - **Database:** `MySQL, TiDB`
 - **Testing:** `________________`
 - **CI/CD:** `GitHub Actions + JUnit5`
 
 ### Môi trường chạy
-- **Hệ điều hành:** `________________`
+- **Hệ điều hành:** `Windows, Linux, MacOS`
 - **JDK:** `25`
-- **IDE:** `________________`
-- **Phiên bản JavaFX / thư viện hỗ trợ:** `________________`
+- **IDE:** `IntelliJ, Visual Studio Code`
+- **Phiên bản JavaFX:** `________________`
 
 ### Yêu cầu cài đặt
 1. Cài đặt `________________`.
@@ -41,11 +41,11 @@ Phạm vi hệ thống tập trung vào các chức năng cốt lõi của một
 ```text
 project-root/
 ├── server/
-│   ├── src/
+│   ├── src/main/java/server
 │   ├── resources/
 │   └── ...
 ├── client/
-│   ├── src/
+│   ├── src/main/java/client
 │   ├── resources/
 │   └── ...
 ├── docs/
@@ -56,10 +56,10 @@ project-root/
 
 ### Các module chính
 - `________________`: xử lý giao diện người dùng.
-- `________________`: xử lý nghiệp vụ đấu giá.
+- `Service`: xử lý nghiệp vụ đấu giá.
 - `________________`: quản lý kết nối và dữ liệu.
 - `________________`: lưu trữ entity / model / DTO.
-- `________________`: xử lý các thao tác với database.
+- `Repository`: xử lý các thao tác với database.
 
 ## 4. Hướng dẫn chạy hệ thống
 ### Bước 1: Khởi động Server
@@ -81,34 +81,34 @@ ________________
 
 ## 5. Danh sách chức năng đã hoàn thành
 ### Chức năng bắt buộc
-- [ ] Đăng ký / đăng nhập tài khoản.
-- [ ] Quản lý người dùng theo vai trò Bidder / Seller / Admin.
-- [ ] Thêm / sửa / xóa sản phẩm đấu giá.
-- [ ] Hiển thị giá khởi điểm, giá hiện tại, thời gian bắt đầu / kết thúc.
-- [ ] Tham gia đấu giá và đặt giá hợp lệ.
-- [ ] Cập nhật người dẫn đầu phiên đấu giá.
-- [ ] Tự động kết thúc phiên đấu giá theo thời gian.
-- [ ] Xử lý lỗi và ngoại lệ.
-- [ ] Giao diện người dùng GUI.
-
+- [x] Đăng ký / đăng nhập tài khoản.
+- [x] Quản lý người dùng theo vai trò User / Admin.
+- [x] Thêm / sửa / duyệt sản phẩm đấu giá.
+- [x] Hiển thị giá khởi điểm, giá hiện tại, thời gian bắt đầu / kết thúc.
+- [x] Tham gia đấu giá đồng thời, cập nhật kết quả Realtime.
+- [x] Tự động kết thúc phiên đấu giá theo thời gian.
+- [x] Xử lý lỗi và ngoại lệ.
+- [x] Giao diện người dùng GUI.
+- [x] Thiết kế OOP.
+- [x] Design Patterns
+- [x] Client-Server + MVC
+- [x] Unit Test, CI/CD
 ### Chức năng nâng cao
-- [ ] Auto-Bidding.
-- [ ] Concurrent Bidding.
-- [ ] Anti-sniping.
-- [ ] Realtime Update.
-- [ ] Bid History Visualization.
+- [x] Auto-Bidding.
+- [x] Anti-sniping.
+- [x] Bid History Visualization.
 
 ## 6. Tài liệu và demo
 - **Báo cáo PDF:** [link báo cáo](________________)
 - **Video demo:** [link video](________________)
 
 ## 7. Thành viên nhóm
-- `Tên thành viên 1` - `Vai trò / phần phụ trách`
-- `Tên thành viên 2` - `Vai trò / phần phụ trách`
-- `Tên thành viên 3` - `Vai trò / phần phụ trách`
-- `Tên thành viên 4` - `Vai trò / phần phụ trách`
+- `Trần Nhật Minh` - `Xây dựng domain, logic đặt giá, Auto-Bidding, Anti-snipping`
+- `Vũ Bảo Ngọc` - `Xây dựng Database, xử lý truy vân Database cho Server`
+- `Đồng Thị Trà My` - `Networking, giao tiếp Client-Server`
+- `Nguyễn Trang Linh` - `Design UI, xử lý logic Controller UX/UI, Bid History Visualization`
 
 ## 8. Ghi chú
 - Đây là bài tập lớn môn **Lập trình nâng cao**.
 - Hệ thống được thiết kế theo mô hình **Client-Server** và **MVC**.
-- Một số tính năng có thể được phát triển thêm tùy theo phạm vi của nhóm.
+- Một số tính năng đang được phát triển thêm.
