@@ -3274,7 +3274,16 @@ public class UserDashboardController extends BaseDashboardController {
     description.setWrapText(true);
     description.setMaxWidth(Double.MAX_VALUE);
 
-    content.getChildren().addAll(title, description);
+    content.getChildren().add(title);
+    String sizeCondition = sizeConditionValue(data.attributes);
+    if (sizeCondition != null && !sizeCondition.isBlank()) {
+      Label sizeConditionLine = new Label("Size / Condition: " + sizeCondition);
+      sizeConditionLine.getStyleClass().add("auction-detail-size-condition");
+      sizeConditionLine.setWrapText(true);
+      sizeConditionLine.setMaxWidth(Double.MAX_VALUE);
+      content.getChildren().add(sizeConditionLine);
+    }
+    content.getChildren().add(description);
     return content;
   }
 
@@ -4474,7 +4483,7 @@ public class UserDashboardController extends BaseDashboardController {
     row.setAlignment(Pos.CENTER);
     row.setMaxWidth(Double.MAX_VALUE);
 
-    addAuctionCategoryMetaCell(row, data.category, sizeConditionValue(data.attributes));
+    addAuctionMetaCell(row, "Category", data.category);
     if (isArtCategory(data.category)) {
       addAuctionMetaCell(row, "Artist", attributeValue(data.attributes, "artist"));
       addAuctionMetaCell(row, "Year", attributeValue(data.attributes, "year_created", "year"));
