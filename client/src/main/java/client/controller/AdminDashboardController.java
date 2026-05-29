@@ -924,7 +924,7 @@ public class AdminDashboardController extends BaseDashboardController {
 
         showDetail(
             "Auction monitoring",
-            dataSourceNote(auctionsLoaded) + " OPEN/RUNNING có Cancel nối vào lệnh force close backend; FINISHED/PAID chỉ xem."
+            dataSourceNote(auctionsLoaded) + " Chỉ auction OPEN được hiện Cancel; RUNNING/FINISHED/PAID/CANCELED là view-only để không đụng flow bid, payment và wallet."
         );
     }
 
@@ -1564,8 +1564,7 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private boolean isForceClosableStatus(String status) {
-        String normalized = normalize(status);
-        return normalized.equals("open") || normalized.equals("running");
+        return normalize(status).equals("open");
     }
 
     private String extractUserId(AdminRow data) {
@@ -2056,7 +2055,7 @@ public class AdminDashboardController extends BaseDashboardController {
         addDetailBlock(
             "Allowed admin action",
             isForceClosableStatus(data.status)
-                ? "Cancel maps to ADMIN_FORCE_CLOSE with a fixed audit reason."
+                ? "Cancel chỉ hiện với auction OPEN và maps to ADMIN_FORCE_CLOSE with a fixed audit reason."
                 : "Auction này ở trạng thái view-only; payment/bid/wallet flow không sửa từ admin-home."
         );
 

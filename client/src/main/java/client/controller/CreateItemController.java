@@ -1,10 +1,5 @@
 package client.controller;
 
-import client.SceneNavigator;
-import client.model.User;
-import client.service.CloudMediaApiClient;
-import client.service.NetworkManager;
-import client.service.SessionManager;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -16,6 +11,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+
+import client.SceneNavigator;
+import client.model.User;
+import client.service.CloudMediaApiClient;
+import client.service.NetworkManager;
+import client.service.SessionManager;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
@@ -239,7 +240,7 @@ public class CreateItemController {
     // Khoá nút, upload background
     saveDraftButton.setDisable(true);
     submitItemButton.setDisable(true);
-    showNeutralMessage("Đang upload ảnh lên cloud...");
+    showNeutralMessage("Đang upload ảnh...");
 
     Task<List<String>> task = new Task<>() {
       @Override protected List<String> call() {

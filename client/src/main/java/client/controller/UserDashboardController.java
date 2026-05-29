@@ -308,7 +308,7 @@ public class UserDashboardController extends BaseDashboardController {
   @FXML
   private void handleOpenDepositDialog() {
     Dialog<BigDecimal> dialog = new Dialog<>();
-    dialog.initStyle(StageStyle.UNDECORATED);
+    dialog.initStyle(StageStyle.TRANSPARENT);
     dialog.setHeaderText(null);
     dialog.setGraphic(null);
     dialog.setResizable(false);
@@ -395,7 +395,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     dialog.setOnShown(event -> {
       if (dialogPane.getScene() != null) {
-        dialogPane.getScene().setFill(Color.web("#f8f0e5"));
+        dialogPane.getScene().setFill(Color.TRANSPARENT);
       }
       amountField.requestFocus();
     });
