@@ -393,8 +393,9 @@ public class Auction extends Entity {
             // Check chạm giá sàn (Reserve Price)
             boolean meetsReserve = (reservePrice.compareTo(BigDecimal.ZERO) == 0) || (currentPrice.compareTo(reservePrice) >= 0);
 
+            // Check winner status
             // Cập nhật Auction Status
-            if (!hasBids || !meetsReserve) {
+            if (!hasBids || !meetsReserve || currentLeader.getStatus() != UserStatus.ACTIVE) {
                 status = AuctionStatus.CANCELED;
                 // Đánh dấu tất cả bid là LOST (nếu có)
                 bidHistory.forEach(BidTransaction::markLost);
