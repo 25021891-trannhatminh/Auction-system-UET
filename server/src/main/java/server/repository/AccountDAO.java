@@ -74,14 +74,14 @@ public class AccountDAO {
         """;
 
     /**
-     * SQL đăng nhập.
+     * SQL đăng nhập. Trạng thái tài khoản được kiểm tra ở service để client nhận
+     * đúng lý do LOGIN_FAIL thay vì gộp user bị ban với sai tài khoản/mật khẩu.
      */
     private static final String SQL_LOGIN = """
         SELECT user_id, username, password, email, full_name,
                phone, role, status, last_login, created_at
         FROM accounts
         WHERE (username = ? OR email = ?)
-        AND status = 'ACTIVE'
         LIMIT 1
         """;
 

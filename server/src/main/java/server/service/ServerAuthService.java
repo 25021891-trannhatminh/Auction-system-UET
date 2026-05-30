@@ -2,6 +2,7 @@ package server.service;
 
 
 import server.common.entity.User;
+import server.common.enums.UserStatus;
 import server.repository.AccountDAO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,14 @@ public class ServerAuthService {
     try {
       User user = accountDAO.login(identifier, password);
       if (user != null) {
+        UserStatus status = user.getStatus() != null ? user.getStatus() : UserStatus.ACTIVE;
+        if (status == UserStatus.BANNED) {
+          return "LOGIN_FAIL ACCOUNT_BANNED";
+        }
+        if (status == UserStatus.SUSPENDED) {
+          return "LOGIN_FAIL ACCOUNT_SUSPENDED";
+        }
+
         return "LOGIN_SUCCESS " + fields(
             user.getId(),
             user.getUsername(),
@@ -43,7 +52,7 @@ public class ServerAuthService {
             user.getFullName(),
             user.getPhone(),
             user.getRole() != null ? user.getRole().name() : "USER",
-            user.getStatus() != null ? user.getStatus().name() : "ACTIVE",
+            status.name(),
             "true"
         );
       } else {

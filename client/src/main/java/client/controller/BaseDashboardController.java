@@ -7,6 +7,7 @@ import client.service.NetworkManager;
 import client.service.NotificationUIHandler;
 import client.service.SessionManager;
 import java.io.IOException;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.geometry.Bounds;
@@ -32,6 +34,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Popup;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import javafx.util.Duration;
 
 /**
  * Shared base controller for role-specific dashboards.
@@ -46,6 +49,7 @@ public abstract class BaseDashboardController {
     private int unreadNotificationCount = 0;
     private int incomingHistoryUnreadCount = 0;
     private Popup notificationPopup;
+    private boolean forcedBanLogoutInProgress;
 
     protected static class SectionContent {
         protected final String title;
@@ -223,6 +227,11 @@ public abstract class BaseDashboardController {
         }
 
         rememberRealtimeNotification(notification);
+        if (isAccountBannedNotification(notification)) {
+            handleForcedBanLogout(notification);
+            return;
+        }
+
         notifUIHandler.handle(rawMessage);
         handleRealtimeNotification(rawMessage);
     }
@@ -256,6 +265,62 @@ public abstract class BaseDashboardController {
         }
 
         return new NotificationModel(parts[1], parts[2], parts[3]);
+    }
+
+    private boolean isAccountBannedNotification(NotificationModel notification) {
+        if (notification == null) {
+            return false;
+        }
+
+        String type = normalizeNotificationText(notification.getType());
+        String title = normalizeNotificationText(notification.getTitle());
+        String message = normalizeNotificationText(notification.getMessage());
+
+        boolean systemMessage = type.equals("SYSTEM") || type.isBlank();
+        boolean bannedContent = title.contains("ACCOUNT SUSPENDED")
+            || title.contains("ACCOUNT BANNED")
+            || title.contains("TAI KHOAN BI BAN")
+            || message.contains("ACCOUNT HAS BEEN SUSPENDED")
+            || message.contains("ACCOUNT HAS BEEN BANNED")
+            || message.contains("TAI KHOAN CUA BAN DA BI BAN")
+            || message.contains("TAI KHOAN DA BI BAN");
+
+        return systemMessage && bannedContent;
+    }
+
+    private String normalizeNotificationText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+
+        return Normalizer.normalize(value.trim(), Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "")
+            .replace('đ', 'd')
+            .replace('Đ', 'D')
+            .toUpperCase();
+    }
+
+
+    private void handleForcedBanLogout(NotificationModel notification) {
+        if (forcedBanLogoutInProgress) {
+            return;
+        }
+
+        forcedBanLogoutInProgress = true;
+        notifUIHandler.showError(
+            "Tài khoản đã bị ban",
+            "Phiên đăng nhập hiện tại đã bị đóng vì tài khoản của bạn không còn hoạt động."
+        );
+
+        PauseTransition delay = new PauseTransition(Duration.millis(900));
+        delay.setOnFinished(event -> {
+            handleLogout();
+            NetworkManager manager = NetworkManager.getInstance();
+            if (manager != null) {
+                manager.disconnect();
+            }
+        });
+        delay.play();
     }
 
     protected void requestNotificationHistory() {

@@ -311,6 +311,12 @@ public class AuthController {
                     String payload = p.length > 1 ? p[1] : "";
                     User user = parseLoginSuccessPayload(payload);
 
+                    if (isBlockedAccount(user)) {
+                        SessionManager.clear();
+                        showError(signInMessageLabel, buildBlockedAccountLoginMessage(user));
+                        return;
+                    }
+
                     SessionManager.setCurrentUser(user);
 
                     if (user.getSystemRole() == SystemRole.ADMIN) {
@@ -329,7 +335,8 @@ public class AuthController {
             }
 
             if (p[0].equals("LOGIN_FAIL")) {
-                showError(signInMessageLabel, "Sai tài khoản hoặc mật khẩu.");
+                String reason = p.length > 1 ? p[1] : "INVALID_AUTH";
+                showError(signInMessageLabel, buildLoginFailureMessage(reason));
                 return;
             }
 
@@ -459,6 +466,39 @@ public class AuthController {
         } catch (NumberFormatException ignored) {
             return fallbackValue;
         }
+    }
+
+    private boolean isBlockedAccount(User user) {
+        if (user == null) {
+            return true;
+        }
+
+        AccountStatus status = user.getAccountStatus();
+        return !user.isActive() || status == AccountStatus.BANNED || status == AccountStatus.SUSPENDED;
+    }
+
+    private String buildBlockedAccountLoginMessage(User user) {
+        AccountStatus status = user == null ? AccountStatus.BANNED : user.getAccountStatus();
+        if (status == AccountStatus.SUSPENDED) {
+            return "Tài khoản của bạn đang bị tạm khóa. Vui lòng liên hệ admin để được hỗ trợ.";
+        }
+        return "Tài khoản của bạn đã bị ban. Vui lòng liên hệ admin để được hỗ trợ.";
+    }
+
+    private String buildLoginFailureMessage(String rawReason) {
+        String reason = rawReason == null ? "INVALID_AUTH" : rawReason.trim().toUpperCase();
+
+        return switch (reason) {
+            case "ACCOUNT_BANNED", "USER_BANNED", "BANNED" ->
+                "Tài khoản của bạn đã bị ban. Vui lòng liên hệ admin để được hỗ trợ.";
+            case "ACCOUNT_SUSPENDED", "SUSPENDED" ->
+                "Tài khoản của bạn đang bị tạm khóa. Vui lòng liên hệ admin để được hỗ trợ.";
+            case "MISSING_CREDENTIALS", "INVALID_FORMAT" ->
+                "Vui lòng nhập đầy đủ tài khoản/email và mật khẩu.";
+            case "SERVER_ERROR" ->
+                "Server đang gặp lỗi khi đăng nhập. Vui lòng thử lại sau.";
+            default -> "Sai tài khoản/email hoặc mật khẩu.";
+        };
     }
 
     private String fallback(String value, String fallbackValue) {

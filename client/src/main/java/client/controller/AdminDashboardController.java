@@ -688,6 +688,10 @@ public class AdminDashboardController extends BaseDashboardController {
             return new String[]{"Ban"};
         }
 
+        if (normalizedStatus.equals("banned") || normalizedStatus.equals("suspended")) {
+            return new String[]{"Restore"};
+        }
+
         return new String[]{};
     }
 
