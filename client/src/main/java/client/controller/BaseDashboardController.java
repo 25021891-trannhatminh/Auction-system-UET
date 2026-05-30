@@ -204,6 +204,8 @@ public abstract class BaseDashboardController {
 
                 if (msg.startsWith("PUSH_NOTIF|")) {
                     Platform.runLater(() -> processPushNotification(msg));
+                } else if (isNotificationMarkReadResponse(msg)) {
+                    Platform.runLater(() -> handleNotificationMarkReadResponse(msg));
                 } else {
                     // Xử lý các phản hồi nghiệp vụ thông thường
                     Platform.runLater(() -> handleBusinessResponse(msg));
@@ -325,10 +327,8 @@ public abstract class BaseDashboardController {
 
     protected void requestNotificationHistory() {
         NetworkManager manager = networkManager == null ? NetworkManager.getInstance() : networkManager;
-        User currentUser = SessionManager.getCurrentUser();
-        int userId = currentUser == null ? 0 : currentUser.getUserId();
         if (manager != null) {
-            manager.send(userId > 0 ? "USER_LIST_NOTIFICATIONS " + userId : "USER_LIST_NOTIFICATIONS");
+            manager.send("USER_LIST_NOTIFICATIONS");
         }
     }
 
@@ -336,6 +336,34 @@ public abstract class BaseDashboardController {
         return message != null && (message.equals("USER_NOTIFICATIONS_BEGIN")
             || message.equals("USER_NOTIFICATIONS_END")
             || message.startsWith("USER_NOTIFICATION "));
+    }
+
+    protected boolean isNotificationMarkReadResponse(String message) {
+        return message != null && (message.startsWith("USER_MARK_NOTIFICATIONS_READ_SUCCESS")
+            || message.startsWith("USER_MARK_NOTIFICATIONS_READ_FAIL"));
+    }
+
+    protected void handleNotificationMarkReadResponse(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        if (message.startsWith("USER_MARK_NOTIFICATIONS_READ_SUCCESS")) {
+            for (NotificationModel notification : notificationInbox) {
+                notification.setRead(true);
+            }
+            unreadNotificationCount = 0;
+            updateNotificationBadge();
+            if (notificationPopup != null && notificationPopup.isShowing()) {
+                refreshNotificationPopupContent();
+            }
+            return;
+        }
+
+        notifUIHandler.showError(
+            "Notification sync failed",
+            "The server could not mark notifications as read. Reloading notification history."
+        );
+        requestNotificationHistory();
     }
 
     protected void handleNotificationHistoryMessage(String message) {
@@ -387,12 +415,8 @@ public abstract class BaseDashboardController {
 
     private void markNotificationsReadOnServer() {
         NetworkManager manager = networkManager == null ? NetworkManager.getInstance() : networkManager;
-        User currentUser = SessionManager.getCurrentUser();
-        int userId = currentUser == null ? 0 : currentUser.getUserId();
         if (manager != null) {
-            manager.send(userId > 0
-                ? "USER_MARK_NOTIFICATIONS_READ " + userId
-                : "USER_MARK_NOTIFICATIONS_READ");
+            manager.send("USER_MARK_NOTIFICATIONS_READ");
         }
     }
 
@@ -516,6 +540,9 @@ public abstract class BaseDashboardController {
         Button markReadButton = new Button("Mark read");
         markReadButton.getStyleClass().add("notification-clear-btn");
         markReadButton.setOnAction(event -> {
+            for (NotificationModel notification : notificationInbox) {
+                notification.setRead(true);
+            }
             unreadNotificationCount = 0;
             updateNotificationBadge();
             markNotificationsReadOnServer();

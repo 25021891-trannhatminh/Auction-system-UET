@@ -158,7 +158,11 @@ public class UserDashboardController extends BaseDashboardController {
   private boolean transactionsLoaded;
   private boolean transactionsLoading;
   private boolean transactionsReloadPending;
-  private final Map<String, Boolean> paymentSubmittingByAuction = new HashMap<>();
+  private final UserTransactionFlow transactionFlow = new UserTransactionFlow();
+  private final Map<String, Boolean> manualBidSubmittingByAuction = new HashMap<>();
+  private final Map<String, Boolean> autoBidSubmittingByAuction = new HashMap<>();
+  private boolean depositSubmitting;
+  private boolean createItemSubmitting;
   private BigDecimal currentWalletBalance = BigDecimal.ZERO;
   private boolean walletBalanceKnown;
   private final Map<String, Long> auctionSecondsSyncedAtMillis = new HashMap<>();
@@ -247,6 +251,10 @@ public class UserDashboardController extends BaseDashboardController {
       }
       if (isNotificationHistoryMessage(msg)) {
         Platform.runLater(() -> handleNotificationHistoryMessage(msg));
+        return;
+      }
+      if (isNotificationMarkReadResponse(msg)) {
+        Platform.runLater(() -> handleNotificationMarkReadResponse(msg));
         return;
       }
       if (isSellerBidHistoryMessage(msg)) {
@@ -401,13 +409,21 @@ public class UserDashboardController extends BaseDashboardController {
     });
 
     dialog.showAndWait().ifPresent(amount -> {
+      if (depositSubmitting) {
+        notifUIHandler.showInfo(
+            "Deposit is processing",
+            "Please wait for the current wallet update to finish before sending another deposit."
+        );
+        return;
+      }
       if (networkManager == null) {
         networkManager = NetworkManager.getInstance();
       }
-      if (networkManager == null) {
+      if (networkManager == null || !networkManager.isConnected()) {
         notifUIHandler.showError("Deposit failed", "Cannot connect to the server.");
         return;
       }
+      depositSubmitting = true;
       networkManager.send(buildDepositCommand(amount));
       notifUIHandler.showSuccess(
           "Deposit processing",
@@ -476,10 +492,6 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private String buildDepositCommand(BigDecimal amount) {
-    User currentUser = SessionManager.getCurrentUser();
-    if (currentUser != null && currentUser.getUserId() > 0) {
-      return "DEPOSIT_WALLET " + currentUser.getUserId() + " " + amount.toPlainString();
-    }
     return "DEPOSIT_WALLET " + amount.toPlainString();
   }
 
@@ -498,10 +510,6 @@ public class UserDashboardController extends BaseDashboardController {
 
   /**
    * Loads data needed by the inline Create Listing form.
-   *
-   * <p>The dashboard uses a lightweight socket, so the current user id is included in
-   * seller-specific requests. The server still prefers the authenticated socket user when it has
-   * one.</p>
    */
   private void requestCreateListingMetadata() {
     if (createItemNetworkManager == null) {
@@ -511,11 +519,10 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    User currentUser = SessionManager.getCurrentUser();
-    if (currentUser != null && currentUser.getUserId() > 0) {
+    if (SessionManager.getCurrentUser() != null) {
       sellerItemsLoading = true;
-      createItemNetworkManager.send("USER_ITEM_STATS " + currentUser.getUserId());
-      createItemNetworkManager.send("USER_LIST_ITEMS " + currentUser.getUserId());
+      createItemNetworkManager.send("USER_ITEM_STATS");
+      createItemNetworkManager.send("USER_LIST_ITEMS");
     }
   }
 
@@ -544,12 +551,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     myBidsLoading = true;
-    User currentUser = SessionManager.getCurrentUser();
-    if (currentUser != null && currentUser.getUserId() > 0) {
-      networkManager.send("USER_LIST_BIDS " + currentUser.getUserId());
-    } else {
-      networkManager.send("USER_LIST_BIDS");
-    }
+    networkManager.send("USER_LIST_BIDS");
   }
 
   private void requestUserAutoBids() {
@@ -564,12 +566,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     autoBidsLoading = true;
-    User currentUser = SessionManager.getCurrentUser();
-    if (currentUser != null && currentUser.getUserId() > 0) {
-      networkManager.send("USER_LIST_AUTOBIDS " + currentUser.getUserId());
-    } else {
-      networkManager.send("USER_LIST_AUTOBIDS");
-    }
+    networkManager.send("USER_LIST_AUTOBIDS");
   }
 
   private void requestUserTransactions() {
@@ -584,12 +581,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     transactionsLoading = true;
-    User currentUser = SessionManager.getCurrentUser();
-    if (currentUser != null && currentUser.getUserId() > 0) {
-      networkManager.send("USER_LIST_TRANSACTIONS " + currentUser.getUserId());
-    } else {
-      networkManager.send("USER_LIST_TRANSACTIONS");
-    }
+    networkManager.send("USER_LIST_TRANSACTIONS");
   }
 
   private void requestSellerBidHistory(String auctionId) {
@@ -660,6 +652,8 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("USER_TRANSACTIONS_ERROR")
         || message.startsWith("PAYMENT_SUCCESS")
         || message.startsWith("PAYMENT_FAIL")
+        || message.startsWith("REFUND_SUCCESS")
+        || message.startsWith("REFUND_FAIL")
         || message.startsWith("DEPOSIT_SUCCESS")
         || message.startsWith("DEPOSIT_FAIL")
         || message.startsWith("WALLET_UPDATE|"));
@@ -1001,7 +995,35 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
+    if (message.startsWith("REFUND_SUCCESS")) {
+      String[] parts = message.trim().split("\\s+", 3);
+      String auctionId = parts.length > 1 ? parts[1] : "";
+      clearRefundSubmitting(auctionId);
+      notifUIHandler.showSuccess(
+          "Refund completed",
+          auctionId.isBlank()
+              ? "The payment has been refunded successfully."
+              : "Refund completed for auction AUC-" + auctionId + "."
+      );
+      reloadTransactionsFromServer();
+      requestUserAuctions();
+      return;
+    }
+
+    if (message.startsWith("REFUND_FAIL")) {
+      String[] parts = message.trim().split("\\s+", 3);
+      String auctionId = parts.length > 2 ? parts[1] : "";
+      String reason = parts.length > 2
+          ? parts[2]
+          : parts.length > 1 ? parts[1] : "REFUND_NOT_COMPLETED";
+      clearRefundSubmitting(auctionId);
+      notifUIHandler.showError("Refund failed", readableRefundFailure(reason));
+      reloadTransactionsFromServer();
+      return;
+    }
+
     if (message.startsWith("DEPOSIT_SUCCESS")) {
+      depositSubmitting = false;
       List<String> fields = splitPayload(message.substring("DEPOSIT_SUCCESS".length()).trim());
       String amount = fields.isEmpty() ? "" : formatMoney(fields.get(0));
       String balance = fields.size() > 1 ? formatMoney(fields.get(1)) : "";
@@ -1019,6 +1041,7 @@ public class UserDashboardController extends BaseDashboardController {
     }
 
     if (message.startsWith("DEPOSIT_FAIL")) {
+      depositSubmitting = false;
       String reason = message.substring("DEPOSIT_FAIL".length()).trim();
       notifUIHandler.showError("Deposit failed", readablePaymentFailure(reason));
       reloadTransactionsFromServer();
@@ -1062,8 +1085,9 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("USER_TRANSACTIONS_ERROR")) {
       transactionsLoading = false;
+      depositSubmitting = false;
       transactions.clear();
-      paymentSubmittingByAuction.clear();
+      transactionFlow.clearAll();
       transactionsLoaded = true;
       applyTransactionStatsIfVisible();
       if ("winners".equals(currentSectionKey)) {
@@ -2313,40 +2337,71 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private boolean isPaymentSubmitting(TransactionData transaction) {
-    return transaction != null && isPaymentSubmitting(transaction.auctionId);
-  }
-
-  private boolean isPaymentSubmitting(String auctionId) {
-    return paymentSubmittingByAuction.containsKey(normalizeAuctionKey(auctionId));
+    return transactionFlow.isPaymentSubmitting(transaction);
   }
 
   private void markPaymentSubmitting(String auctionId) {
-    String key = normalizeAuctionKey(auctionId);
-    if (!key.isBlank()) {
-      paymentSubmittingByAuction.put(key, Boolean.TRUE);
-    }
+    transactionFlow.markPaymentSubmitting(auctionId);
   }
 
   private void clearPaymentSubmitting(String auctionId) {
+    transactionFlow.clearPaymentSubmitting(auctionId);
+  }
+
+  private boolean isRefundSubmitting(TransactionData transaction) {
+    return transactionFlow.isRefundSubmitting(transaction);
+  }
+
+  private void markRefundSubmitting(String auctionId) {
+    transactionFlow.markRefundSubmitting(auctionId);
+  }
+
+  private void clearRefundSubmitting(String auctionId) {
+    transactionFlow.clearRefundSubmitting(auctionId);
+  }
+
+  private boolean isManualBidSubmitting(String auctionId) {
+    return manualBidSubmittingByAuction.containsKey(normalizeAuctionKey(auctionId));
+  }
+
+  private void markManualBidSubmitting(String auctionId) {
     String key = normalizeAuctionKey(auctionId);
     if (!key.isBlank()) {
-      paymentSubmittingByAuction.remove(key);
+      manualBidSubmittingByAuction.put(key, Boolean.TRUE);
+    }
+  }
+
+  private void clearManualBidSubmitting(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (!key.isBlank()) {
+      manualBidSubmittingByAuction.remove(key);
+    }
+  }
+
+  private boolean isAutoBidSubmitting(String auctionId) {
+    return autoBidSubmittingByAuction.containsKey(normalizeAuctionKey(auctionId));
+  }
+
+  private void markAutoBidSubmitting(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (!key.isBlank()) {
+      autoBidSubmittingByAuction.put(key, Boolean.TRUE);
+    }
+  }
+
+  private void clearAutoBidSubmitting(String auctionId) {
+    String key = normalizeAuctionKey(auctionId);
+    if (!key.isBlank()) {
+      autoBidSubmittingByAuction.remove(key);
     }
   }
 
   private void dropResolvedPaymentSubmissions() {
-    if (paymentSubmittingByAuction.isEmpty()) {
-      return;
-    }
-
-    paymentSubmittingByAuction.keySet().removeIf(key -> {
-      TransactionData latest = findTransactionByAuctionId(key);
-      return latest == null || !latest.isPayable();
-    });
+    transactionFlow.dropResolvedSubmissions(transactions);
   }
 
   private String normalizeAuctionKey(String auctionId) {
-    return auctionId == null ? "" : auctionId.trim();
+    return transactionFlow.normalizeAuctionKey(auctionId);
   }
 
   private void reloadTransactionsFromServer() {
@@ -2509,6 +2564,20 @@ public class UserDashboardController extends BaseDashboardController {
         event.consume();
       });
       return payButton;
+    }
+
+    if (transaction.isRefundable()) {
+      boolean submitting = isRefundSubmitting(transaction);
+      Button refundButton = new Button(submitting ? "Refunding" : "Refund");
+      refundButton.setMnemonicParsing(false);
+      refundButton.getStyleClass().addAll("mini-action-btn", "transaction-refund-btn");
+      refundButton.setMaxWidth(Double.MAX_VALUE);
+      refundButton.setDisable(submitting);
+      refundButton.setOnAction(event -> {
+        submitTransactionRefund(transaction);
+        event.consume();
+      });
+      return refundButton;
     }
 
     Label status = transactionTableLabel(resolveTransactionStatus(transaction), "transaction-status-cell");
@@ -2715,13 +2784,6 @@ public class UserDashboardController extends BaseDashboardController {
     return prettyStatus(transaction.paymentStatus);
   }
 
-  private static final class TransactionPaymentSummary {
-    private BigDecimal paidByBuyer = BigDecimal.ZERO;
-    private BigDecimal receivedBySeller = BigDecimal.ZERO;
-    private BigDecimal pendingBuyerPay = BigDecimal.ZERO;
-    private BigDecimal pendingSellerReceive = BigDecimal.ZERO;
-  }
-
   private TransactionData findTransactionByAuctionId(String auctionId) {
     String key = normalizeAuctionKey(auctionId);
     if (key.isBlank()) {
@@ -2773,26 +2835,62 @@ public class UserDashboardController extends BaseDashboardController {
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
-    if (networkManager == null) {
+    if (networkManager == null || !networkManager.isConnected()) {
       notifUIHandler.showError("Payment failed", "Cannot connect to the server.");
       return;
     }
 
     markPaymentSubmitting(latestTransaction.auctionId);
     refreshTransactionWorkspaceIfVisible();
-    networkManager.send(buildConfirmPaymentCommand(latestTransaction));
+    networkManager.send(transactionFlow.buildConfirmPaymentCommand(latestTransaction));
   }
 
-  private String buildConfirmPaymentCommand(TransactionData transaction) {
-    String auctionId = normalizeAuctionKey(transaction.auctionId);
-    String itemName = commandSafeText(fallback(transaction.itemName, "Auction #" + auctionId));
-    return itemName.isBlank()
-        ? "CONFIRM_PAYMENT " + auctionId
-        : "CONFIRM_PAYMENT " + auctionId + " " + itemName;
-  }
+  private void submitTransactionRefund(TransactionData transaction) {
+    TransactionData latestTransaction = findTransactionByAuctionId(
+        transaction == null ? "" : transaction.auctionId
+    );
+    if (latestTransaction == null) {
+      latestTransaction = transaction;
+    }
 
-  private String commandSafeText(String value) {
-    return value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").trim();
+    if (latestTransaction == null || !latestTransaction.isRefundable()) {
+      showTemporaryDetail("Refund unavailable", "Only completed seller-side payments can be refunded.");
+      return;
+    }
+    if (latestTransaction.auctionId.isBlank() || "0".equals(latestTransaction.auctionId)) {
+      showTemporaryDetail("Refund unavailable", "This payment row is missing auction information.");
+      return;
+    }
+    if (isRefundSubmitting(latestTransaction)) {
+      showTemporaryDetail("Refund processing", "This refund request is already being sent to the server.");
+      return;
+    }
+
+    BigDecimal amount = moneyValue(latestTransaction.amount);
+    if (walletBalanceKnown && currentWalletBalance.compareTo(amount.abs()) < 0) {
+      notifUIHandler.showError(
+          "Refund blocked",
+          "Wallet balance is not enough to refund this completed payment."
+      );
+      showTemporaryDetail(
+          "Refund blocked",
+          "Required: " + formatMoney(amount.abs().toPlainString()) + "\n"
+              + "Available: " + formatMoney(currentWalletBalance.toPlainString())
+      );
+      return;
+    }
+
+    if (networkManager == null) {
+      networkManager = NetworkManager.getInstance();
+    }
+    if (networkManager == null || !networkManager.isConnected()) {
+      notifUIHandler.showError("Refund failed", "Cannot connect to the server.");
+      return;
+    }
+
+    markRefundSubmitting(latestTransaction.auctionId);
+    refreshTransactionWorkspaceIfVisible();
+    networkManager.send(transactionFlow.buildRefundPaymentCommand(latestTransaction));
   }
 
 
@@ -3176,24 +3274,27 @@ public class UserDashboardController extends BaseDashboardController {
     Label bidMessage = new Label();
 
     if (!sellerView) {
+      boolean manualBidPending = isManualBidSubmitting(displayData.auctionId);
       bidInput.setPromptText("Enter bid amount");
-      bidInput.setDisable(!isAuctionBidEnabled(displayData));
+      bidInput.setDisable(!isAuctionBidEnabled(displayData) || manualBidPending);
       bidInput.getStyleClass().add("auction-detail-bid-input");
       bidInput.setMinWidth(0);
       HBox.setHgrow(bidInput, Priority.ALWAYS);
 
       placeBidButton.setMnemonicParsing(false);
       placeBidButton.getStyleClass().add("auction-market-bid-btn");
-      placeBidButton.setDisable(!isAuctionBidEnabled(displayData));
+      placeBidButton.setDisable(!isAuctionBidEnabled(displayData) || manualBidPending);
       lockRegionWidth(placeBidButton, 104);
       placeBidButton.setOnAction(event -> submitManualBid(displayData, bidInput));
 
       bidRow.getChildren().addAll(bidInput, placeBidButton);
       autoBidPanel = buildAutoBidPanel(
           displayData, autoBidMaxInput, autoBidIncrementInput, autoBidRegisterButton, autoBidCancelButton);
-      bidMessage.setText(isAuctionBidEnabled(displayData)
-          ? "Minimum increment: " + displayData.minimumIncrement
-          : bidDisabledReason(displayData));
+      bidMessage.setText(manualBidPending
+          ? "Your bid is being confirmed by the server..."
+          : isAuctionBidEnabled(displayData)
+              ? "Minimum increment: " + displayData.minimumIncrement
+              : bidDisabledReason(displayData));
     }
 
     bidMessage.getStyleClass().add("auction-detail-end-note");
@@ -3455,6 +3556,7 @@ public class UserDashboardController extends BaseDashboardController {
     hint.getStyleClass().add("auction-detail-end-note");
     hint.setWrapText(true);
 
+    boolean autoBidPending = latestData != null && isAutoBidSubmitting(latestData.auctionId);
     HBox inputRow = new HBox(8);
     inputRow.getStyleClass().add("auction-detail-auto-bid-input-row");
     maxInput.setPromptText("Max bid");
@@ -3462,7 +3564,7 @@ public class UserDashboardController extends BaseDashboardController {
     for (TextField input : new TextField[] {maxInput, incrementInput}) {
       input.getStyleClass().add("auction-detail-bid-input");
       input.setMinWidth(0);
-      input.setDisable(!isAuctionBidEnabled(latestData));
+      input.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
       HBox.setHgrow(input, Priority.ALWAYS);
     }
     incrementInput.setText(normalize(latestData.minimumIncrement).equals("0 vnd") ? "" : latestData.minimumIncrement);
@@ -3474,13 +3576,13 @@ public class UserDashboardController extends BaseDashboardController {
     actions.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
     registerButton.setMnemonicParsing(false);
     registerButton.getStyleClass().add("auction-market-bid-btn");
-    registerButton.setDisable(!isAuctionBidEnabled(latestData));
+    registerButton.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
     registerButton.setMaxWidth(Double.MAX_VALUE);
     registerButton.setOnAction(event -> submitAutoBid(latestData, maxInput, incrementInput));
 
     cancelButton.setMnemonicParsing(false);
     cancelButton.getStyleClass().add("auction-detail-secondary-btn");
-    cancelButton.setDisable(!isAuctionBidEnabled(latestData));
+    cancelButton.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
     cancelButton.setMaxWidth(Double.MAX_VALUE);
     cancelButton.setOnAction(event -> cancelAutoBid(latestData));
 
@@ -3765,6 +3867,11 @@ public class UserDashboardController extends BaseDashboardController {
       updateActiveBidControls(latestData);
       return;
     }
+    if (isManualBidSubmitting(latestData.auctionId)) {
+      showBidFeedback("Your previous bid is still being confirmed by the server.", false);
+      updateActiveBidControls(latestData);
+      return;
+    }
 
     String amount = normalizeBidAmount(bidInput.getText());
     if (amount.isBlank()) {
@@ -3802,14 +3909,13 @@ public class UserDashboardController extends BaseDashboardController {
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
-    if (networkManager == null) {
+    if (networkManager == null || !networkManager.isConnected()) {
       showBidFeedback("Cannot connect to the server.", true);
       return;
     }
 
-    if (activeAuctionBidButton != null) {
-      activeAuctionBidButton.setDisable(true);
-    }
+    markManualBidSubmitting(latestData.auctionId);
+    updateActiveBidControls(latestData);
     showBidFeedback("Sending bid to the server...", false);
     networkManager.send("BID " + latestData.auctionId + " " + amount);
   }
@@ -3822,6 +3928,11 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (!isAuctionBidEnabled(latestData)) {
       showBidFeedback(bidDisabledReason(latestData), true);
+      updateActiveBidControls(latestData);
+      return;
+    }
+    if (isAutoBidSubmitting(latestData.auctionId)) {
+      showBidFeedback("Your auto-bid change is still being confirmed by the server.", false);
       updateActiveBidControls(latestData);
       return;
     }
@@ -3859,12 +3970,13 @@ public class UserDashboardController extends BaseDashboardController {
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
-    if (networkManager == null) {
+    if (networkManager == null || !networkManager.isConnected()) {
       showBidFeedback("Cannot connect to the server.", true);
       return;
     }
 
-    setAutoBidControlsDisabled(true);
+    markAutoBidSubmitting(latestData.auctionId);
+    updateActiveBidControls(latestData);
     showBidFeedback("Saving auto-bid rule to the server...", false);
     networkManager.send("AUTOBID_REGISTER " + latestData.auctionId + " " + maxBid + " " + increment);
   }
@@ -3874,15 +3986,21 @@ public class UserDashboardController extends BaseDashboardController {
     if (latestData == null || latestData.auctionId == null || latestData.auctionId.isBlank()) {
       return;
     }
+    if (isAutoBidSubmitting(latestData.auctionId)) {
+      showBidFeedback("Your auto-bid change is still being confirmed by the server.", false);
+      updateActiveBidControls(latestData);
+      return;
+    }
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
     }
-    if (networkManager == null) {
+    if (networkManager == null || !networkManager.isConnected()) {
       showBidFeedback("Cannot connect to the server.", true);
       return;
     }
 
-    setAutoBidControlsDisabled(true);
+    markAutoBidSubmitting(latestData.auctionId);
+    updateActiveBidControls(latestData);
     showBidFeedback("Canceling auto-bid rule...", false);
     networkManager.send("AUTOBID_CANCEL " + latestData.auctionId);
   }
@@ -3973,6 +4091,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("BID_SUCCESS")) {
       String[] parts = message.trim().split("\\s+", 3);
       String auctionId = parts.length > 1 ? parts[1] : activeAuctionDetailId;
+      clearManualBidSubmitting(auctionId);
       if (activeAuctionBidInput != null) {
         activeAuctionBidInput.clear();
       }
@@ -3999,6 +4118,8 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
     if (message.startsWith("FAIL ") && activeAuctionDetailId != null) {
+      clearManualBidSubmitting(activeAuctionDetailId);
+      clearAutoBidSubmitting(activeAuctionDetailId);
       if (activeAuctionBidButton != null) {
         activeAuctionBidButton.setDisable(false);
       }
@@ -4037,6 +4158,8 @@ public class UserDashboardController extends BaseDashboardController {
     String auctionId = parts.length > 1 ? parts[1] : "";
     String action = parts.length > 2 ? parts[2] : "REGISTERED";
 
+    clearAutoBidSubmitting(auctionId);
+
     if (activeAuctionDetailId == null || auctionId.isBlank() || activeAuctionDetailId.equals(auctionId)) {
       setAutoBidControlsDisabled(false);
       if ("REGISTERED".equalsIgnoreCase(action)) {
@@ -4065,6 +4188,8 @@ public class UserDashboardController extends BaseDashboardController {
     String auctionId = parts.length > 1 ? parts[1] : "";
     String reason = parts.length > 2 ? parts[2] : "";
 
+    clearAutoBidSubmitting(auctionId);
+
     if (activeAuctionDetailId == null
         || auctionId.isBlank()
         || "-1".equals(auctionId)
@@ -4078,6 +4203,8 @@ public class UserDashboardController extends BaseDashboardController {
     String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 3);
     String auctionId = parts.length > 1 ? parts[1] : "";
     String reason = parts.length > 2 ? parts[2] : "";
+
+    clearManualBidSubmitting(auctionId);
 
     if (activeAuctionDetailId != null
         && (auctionId.isBlank()
@@ -4997,27 +5124,37 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void updateActiveBidControls(AuctionCardData data) {
-    boolean disabled = !isAuctionBidEnabled(data);
+    AuctionCardData latestData = latestAuctionCard(data);
+    boolean baseDisabled = !isAuctionBidEnabled(latestData);
+    boolean manualPending = latestData != null && isManualBidSubmitting(latestData.auctionId);
+    boolean autoPending = latestData != null && isAutoBidSubmitting(latestData.auctionId);
+
     if (activeAuctionBidInput != null) {
-      activeAuctionBidInput.setDisable(disabled);
+      activeAuctionBidInput.setDisable(baseDisabled || manualPending);
     }
     if (activeAuctionBidButton != null) {
-      activeAuctionBidButton.setDisable(disabled);
+      activeAuctionBidButton.setDisable(baseDisabled || manualPending);
     }
     if (activeAutoBidMaxInput != null) {
-      activeAutoBidMaxInput.setDisable(disabled);
+      activeAutoBidMaxInput.setDisable(baseDisabled || autoPending);
     }
     if (activeAutoBidIncrementInput != null) {
-      activeAutoBidIncrementInput.setDisable(disabled);
+      activeAutoBidIncrementInput.setDisable(baseDisabled || autoPending);
     }
     if (activeAutoBidRegisterButton != null) {
-      activeAutoBidRegisterButton.setDisable(disabled);
+      activeAutoBidRegisterButton.setDisable(baseDisabled || autoPending);
     }
     if (activeAutoBidCancelButton != null) {
-      activeAutoBidCancelButton.setDisable(disabled);
+      activeAutoBidCancelButton.setDisable(baseDisabled || autoPending);
     }
-    if (disabled && activeAuctionBidMessageLabel != null && data != null) {
-      activeAuctionBidMessageLabel.setText(bidDisabledReason(data));
+    if (activeAuctionBidMessageLabel != null && latestData != null) {
+      if (manualPending) {
+        activeAuctionBidMessageLabel.setText("Your bid is being confirmed by the server...");
+      } else if (autoPending) {
+        activeAuctionBidMessageLabel.setText("Your auto-bid change is being confirmed by the server...");
+      } else if (baseDisabled) {
+        activeAuctionBidMessageLabel.setText(bidDisabledReason(latestData));
+      }
     }
   }
 
@@ -6370,6 +6507,11 @@ public class UserDashboardController extends BaseDashboardController {
       Button submitItemButton,
       Label messageLabel,
       SellerItemData editItem) {
+    if (createItemSubmitting) {
+      showCreateMessage(messageLabel, "Yêu cầu tạo/cập nhật item đang được server xử lý.", false);
+      return;
+    }
+
     String title = safeTrim(titleField.getText());
     String category = categoryBox.getValue() == null ? "" : categoryBox.getValue().trim();
     BigDecimal price = parseCreateItemPrice(priceField.getText());
@@ -6439,6 +6581,12 @@ public class UserDashboardController extends BaseDashboardController {
         false
     );
 
+    if (createItemNetworkManager == null || !createItemNetworkManager.isConnected()) {
+      showCreateMessage(messageLabel, "Không thể kết nối server. Vui lòng thử lại sau.", true);
+      return;
+    }
+
+    createItemSubmitting = true;
     if (editItem == null) {
       createItemNetworkManager.send("CREATE_ITEM " + payload);
     } else {
@@ -6504,6 +6652,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("CREATE_ITEM_SUCCESS")
         || message.startsWith("USER_UPDATE_DRAFT_SUCCESS")) {
+      createItemSubmitting = false;
       sellerItemsLoaded = false;
       sellerItemStatsLoaded = false;
       requestCreateListingMetadata();
@@ -6522,6 +6671,7 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (message.startsWith("CREATE_ITEM_FAIL")
         || message.startsWith("USER_UPDATE_DRAFT_FAIL")) {
+      createItemSubmitting = false;
       showTemporaryDetail("My Items failed", message);
     }
   }
@@ -6891,20 +7041,11 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private String readablePaymentFailure(String reason) {
-    String normalized = reason == null ? "" : reason.trim().toUpperCase();
-    return switch (normalized) {
-      case "NOT_LOGGED_IN" -> "Please sign in before paying for a transaction.";
-      case "INVALID_FORMAT" -> "Payment request is missing auction information.";
-      case "PAYMENT_NOT_FOUND" -> "No payable transaction exists for this auction.";
-      case "NOT_BUYER" -> "Only the winning buyer can pay this transaction.";
-      case "PAYMENT_COMPLETED" -> "This transaction has already been paid.";
-      case "PAYMENT_FAILED" -> "This transaction is already marked as failed.";
-      case "PAYMENT_REFUNDED" -> "This transaction has already been refunded.";
-      case "PAYMENT_NOT_COMPLETED" -> "Payment could not be completed. Please check wallet balance and transaction status.";
-      default -> normalized.isBlank()
-          ? "Payment could not be completed."
-          : "Payment could not be completed: " + normalized.replace('_', ' ').toLowerCase() + ".";
-    };
+    return TransactionFailureMessages.payment(reason);
+  }
+
+  private String readableRefundFailure(String reason) {
+    return TransactionFailureMessages.refund(reason);
   }
 
   private BigDecimal parseMoneyOrNull(String value) {
