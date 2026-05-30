@@ -208,7 +208,7 @@ classDiagram
     AuctionManager o-- "0..*" Auction : auctionMap
     AuctionManager o-- "0..*" User : userMap
     AuctionManager o-- "0..*" RealTimeObserver : globalObservers
----
+```
 
 ## 2. Quan Hệ Chính Giữa Các Lớp
 
