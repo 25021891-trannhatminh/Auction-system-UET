@@ -23,6 +23,7 @@ import server.common.model.BidHistoryDTO;
 import server.database.DBConnection;
 import server.network.NotificationDispatcher;
 import server.repository.AccountDAO;
+import server.repository.AutoBidConfigDAO;
 import server.repository.BidTransactionDAO;
 import server.repository.BidTransactionDAO.AuctionLockInfo;
 
@@ -169,6 +170,18 @@ public class BidTransactionService {
     return results;
   }
 
+
+  public List<BidHistoryDTO> getBidHistoryFromDB(int auctionId){
+    return bidTransactionDAO.getBidHistory(auctionId);
+  }
+
+  public List<BidTransactionDAO.AuctionBidHistoryRow> getBidHistoryRowsFromDB (int auctionId){
+    return bidTransactionDAO.getAuctionBidHistoryRows(auctionId);
+  }
+
+  public List<BidTransactionDAO.UserBidRow> getLastestBidById(int userId){
+    return bidTransactionDAO.getLatestBidsByBidder(userId);
+  }
   /**
    * Hàm map ngược từ BidHistoryDTO (sử dụng BidStatus gốc) thành Entity nguyên bản trên RAM
    */

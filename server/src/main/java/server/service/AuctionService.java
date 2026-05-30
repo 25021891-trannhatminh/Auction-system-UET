@@ -835,6 +835,28 @@ public class AuctionService {
     return auction;
   }
 
+  public List<AuctionDTO> getListAuctionByStatus(AuctionStatus status){
+    return auctionDAO.getByStatus(status);
+  }
+
+  public List<AuctionDAO.AdminAuctionRow> getAuctionRowsForAdmin(){
+    return auctionDAO.getAdminAuctionRows();
+  }
+  public List<AuctionDAO.UserAuctionRow> getAuctionRowsForUser(){
+    return auctionDAO.getUserAuctionRows();
+  }
+
+  /**
+   * Checks that the authenticated seller owns the requested auction.
+   */
+  public boolean isAuctionOwnedByUser(int auctionId, int sellerId) {
+    return auctionDAO.isOwnedBySeller(auctionId, sellerId);
+  }
+
+  public List<AutoBidConfigDAO.UserAutoBidRow> getAutoBidById(int userId){
+    return autoBidConfigDAO.getUserAutoBidRows(userId);
+  }
+
   // ==================== NOTIFY METHODS ====================
   public void broadcastSystemNotif(String title, String message) {
     notifySystemNotification(-1, title, message);

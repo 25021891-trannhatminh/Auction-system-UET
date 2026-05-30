@@ -20,6 +20,8 @@ import server.repository.*;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class PaymentService {
@@ -406,6 +408,26 @@ public class PaymentService {
     NotificationDispatcher.getInstance().submit(new WalletUpdateEvent(userId, newBalance));
   }
 
+  public BigDecimal getUserBalance (int userId){
+    return walletDAO.getBalanceByUserId(userId);
+  }
+  /** Map (txId → số dư sau giao dịch) dùng cho Transaction history. */
+  public Map<Integer, BigDecimal> balanceAfterPay (int userId, BigDecimal currentBalance){
+    return walletTxDAO.buildBalanceAfterMap(userId, currentBalance);
+  }
+
+  /** Lấy danh sách giao dịch (payment + wallet) của user cho Transaction history */
+  public List<PaymentDAO.UserTransactionRow> getPaymentList(int userId){
+    return paymentDAO.getUserTransactionRows(userId);
+  }
+
+  public PaymentDAO.PaymentWalletInfo getPaymentRecord(int auctionId){
+    return paymentDAO.getPaymentWalletInfo(auctionId);
+  }
+
+  public PaymentDAO.PaymentBuyerStatus getBuyerStatus(int auctionId){
+    return paymentDAO.getPaymentBuyerStatus(auctionId);
+  }
   private void rollbackQuietly(Connection conn) {
     if (conn == null) return;
     try { conn.rollback(); } catch (SQLException e) { logger.error("rollbackQuietly() failed", e); }

@@ -1,7 +1,5 @@
 package server.common.entity;
 
-
-import server.common.entity.manager.AuctionManager;
 import server.common.enums.AccountRole;
 import server.common.enums.AdminPermission;
 import server.common.enums.UserStatus;
@@ -11,11 +9,16 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-/*  Admin
-    force-close auction, ban user, xem toàn bộ dữ liệu (transaction log).
-    permissions lưu dưới dạng Set<String> để dễ kiểm tra.
-    Note: UI cần check hasPermission() trước khi hiển thị
-    các chức năng admin nhạy cảm. (Đăng nhập = tài khoản role = ADMIN trong DB)
+/**
+ * Tài khoản Quản trị viên của hệ thống đấu giá.
+ *
+ * <p>Admin được trao quyền mặc định đầy đủ khi khởi tạo. Tập quyền
+ * có thể được thu hẹp hoặc mở rộng qua {@link #grantPermission} / {@link #revokePermission}.</p>
+ *
+ * <p>UI: gọi {@link #hasPermission(AdminPermission)} trước khi hiển thị
+ * các chức năng nhạy cảm (force-close auction, ban user, v.v.).</p>
+ *
+ * <p>DB: đăng nhập bằng tài khoản có {@code role = ADMIN} trong bảng {@code accounts}.</p>
  */
 public class Admin extends Account {
 
@@ -30,22 +33,30 @@ public class Admin extends Account {
         AdminPermission.VIEW_ALL_AUCTIONS,
         AdminPermission.MANAGE_PAYMENTS,
         AdminPermission.SYSTEM_NOTIFICATION
-        ));
+    ));
 
     public Admin(String username, String email, String passwordHash,
                  String fullName, String phone) {
         super(username, email, passwordHash, fullName, phone, AccountRole.ADMIN);
     }
 
-    /** Constructor load từ DB */
+    /** Constructor load từ DB — toàn bộ trường đã được persist. */
     public Admin(int id, LocalDateTime createdAt,
                  String username, String email, String passwordHash,
                  String fullName, String phone, UserStatus status,
                  LocalDateTime lastLogin) {
         super(id, createdAt, username, email, passwordHash, fullName, phone,
-              AccountRole.ADMIN, status, lastLogin);
+            AccountRole.ADMIN, status, lastLogin);
     }
 
+    // ── Permission management ─────────────────────────────────────────────────
+
+    /**
+     * Kiểm tra admin có quyền thực hiện một hành động cụ thể không.
+     *
+     * @param permission quyền cần kiểm tra
+     * @return {@code true} nếu admin có quyền đó
+     */
     public boolean hasPermission(AdminPermission permission) {
         return permissions.contains(permission);
     }
@@ -53,8 +64,8 @@ public class Admin extends Account {
     public void grantPermission(AdminPermission permission) { permissions.add(permission); }
     public void revokePermission(AdminPermission permission) { permissions.remove(permission); }
 
+    /** Trả về bản sao của tập quyền — tránh caller sửa trực tiếp. */
     public Set<AdminPermission> getPermissions() { return new HashSet<>(permissions); }
-
 
     @Override
     public void printInfo() {

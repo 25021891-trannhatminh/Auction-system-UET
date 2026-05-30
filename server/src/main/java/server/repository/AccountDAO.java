@@ -431,7 +431,6 @@ public class AccountDAO {
 
     /**
      * Lấy danh sách user kèm số liệu thống kê cho Admin panel.
-     * Tách từ ClientHandler.sendAdminUsers() để tuân thủ SRP.
      *
      * @return danh sách {@link AdminUserRow} đã kèm itemCount, runningAuctionCount, bidCount
      */

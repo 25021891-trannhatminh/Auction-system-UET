@@ -115,6 +115,12 @@ public class AdminService {
   }
 
   // ====================== VIEW ALL ======================
+  public boolean isActiveAdmin(int userId) {
+    return accountDAO.isActiveAdmin(userId);
+  }
+  public List<AccountDAO.AdminUserRow> getUserInfoRows(){
+    return accountDAO.getAdminUserRows();
+  }
   public List<User> getAllUsers() {
     return accountDAO.getAll();
   }
