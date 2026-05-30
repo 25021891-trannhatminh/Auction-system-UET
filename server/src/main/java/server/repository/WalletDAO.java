@@ -82,6 +82,10 @@ public class WalletDAO {
     private static final String SQL_CHECK_WALLET =
         "SELECT wallet_id FROM wallets WHERE user_id = ?";
 
+    /** Tách từ ClientHandler.loadCurrentWalletBalance() - SRP */
+    private static final String SQL_SELECT_BALANCE_BY_USER_ID =
+        "SELECT balance FROM wallets WHERE user_id = ?";
+
     // ============================================================
     // SELECT Methods
     // ============================================================
@@ -430,5 +434,32 @@ public class WalletDAO {
             rs.getBigDecimal("balance"),
             rs.getTimestamp("updated_at")
         );
+    }
+
+    // ============================================================
+    // Method tách từ ClientHandler - SRP
+    // ============================================================
+
+    /**
+     * Lấy số dư hiện tại của ví theo userId (standalone connection).
+     * Tách từ ClientHandler.loadCurrentWalletBalance().
+     *
+     * @param userId ID người dùng cần kiểm tra số dư
+     * @return số dư; trả về {@link java.math.BigDecimal#ZERO} nếu không tìm thấy
+     */
+    public java.math.BigDecimal getBalanceByUserId(int userId) {
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_BALANCE_BY_USER_ID)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    java.math.BigDecimal balance = rs.getBigDecimal("balance");
+                    return balance == null ? java.math.BigDecimal.ZERO : balance;
+                }
+            }
+        } catch (java.sql.SQLException e) {
+            logger.error("getBalanceByUserId() failed for userId={}", userId, e);
+        }
+        return java.math.BigDecimal.ZERO;
     }
 }

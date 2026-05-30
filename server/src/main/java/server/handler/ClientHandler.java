@@ -6,36 +6,30 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import server.common.ProtocolConstants;
-import server.common.entity.Auction;
-import server.common.entity.Item;
 import server.common.entity.Notification;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
-import server.common.enums.ItemStatus;
 import server.common.enums.NotificationType;
 import server.common.model.AuctionDTO;
-import server.database.DBConnection;
 import server.network.ClientManager;
+import server.repository.AccountDAO;
 import server.repository.AuctionDAO;
+import server.repository.AutoBidConfigDAO;
 import server.repository.BidTransactionDAO;
 import server.repository.ItemDAO;
+import server.repository.PaymentDAO;
+import server.repository.WalletDAO;
+import server.repository.WalletTransactionDAO;
 import server.common.model.BidHistoryDTO;
 import server.service.AdminService;
 import server.service.AuctionService;
@@ -43,7 +37,6 @@ import server.service.ItemService;
 import server.service.NotificationService;
 import server.service.PaymentService;
 import server.service.ServerAuthService;
-import server.service.listeners.RealTimeObserver;
 
 public class ClientHandler implements Runnable{
 //    private static final int GLOBAL_USER_ID = -1;
@@ -64,18 +57,21 @@ public class ClientHandler implements Runnable{
     private String username = "Guest"; // Tên hiển thị mặc định
     private int userId = ProtocolConstants.NOTIFICATION_GLOBAL_USER_ID ;   // Default UserID
 
-    // DAOs (Refactor sau không cho DAO vào Handler)
+    // DAOs
+    private final AccountDAO accountDAO          = new AccountDAO();
     private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
-    private final AuctionDAO auctionDAO = new AuctionDAO();
-    private final ItemDAO itemDAO = new ItemDAO();
-    private final NotificationService notificationService = new NotificationService();
+    private final AuctionDAO auctionDAO          = new AuctionDAO();
+    private final AutoBidConfigDAO autoBidConfigDAO   = new AutoBidConfigDAO();
+    private final WalletDAO walletDAO            = new WalletDAO();
+    private final WalletTransactionDAO walletTransactionDAO = new WalletTransactionDAO();
+    private final PaymentDAO paymentDAO          = new PaymentDAO();
+    private final NotificationService notificationService  = new NotificationService();
 
     // Services
     private final ServerAuthService authService;
     private final ItemService itemService;
     private final AuctionService auctionService;
     private final PaymentService paymentService;
-    private final AdminService adminService;
     private final ItemCommandHandler itemCommandHandler;
     private final AuctionHandler auctionHandler;
     private final AuctionVisualisationHandler auctionVisualisationHandler;
@@ -89,7 +85,6 @@ public class ClientHandler implements Runnable{
         this.auctionService = auctionService;
         this.authService    = new ServerAuthService();
         this.itemService    = new ItemService();
-        this.adminService   = new AdminService(auctionService);
         this.paymentService = new PaymentService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
         this.bidHandler = new BidHandler(auctionService);
@@ -417,22 +412,9 @@ public class ClientHandler implements Runnable{
         }
     }
 
+    /** Ủy quyền kiểm tra admin cho AccountDAO (SRP). */
     private boolean isActiveAdmin(int userId) {
-        if (userId <= 0) {
-            return false;
-        }
-        String sql = "SELECT role, status FROM accounts WHERE user_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, userId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next()
-                    && "ADMIN".equalsIgnoreCase(rs.getString("role"))
-                    && "ACTIVE".equalsIgnoreCase(rs.getString("status"));
-            }
-        } catch (SQLException e) {
-            return false;
-        }
+        return accountDAO.isActiveAdmin(userId);
     }
 
 
@@ -444,214 +426,91 @@ public class ClientHandler implements Runnable{
         }
     }
 
+    /** Lấy danh sách user cho Admin panel — gọi AccountDAO (SRP). */
     private void sendAdminUsers() {
-        Map<Integer, Integer> itemCounts = loadIntCounts("""
-            SELECT seller_id AS user_id, COUNT(*) AS value
-            FROM items
-            GROUP BY seller_id
-            """);
-        Map<Integer, Integer> runningCounts = loadIntCounts("""
-            SELECT seller_id AS user_id, COUNT(*) AS value
-            FROM auctions
-            WHERE status = 'RUNNING'
-            GROUP BY seller_id
-            """);
-        Map<Integer, Integer> bidCounts = loadIntCounts("""
-            SELECT bidder_id AS user_id, COUNT(*) AS value
-            FROM bid_transactions
-            GROUP BY bidder_id
-            """);
-
-        String sql = """
-            SELECT user_id,
-                   username,
-                   COALESCE(email, '') AS email,
-                   COALESCE(full_name, '') AS full_name,
-                   COALESCE(phone, '') AS phone,
-                   COALESCE(role, 'USER') AS role,
-                   COALESCE(status, 'ACTIVE') AS status,
-                   last_login,
-                   created_at
-            FROM accounts
-            ORDER BY created_at DESC, user_id DESC
-            """;
-
         send("ADMIN_USERS_BEGIN");
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
-                int userId = rs.getInt("user_id");
-                String statusStr = rs.getString("status");
-                String isActiveStr = "ACTIVE".equals(statusStr) ? "true" : "false";
-
+        try {
+            List<AccountDAO.AdminUserRow> rows = accountDAO.getAdminUserRows();
+            for (AccountDAO.AdminUserRow row : rows) {
                 send("ADMIN_USER " + fields(
-                    userId,
-                    rs.getString("username"),
-                    rs.getString("email"),
-                    rs.getString("full_name"),
-                    rs.getString("phone"),
-                    rs.getString("role"),
-                    statusStr,
-                    isActiveStr,
-                    rs.getTimestamp("last_login"),
-                    rs.getTimestamp("created_at"),
-                    itemCounts.getOrDefault(userId, 0),
-                    runningCounts.getOrDefault(userId, 0),
-                    bidCounts.getOrDefault(userId, 0)
+                    row.userId(),
+                    row.username(),
+                    row.email(),
+                    row.fullName(),
+                    row.phone(),
+                    row.role(),
+                    row.status(),
+                    row.isActive(),
+                    row.lastLogin(),
+                    row.createdAt(),
+                    row.itemCount(),
+                    row.runningAuctionCount(),
+                    row.bidCount()
                 ));
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             send("ADMIN_DATA_ERROR " + fields("USERS", e.getMessage()));
             e.printStackTrace();
         }
         send("ADMIN_USERS_END");
     }
 
-    private Map<Integer, Integer> loadIntCounts(String sql) {
-        Map<Integer, Integer> counts = new HashMap<>();
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                counts.put(rs.getInt("user_id"), rs.getInt("value"));
-            }
-        } catch (SQLException e) {
-            // Related tables must not block the main users table from loading.
-            System.out.println("Admin count query skipped: " + e.getMessage());
-        }
-        return counts;
-    }
-
+    /** Lấy danh sách auction cho Admin panel — gọi AuctionDAO (SRP). */
     private void sendAdminAuctions() {
-        String sql = """
-            SELECT a.auction_id, a.item_id, COALESCE(i.name, '') AS item_name,
-                   a.seller_id, COALESCE(seller.username, '') AS seller_username,
-                   a.current_price, COALESCE(bid_counts.bid_count, 0) AS bid_count,
-                   a.status, a.start_time, a.end_time,
-                   COALESCE(winner.username, '') AS winner_username
-            FROM auctions a
-            LEFT JOIN items i ON i.item_id = a.item_id
-            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
-            LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
-            LEFT JOIN (
-                SELECT auction_id, COUNT(*) AS bid_count
-                FROM bid_transactions
-                GROUP BY auction_id
-            ) bid_counts ON bid_counts.auction_id = a.auction_id
-            ORDER BY a.created_at DESC, a.auction_id DESC
-            """;
-
         send("ADMIN_AUCTIONS_BEGIN");
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
+        try {
+            List<AuctionDAO.AdminAuctionRow> rows = auctionDAO.getAdminAuctionRows();
+            for (AuctionDAO.AdminAuctionRow row : rows) {
                 send("ADMIN_AUCTION " + fields(
-                    String.valueOf(rs.getInt("auction_id")),
-                    String.valueOf(rs.getInt("item_id")),
-                    rs.getString("item_name"),
-                    String.valueOf(rs.getInt("seller_id")),
-                    rs.getString("seller_username"),
-                    rs.getBigDecimal("current_price"),
-                    rs.getInt("bid_count"),
-                    rs.getString("status"),
-                    rs.getTimestamp("start_time"),
-                    rs.getTimestamp("end_time"),
-                    rs.getString("winner_username")
+                    String.valueOf(row.auctionId()),
+                    String.valueOf(row.itemId()),
+                    row.itemName(),
+                    String.valueOf(row.sellerId()),
+                    row.sellerUsername(),
+                    row.currentPrice(),
+                    row.bidCount(),
+                    row.status(),
+                    row.startTime(),
+                    row.endTime(),
+                    row.winnerUsername()
                 ));
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             send("ADMIN_DATA_ERROR " + fields("AUCTIONS", e.getMessage()));
             e.printStackTrace();
         }
         send("ADMIN_AUCTIONS_END");
     }
 
+    /** Lấy danh sách auction đang mở cho User dashboard — gọi AuctionDAO (SRP). */
     private void sendUserAuctions() {
-        String sql = """
-            SELECT a.auction_id,
-                   a.item_id,
-                   COALESCE(i.name, '') AS item_name,
-                   COALESCE(i.category, '') AS category_name,
-                   COALESCE(i.description, '') AS description,
-                   a.current_price,
-                   a.min_bid_increment,
-                   a.reserve_price,
-                   COALESCE(bid_counts.bid_count, 0) AS bid_count,
-                   CASE
-                       WHEN a.status IN ('OPEN', 'RUNNING') AND NOW() >= a.end_time THEN 'FINISHED'
-                       WHEN a.status = 'OPEN' AND NOW() >= a.start_time THEN 'RUNNING'
-                       ELSE a.status
-                   END AS display_status,
-                   a.start_time,
-                   a.end_time,
-                   GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left,
-                   COALESCE(seller.username, '') AS seller_username,
-                   COALESCE(winner.username, '') AS winner_username,
-                   COALESCE(imgs.image_urls, '') AS image_urls,
-                   COALESCE(attrs.attribute_lines, '') AS attribute_lines,
-                   a.snipe_window_seconds,
-                   a.snipe_extension_seconds
-            FROM auctions a
-            LEFT JOIN items i ON i.item_id = a.item_id
-            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
-            LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
-            LEFT JOIN (
-                SELECT auction_id, COUNT(*) AS bid_count
-                FROM bid_transactions
-                GROUP BY auction_id
-            ) bid_counts ON bid_counts.auction_id = a.auction_id
-            LEFT JOIN (
-                SELECT item_id,
-                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
-                                    SEPARATOR '\n') AS image_urls
-                FROM item_images
-                GROUP BY item_id
-            ) imgs ON imgs.item_id = a.item_id
-            LEFT JOIN (
-                SELECT item_id,
-                       GROUP_CONCAT(CONCAT(attr_key, ': ', attr_value) ORDER BY attr_id ASC
-                                    SEPARATOR '\n') AS attribute_lines
-                FROM item_attributes
-                GROUP BY item_id
-            ) attrs ON attrs.item_id = a.item_id
-            WHERE a.status IN ('OPEN', 'RUNNING')
-              AND a.end_time > NOW()
-            ORDER BY a.end_time ASC, a.auction_id DESC
-            """;
-
         send("USER_AUCTIONS_BEGIN");
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
+        try {
+            List<AuctionDAO.UserAuctionRow> rows = auctionDAO.getUserAuctionRows();
+            for (AuctionDAO.UserAuctionRow row : rows) {
                 send("USER_AUCTION " + fields(
-                    rs.getInt("auction_id"),
-                    rs.getInt("item_id"),
-                    rs.getString("item_name"),
-                    rs.getString("category_name"),
-                    rs.getString("description"),
-                    rs.getBigDecimal("current_price"),
-                    rs.getBigDecimal("min_bid_increment"),
-                    rs.getBigDecimal("reserve_price"),
-                    rs.getInt("bid_count"),
-                    rs.getString("display_status"),
-                    rs.getTimestamp("start_time"),
-                    rs.getTimestamp("end_time"),
-                    rs.getLong("seconds_left"),
-                    rs.getString("seller_username"),
-                    rs.getString("winner_username"),
-                    rs.getString("image_urls"),
-                    rs.getString("attribute_lines"),
-                    rs.getInt("snipe_window_seconds"),
-                    rs.getInt("snipe_extension_seconds")
+                    row.auctionId(),
+                    row.itemId(),
+                    row.itemName(),
+                    row.categoryName(),
+                    row.description(),
+                    row.currentPrice(),
+                    row.minBidIncrement(),
+                    row.reservePrice(),
+                    row.bidCount(),
+                    row.displayStatus(),
+                    row.startTime(),
+                    row.endTime(),
+                    row.secondsLeft(),
+                    row.sellerUsername(),
+                    row.winnerUsername(),
+                    row.imageUrls(),
+                    row.attributeLines(),
+                    row.snipeWindowSeconds(),
+                    row.snipeExtensionSeconds()
                 ));
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             send("USER_AUCTIONS_ERROR " + fields(e.getMessage()));
             e.printStackTrace();
         }
@@ -689,7 +548,7 @@ public class ClientHandler implements Runnable{
     }
 
     /**
-     * Sends persisted auto-bid rules for the current user.
+     * Gửi danh sách auto-bid của user — gọi AutoBidConfigDAO (SRP).
      *
      * <p>Protocol payload matches the user dashboard auto-bid table:
      * autoBidId|auctionId|itemId|itemName|category|currentPrice|maxBid|increment|status|
@@ -703,64 +562,26 @@ public class ClientHandler implements Runnable{
             send("USER_AUTOBIDS_END");
             return;
         }
-
-        String sql = """
-            SELECT cfg.auto_bid_id,
-                   cfg.auction_id,
-                   a.item_id,
-                   COALESCE(i.name, '') AS item_name,
-                   COALESCE(i.category, '') AS category_name,
-                   a.current_price,
-                   cfg.max_bid,
-                   cfg.increment,
-                   cfg.status,
-                   a.end_time,
-                   COALESCE(seller.username, '') AS seller_username,
-                   COALESCE(imgs.image_urls, '') AS image_urls,
-                   GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left
-            FROM auto_bid_configs cfg
-            JOIN auctions a ON a.auction_id = cfg.auction_id
-            LEFT JOIN items i ON i.item_id = a.item_id
-            LEFT JOIN accounts seller ON seller.user_id = a.seller_id
-            LEFT JOIN (
-                SELECT item_id,
-                       GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
-                                    SEPARATOR '\n') AS image_urls
-                FROM item_images
-                GROUP BY item_id
-            ) imgs ON imgs.item_id = a.item_id
-            WHERE cfg.bidder_id = ?
-            ORDER BY CASE cfg.status
-                         WHEN 'ACTIVE' THEN 0
-                         WHEN 'COMPLETED' THEN 1
-                         ELSE 2
-                     END,
-                     a.end_time ASC, cfg.updated_at DESC
-            """;
-
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, targetUserId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    send("USER_AUTOBID " + fields(
-                        rs.getInt("auto_bid_id"),
-                        rs.getInt("auction_id"),
-                        rs.getInt("item_id"),
-                        rs.getString("item_name"),
-                        rs.getString("category_name"),
-                        rs.getBigDecimal("current_price"),
-                        rs.getBigDecimal("max_bid"),
-                        rs.getBigDecimal("increment"),
-                        rs.getString("status"),
-                        rs.getTimestamp("end_time"),
-                        rs.getString("seller_username"),
-                        rs.getString("image_urls"),
-                        rs.getLong("seconds_left")
-                    ));
-                }
+        try {
+            List<AutoBidConfigDAO.UserAutoBidRow> rows = autoBidConfigDAO.getUserAutoBidRows(targetUserId);
+            for (AutoBidConfigDAO.UserAutoBidRow row : rows) {
+                send("USER_AUTOBID " + fields(
+                    row.autoBidId(),
+                    row.auctionId(),
+                    row.itemId(),
+                    row.itemName(),
+                    row.categoryName(),
+                    row.currentPrice(),
+                    row.maxBid(),
+                    row.increment(),
+                    row.status(),
+                    row.endTime(),
+                    row.sellerUsername(),
+                    row.imageUrls(),
+                    row.secondsLeft()
+                ));
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             send("USER_AUTOBIDS_ERROR " + fields(e.getMessage()));
             e.printStackTrace();
         }
@@ -799,7 +620,7 @@ public class ClientHandler implements Runnable{
     }
 
     /**
-     * Sends post-auction payment rows and standalone wallet rows visible to the current user.
+     * Gửi lịch sử giao dịch của user — gọi PaymentDAO + WalletDAO + WalletTransactionDAO (SRP).
      *
      * <p>The mutation path still goes through PaymentService; this method only exposes the
      * persisted payments/wallet transaction state to the Transactions screen.</p>
@@ -812,233 +633,62 @@ public class ClientHandler implements Runnable{
             send("USER_TRANSACTIONS_END");
             return;
         }
-
-        String sql = """
-            SELECT *
-            FROM (
-                SELECT p.payment_id,
-                       p.auction_id,
-                       CASE WHEN p.buyer_id = ? THEN 'BUYER' ELSE 'SELLER' END AS user_role,
-                       COALESCE(i.name, CONCAT('Auction #', p.auction_id)) AS item_name,
-                       CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END AS counterpart_id,
-                       COALESCE(counterpart.username,
-                                CONCAT('User #', CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END))
-                                AS counterpart_name,
-                       p.amount,
-                       p.status AS payment_status,
-                       a.status AS auction_status,
-                       p.created_at,
-                       p.paid_at,
-                       COALESCE(wt.tx_id, 0) AS wallet_tx_id,
-                       COALESCE(wt.type, '') AS wallet_tx_type,
-                       COALESCE(wt.note, '') AS wallet_note
-                FROM payments p
-                JOIN auctions a ON a.auction_id = p.auction_id
-                LEFT JOIN items i ON i.item_id = a.item_id
-                LEFT JOIN accounts counterpart ON counterpart.user_id =
-                    CASE WHEN p.buyer_id = ? THEN p.seller_id ELSE p.buyer_id END
-                LEFT JOIN (
-                    SELECT wt1.tx_id, wt1.user_id, wt1.ref_auction_id, wt1.type, wt1.note
-                    FROM wallet_transactions wt1
-                    JOIN (
-                        SELECT user_id, ref_auction_id, MAX(tx_id) AS latest_tx_id
-                        FROM wallet_transactions
-                        WHERE type IN ('PAYMENT', 'REFUND')
-                        GROUP BY user_id, ref_auction_id
-                    ) latest ON latest.latest_tx_id = wt1.tx_id
-                ) wt ON wt.ref_auction_id = p.auction_id AND wt.user_id = ?
-                WHERE p.buyer_id = ? OR p.seller_id = ?
-
-                UNION ALL
-
-                SELECT 0 AS payment_id,
-                       COALESCE(wt.ref_auction_id, 0) AS auction_id,
-                       'WALLET' AS user_role,
-                       CASE
-                           WHEN wt.type = 'DEPOSIT' THEN 'Wallet top-up'
-                           WHEN wt.ref_auction_id IS NULL THEN 'Wallet'
-                           ELSE COALESCE(i.name, CONCAT('Auction #', wt.ref_auction_id))
-                       END AS item_name,
-                       0 AS counterpart_id,
-                       'Wallet' AS counterpart_name,
-                       wt.amount,
-                       'COMPLETED' AS payment_status,
-                       'WALLET' AS auction_status,
-                       wt.created_at,
-                       wt.created_at AS paid_at,
-                       wt.tx_id AS wallet_tx_id,
-                       wt.type AS wallet_tx_type,
-                       COALESCE(wt.note, '') AS wallet_note
-                FROM wallet_transactions wt
-                LEFT JOIN auctions a ON a.auction_id = wt.ref_auction_id
-                LEFT JOIN items i ON i.item_id = a.item_id
-                WHERE wt.user_id = ?
-                  AND wt.type IN ('DEPOSIT', 'WITHDRAW')
-            ) tx
-            ORDER BY COALESCE(tx.paid_at, tx.created_at) DESC, tx.payment_id DESC, tx.wallet_tx_id DESC
-            """;
-
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            BigDecimal currentWalletBalance = loadCurrentWalletBalance(conn, targetUserId);
+        try {
+            BigDecimal currentWalletBalance = walletDAO.getBalanceByUserId(targetUserId);
             send("WALLET_UPDATE|" + targetUserId + "|" + currentWalletBalance.toPlainString());
 
-            Map<Integer, BigDecimal> balanceAfterByTx = loadWalletBalanceAfterByTx(
-                conn,
-                targetUserId,
-                currentWalletBalance
-            );
+            Map<Integer, BigDecimal> balanceAfterByTx =
+                walletTransactionDAO.buildBalanceAfterMap(targetUserId, currentWalletBalance);
 
-            ps.setInt(1, targetUserId);
-            ps.setInt(2, targetUserId);
-            ps.setInt(3, targetUserId);
-            ps.setInt(4, targetUserId);
-            ps.setInt(5, targetUserId);
-            ps.setInt(6, targetUserId);
-            ps.setInt(7, targetUserId);
-            ps.setInt(8, targetUserId);
+            List<PaymentDAO.UserTransactionRow> rows =
+                paymentDAO.getUserTransactionRows(targetUserId);
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int walletTxId = rs.getInt("wallet_tx_id");
-                    BigDecimal balanceAfter = balanceAfterByTx.get(walletTxId);
-                    send("USER_TRANSACTION " + fields(
-                        rs.getInt("payment_id"),
-                        rs.getInt("auction_id"),
-                        rs.getString("user_role"),
-                        rs.getString("item_name"),
-                        rs.getInt("counterpart_id"),
-                        rs.getString("counterpart_name"),
-                        rs.getBigDecimal("amount"),
-                        rs.getString("payment_status"),
-                        rs.getString("auction_status"),
-                        rs.getTimestamp("created_at"),
-                        rs.getTimestamp("paid_at"),
-                        walletTxId,
-                        rs.getString("wallet_tx_type"),
-                        rs.getString("wallet_note"),
-                        balanceAfter == null ? "" : balanceAfter
-                    ));
-                }
+            for (PaymentDAO.UserTransactionRow row : rows) {
+                BigDecimal balanceAfter = balanceAfterByTx.get(row.walletTxId());
+                send("USER_TRANSACTION " + fields(
+                    row.paymentId(),
+                    row.auctionId(),
+                    row.userRole(),
+                    row.itemName(),
+                    row.counterpartId(),
+                    row.counterpartName(),
+                    row.amount(),
+                    row.paymentStatus(),
+                    row.auctionStatus(),
+                    row.createdAt(),
+                    row.paidAt(),
+                    row.walletTxId(),
+                    row.walletTxType(),
+                    row.walletNote(),
+                    balanceAfter == null ? "" : balanceAfter
+                ));
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             send("USER_TRANSACTIONS_ERROR " + fields(e.getMessage()));
             e.printStackTrace();
         }
         send("USER_TRANSACTIONS_END");
     }
 
-    /**
-     * Builds display-only wallet balances after each persisted wallet transaction.
-     * The current wallet balance remains the source of truth; the method walks the audit log
-     * backwards and never mutates payment or wallet domain state.
-     */
-    private Map<Integer, BigDecimal> loadWalletBalanceAfterByTx(
-            Connection conn,
-            int targetUserId,
-            BigDecimal currentWalletBalance
-    ) throws SQLException {
-        Map<Integer, BigDecimal> balanceAfterByTx = new HashMap<>();
-        BigDecimal runningBalance = currentWalletBalance == null
-            ? BigDecimal.ZERO
-            : currentWalletBalance;
-        String sql = """
-            SELECT tx_id, type, amount, note
-            FROM wallet_transactions
-            WHERE user_id = ?
-            ORDER BY created_at DESC, tx_id DESC
-            """;
-
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, targetUserId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int txId = rs.getInt("tx_id");
-                    BigDecimal amount = rs.getBigDecimal("amount");
-                    BigDecimal delta = walletDisplayDelta(
-                        rs.getString("type"),
-                        amount == null ? BigDecimal.ZERO : amount,
-                        rs.getString("note")
-                    );
-                    balanceAfterByTx.put(txId, runningBalance);
-                    runningBalance = runningBalance.subtract(delta);
-                }
-            }
-        }
-        return balanceAfterByTx;
-    }
-
-    private BigDecimal loadCurrentWalletBalance(Connection conn, int targetUserId) throws SQLException {
-        String sql = "SELECT balance FROM wallets WHERE user_id = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, targetUserId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    BigDecimal balance = rs.getBigDecimal("balance");
-                    return balance == null ? BigDecimal.ZERO : balance;
-                }
-            }
-        }
-        return BigDecimal.ZERO;
-    }
-
-    private BigDecimal walletDisplayDelta(String type, BigDecimal amount, String note) {
-        String normalizedType = type == null ? "" : type.trim().toUpperCase();
-        String normalizedNote = note == null ? "" : note.trim().toLowerCase();
-        return switch (normalizedType) {
-            case "DEPOSIT", "RELEASE" -> amount;
-            case "WITHDRAW", "HOLD" -> amount.negate();
-            case "PAYMENT" -> normalizedNote.startsWith("received") ? amount : amount.negate();
-            case "REFUND" -> normalizedNote.contains("received") ? amount : amount.negate();
-            default -> BigDecimal.ZERO;
-        };
-    }
-
     public String resolvePaymentCompletionFailure(int auctionId) {
-        String sql = """
-            SELECT p.status,
-                   p.amount,
-                   bw.wallet_id AS buyer_wallet_id,
-                   bw.balance AS buyer_balance,
-                   sw.wallet_id AS seller_wallet_id
-            FROM payments p
-            LEFT JOIN wallets bw ON bw.user_id = p.buyer_id
-            LEFT JOIN wallets sw ON sw.user_id = p.seller_id
-            WHERE p.auction_id = ?
-            """;
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, auctionId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return "PAYMENT_NOT_FOUND";
-                }
-
-                int buyerWalletId = rs.getInt("buyer_wallet_id");
-                if (rs.wasNull() || buyerWalletId <= 0) {
-                    return "BUYER_WALLET_NOT_FOUND";
-                }
-                int sellerWalletId = rs.getInt("seller_wallet_id");
-                if (rs.wasNull() || sellerWalletId <= 0) {
-                    return "SELLER_WALLET_NOT_FOUND";
-                }
-
-                BigDecimal amount = rs.getBigDecimal("amount");
-                BigDecimal buyerBalance = rs.getBigDecimal("buyer_balance");
-                String status = rs.getString("status");
-                boolean insufficientBalance = amount != null
-                    && buyerBalance != null
-                    && buyerBalance.compareTo(amount) < 0;
-                if (insufficientBalance) {
-                    return "INSUFFICIENT_BALANCE";
-                }
-                if (status != null && !"PENDING".equalsIgnoreCase(status)) {
-                    return "PAYMENT_" + status.toUpperCase();
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return "PAYMENT_DB_ERROR";
+        PaymentDAO.PaymentWalletInfo info = paymentDAO.getPaymentWalletInfo(auctionId);
+        if (info == null) {
+            return "PAYMENT_NOT_FOUND";
+        }
+        if (info.buyerWalletId() == null || info.buyerWalletId() <= 0) {
+            return "BUYER_WALLET_NOT_FOUND";
+        }
+        if (info.sellerWalletId() == null || info.sellerWalletId() <= 0) {
+            return "SELLER_WALLET_NOT_FOUND";
+        }
+        boolean insufficientBalance = info.amount() != null
+            && info.buyerBalance() != null
+            && info.buyerBalance().compareTo(info.amount()) < 0;
+        if (insufficientBalance) {
+            return "INSUFFICIENT_BALANCE";
+        }
+        if (info.status() != null && !"PENDING".equalsIgnoreCase(info.status())) {
+            return "PAYMENT_" + info.status().toUpperCase();
         }
         return "PAYMENT_NOT_COMPLETED";
     }
@@ -1052,27 +702,17 @@ public class ClientHandler implements Runnable{
             return PaymentAuthorization.reject("NOT_LOGGED_IN");
         }
 
-        String sql = "SELECT buyer_id, status FROM payments WHERE auction_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, auctionId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return PaymentAuthorization.reject("PAYMENT_NOT_FOUND");
-                }
-                if (rs.getInt("buyer_id") != this.userId) {
-                    return PaymentAuthorization.reject("NOT_BUYER");
-                }
-                String status = rs.getString("status");
-                if (!"PENDING".equalsIgnoreCase(status)) {
-                    return PaymentAuthorization.reject("PAYMENT_" + status);
-                }
-                return PaymentAuthorization.allow();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        PaymentDAO.PaymentBuyerStatus info = paymentDAO.getPaymentBuyerStatus(auctionId);
+        if (info == null) {
             return PaymentAuthorization.reject("PAYMENT_NOT_FOUND");
         }
+        if (info.buyerId() != this.userId) {
+            return PaymentAuthorization.reject("NOT_BUYER");
+        }
+        if (!"PENDING".equalsIgnoreCase(info.status())) {
+            return PaymentAuthorization.reject("PAYMENT_" + info.status());
+        }
+        return PaymentAuthorization.allow();
     }
 
     /**
@@ -1172,17 +812,7 @@ public class ClientHandler implements Runnable{
      * Checks that the authenticated seller owns the requested auction.
      */
     private boolean isAuctionOwnedByUser(int auctionId, int sellerId) {
-        String sql = "SELECT seller_id FROM auctions WHERE auction_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, auctionId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() && rs.getInt("seller_id") == sellerId;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return auctionDAO.isOwnedBySeller(auctionId, sellerId);
     }
 
     /**
@@ -1227,11 +857,6 @@ public class ClientHandler implements Runnable{
             e.printStackTrace();
         }
         send("USER_BIDS_END");
-    }
-
-    private Integer nullableInt(ResultSet rs, String column) throws SQLException {
-        int value = rs.getInt(column);
-        return rs.wasNull() ? null : value;
     }
 
     private String fields(Object... values) {

@@ -8,7 +8,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
@@ -100,6 +102,46 @@ public class AccountDAO {
      */
     private static final String SQL_UPDATE_STATUS =
         "UPDATE accounts SET status = ? WHERE user_id = ?";
+
+    // ============================================================
+    // SQL cho Admin Panel (được tách ra từ ClientHandler - SRP)
+    // ============================================================
+
+    private static final String SQL_IS_ACTIVE_ADMIN =
+        "SELECT role, status FROM accounts WHERE user_id = ?";
+
+    private static final String SQL_ITEM_COUNTS_BY_SELLER = """
+        SELECT seller_id AS user_id, COUNT(*) AS value
+        FROM items
+        GROUP BY seller_id
+        """;
+
+    private static final String SQL_RUNNING_AUCTION_COUNTS_BY_SELLER = """
+        SELECT seller_id AS user_id, COUNT(*) AS value
+        FROM auctions
+        WHERE status = 'RUNNING'
+        GROUP BY seller_id
+        """;
+
+    private static final String SQL_BID_COUNTS_BY_BIDDER = """
+        SELECT bidder_id AS user_id, COUNT(*) AS value
+        FROM bid_transactions
+        GROUP BY bidder_id
+        """;
+
+    private static final String SQL_ADMIN_USER_LIST = """
+        SELECT user_id,
+               username,
+               COALESCE(email, '') AS email,
+               COALESCE(full_name, '') AS full_name,
+               COALESCE(phone, '') AS phone,
+               COALESCE(role, 'USER') AS role,
+               COALESCE(status, 'ACTIVE') AS status,
+               last_login,
+               created_at
+        FROM accounts
+        ORDER BY created_at DESC, user_id DESC
+        """;
 
     /**
      * Đăng ký tài khoản mới.
@@ -359,4 +401,100 @@ public class AccountDAO {
         }
         return null;
     }
+
+    // ============================================================
+    // Admin Panel Methods (tách từ ClientHandler - SRP)
+    // ============================================================
+
+    /**
+     * Kiểm tra user có phải ADMIN đang ACTIVE không.
+     * Tách từ ClientHandler.isActiveAdmin() để tuân thủ SRP.
+     *
+     * @param userId ID người dùng cần kiểm tra
+     * @return {@code true} nếu user là ADMIN và đang ACTIVE
+     */
+    public boolean isActiveAdmin(int userId) {
+        if (userId <= 0) return false;
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_IS_ACTIVE_ADMIN)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next()
+                    && "ADMIN".equalsIgnoreCase(rs.getString("role"))
+                    && "ACTIVE".equalsIgnoreCase(rs.getString("status"));
+            }
+        } catch (SQLException e) {
+            logger.error("isActiveAdmin() failed for userId={}", userId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Lấy danh sách user kèm số liệu thống kê cho Admin panel.
+     * Tách từ ClientHandler.sendAdminUsers() để tuân thủ SRP.
+     *
+     * @return danh sách {@link AdminUserRow} đã kèm itemCount, runningAuctionCount, bidCount
+     */
+    public List<AdminUserRow> getAdminUserRows() {
+        Map<Integer, Integer> itemCounts    = loadCountMap(SQL_ITEM_COUNTS_BY_SELLER);
+        Map<Integer, Integer> runningCounts = loadCountMap(SQL_RUNNING_AUCTION_COUNTS_BY_SELLER);
+        Map<Integer, Integer> bidCounts     = loadCountMap(SQL_BID_COUNTS_BY_BIDDER);
+
+        List<AdminUserRow> rows = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_ADMIN_USER_LIST);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                int uid = rs.getInt("user_id");
+                String status = rs.getString("status");
+                rows.add(new AdminUserRow(
+                    uid,
+                    rs.getString("username"),
+                    rs.getString("email"),
+                    rs.getString("full_name"),
+                    rs.getString("phone"),
+                    rs.getString("role"),
+                    status,
+                    "ACTIVE".equals(status),
+                    rs.getTimestamp("last_login"),
+                    rs.getTimestamp("created_at"),
+                    itemCounts.getOrDefault(uid, 0),
+                    runningCounts.getOrDefault(uid, 0),
+                    bidCounts.getOrDefault(uid, 0)
+                ));
+            }
+        } catch (SQLException e) {
+            logger.error("getAdminUserRows() failed", e);
+        }
+        return rows;
+    }
+
+    /**
+     * Helper dùng chung để đếm số lượng theo nhóm.
+     * Các query đếm phụ không nên chặn query chính nếu có lỗi.
+     */
+    private Map<Integer, Integer> loadCountMap(String sql) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                counts.put(rs.getInt("user_id"), rs.getInt("value"));
+            }
+        } catch (SQLException e) {
+            logger.warn("loadCountMap() skipped: {}", e.getMessage());
+        }
+        return counts;
+    }
+
+    /**
+     * Kết quả tổng hợp một dòng user cho Admin panel.
+     * Được trả về bởi {@link #getAdminUserRows()}.
+     */
+    public record AdminUserRow(
+        int userId, String username, String email, String fullName,
+        String phone, String role, String status, boolean isActive,
+        Timestamp lastLogin, Timestamp createdAt,
+        int itemCount, int runningAuctionCount, int bidCount
+    ) {}
 }

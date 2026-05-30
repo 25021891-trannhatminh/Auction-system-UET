@@ -149,6 +149,44 @@ public class AutoBidConfigDAO {
       "DELETE FROM auto_bid_configs WHERE auto_bid_id = ?";
 
   // ============================================================
+  // SQL tách từ ClientHandler - SRP
+  // ============================================================
+
+  private static final String SQL_USER_AUTOBID_LIST = """
+      SELECT cfg.auto_bid_id,
+             cfg.auction_id,
+             a.item_id,
+             COALESCE(i.name, '') AS item_name,
+             COALESCE(i.category, '') AS category_name,
+             a.current_price,
+             cfg.max_bid,
+             cfg.increment,
+             cfg.status,
+             a.end_time,
+             COALESCE(seller.username, '') AS seller_username,
+             COALESCE(imgs.image_urls, '') AS image_urls,
+             GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left
+      FROM auto_bid_configs cfg
+      JOIN auctions a ON a.auction_id = cfg.auction_id
+      LEFT JOIN items i ON i.item_id = a.item_id
+      LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+      LEFT JOIN (
+          SELECT item_id,
+                 GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                              SEPARATOR '\\n') AS image_urls
+          FROM item_images
+          GROUP BY item_id
+      ) imgs ON imgs.item_id = a.item_id
+      WHERE cfg.bidder_id = ?
+      ORDER BY CASE cfg.status
+                   WHEN 'ACTIVE' THEN 0
+                   WHEN 'COMPLETED' THEN 1
+                   ELSE 2
+               END,
+               a.end_time ASC, cfg.updated_at DESC
+      """;
+
+  // ============================================================
   // CREATE Methods
   // ============================================================
 
@@ -682,4 +720,54 @@ public class AutoBidConfigDAO {
         rs.getTimestamp("created_at").toLocalDateTime()
     );
   }
+
+  // ============================================================
+  // Methods tách từ ClientHandler - SRP
+  // ============================================================
+
+  /**
+   * Lấy danh sách auto-bid của một bidder kèm thông tin auction và item.
+   * Tách từ ClientHandler.sendUserAutoBids().
+   *
+   * @param bidderId ID người đặt giá tự động
+   * @return danh sách {@link UserAutoBidRow}
+   */
+  public List<UserAutoBidRow> getUserAutoBidRows(int bidderId) {
+    List<UserAutoBidRow> rows = new ArrayList<>();
+    try (Connection conn = DBConnection.getConnection();
+        PreparedStatement ps = conn.prepareStatement(SQL_USER_AUTOBID_LIST)) {
+      ps.setInt(1, bidderId);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          rows.add(new UserAutoBidRow(
+              rs.getInt("auto_bid_id"),
+              rs.getInt("auction_id"),
+              rs.getInt("item_id"),
+              rs.getString("item_name"),
+              rs.getString("category_name"),
+              rs.getBigDecimal("current_price"),
+              rs.getBigDecimal("max_bid"),
+              rs.getBigDecimal("increment"),
+              rs.getString("status"),
+              rs.getTimestamp("end_time"),
+              rs.getString("seller_username"),
+              rs.getString("image_urls"),
+              rs.getLong("seconds_left")
+          ));
+        }
+      }
+    } catch (SQLException e) {
+      logger.error("getUserAutoBidRows() failed for bidderId={}", bidderId, e);
+    }
+    return rows;
+  }
+
+  /** Dữ liệu một auto-bid row cho User dashboard. */
+  public record UserAutoBidRow(
+      int autoBidId, int auctionId, int itemId, String itemName,
+      String categoryName, java.math.BigDecimal currentPrice,
+      java.math.BigDecimal maxBid, java.math.BigDecimal increment,
+      String status, java.sql.Timestamp endTime,
+      String sellerUsername, String imageUrls, long secondsLeft
+  ) {}
 }

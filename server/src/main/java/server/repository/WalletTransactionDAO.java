@@ -9,7 +9,9 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Data Access Object cho bảng {@code WALLET_TRANSACTIONS}.
@@ -84,6 +86,14 @@ public class WalletTransactionDAO {
         FROM wallet_transactions
         WHERE ref_auction_id = ?
         ORDER BY created_at DESC
+        """;
+
+    /** Tách từ ClientHandler.loadWalletBalanceAfterByTx() - SRP */
+    private static final String SQL_SELECT_FOR_BALANCE_CALC = """
+        SELECT tx_id, type, amount, note
+        FROM wallet_transactions
+        WHERE user_id = ?
+        ORDER BY created_at DESC, tx_id DESC
         """;
 
     // ============================================================
@@ -260,5 +270,58 @@ public class WalletTransactionDAO {
             rs.getString("note"),
             rs.getTimestamp("created_at")
         );
+    }
+
+    // ============================================================
+    // Methods tách từ ClientHandler - SRP
+    // ============================================================
+
+    /**
+     * Xây dựng map (txId → số dư sau giao dịch) dùng cho Transaction history.
+     * Tách từ ClientHandler.loadWalletBalanceAfterByTx().
+     *
+     * @param userId         ID người dùng
+     * @param currentBalance Số dư hiện tại (source of truth, lấy từ WalletDAO)
+     * @return map: txId → số dư sau khi thực hiện giao dịch đó
+     */
+    public Map<Integer, BigDecimal> buildBalanceAfterMap(int userId, BigDecimal currentBalance) {
+        Map<Integer, BigDecimal> balanceAfterByTx = new HashMap<>();
+        BigDecimal runningBalance = currentBalance == null ? BigDecimal.ZERO : currentBalance;
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_SELECT_FOR_BALANCE_CALC)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int txId = rs.getInt("tx_id");
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    BigDecimal delta = computeDisplayDelta(
+                        rs.getString("type"),
+                        amount == null ? BigDecimal.ZERO : amount,
+                        rs.getString("note")
+                    );
+                    balanceAfterByTx.put(txId, runningBalance);
+                    runningBalance = runningBalance.subtract(delta);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("buildBalanceAfterMap() failed for userId={}", userId, e);
+        }
+        return balanceAfterByTx;
+    }
+
+    /**
+     * Tính delta hiển thị của một giao dịch ví (số dư tăng hay giảm bao nhiêu).
+     * Tách từ ClientHandler.walletDisplayDelta().
+     */
+    private static BigDecimal computeDisplayDelta(String type, BigDecimal amount, String note) {
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+        String normalizedNote = note == null ? "" : note.trim().toLowerCase();
+        return switch (normalizedType) {
+            case "DEPOSIT", "RELEASE" -> amount;
+            case "WITHDRAW", "HOLD"   -> amount.negate();
+            case "PAYMENT" -> normalizedNote.startsWith("received") ? amount : amount.negate();
+            case "REFUND"  -> normalizedNote.contains("received")   ? amount : amount.negate();
+            default -> BigDecimal.ZERO;
+        };
     }
 }

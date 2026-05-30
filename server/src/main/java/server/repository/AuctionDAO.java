@@ -95,6 +95,83 @@ public class AuctionDAO {
         "SELECT * FROM auctions WHERE item_id = ?";
 
     // ============================================================
+    // SQL tách từ ClientHandler - SRP
+    // ============================================================
+
+    private static final String SQL_IS_OWNED_BY_SELLER =
+        "SELECT seller_id FROM auctions WHERE auction_id = ?";
+
+    private static final String SQL_ADMIN_AUCTION_LIST = """
+        SELECT a.auction_id, a.item_id, COALESCE(i.name, '') AS item_name,
+               a.seller_id, COALESCE(seller.username, '') AS seller_username,
+               a.current_price, COALESCE(bid_counts.bid_count, 0) AS bid_count,
+               a.status, a.start_time, a.end_time,
+               COALESCE(winner.username, '') AS winner_username
+        FROM auctions a
+        LEFT JOIN items i ON i.item_id = a.item_id
+        LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+        LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
+        LEFT JOIN (
+            SELECT auction_id, COUNT(*) AS bid_count
+            FROM bid_transactions
+            GROUP BY auction_id
+        ) bid_counts ON bid_counts.auction_id = a.auction_id
+        ORDER BY a.created_at DESC, a.auction_id DESC
+        """;
+
+    private static final String SQL_USER_AUCTION_LIST = """
+        SELECT a.auction_id,
+               a.item_id,
+               COALESCE(i.name, '') AS item_name,
+               COALESCE(i.category, '') AS category_name,
+               COALESCE(i.description, '') AS description,
+               a.current_price,
+               a.min_bid_increment,
+               a.reserve_price,
+               COALESCE(bid_counts.bid_count, 0) AS bid_count,
+               CASE
+                   WHEN a.status IN ('OPEN', 'RUNNING') AND NOW() >= a.end_time THEN 'FINISHED'
+                   WHEN a.status = 'OPEN' AND NOW() >= a.start_time THEN 'RUNNING'
+                   ELSE a.status
+               END AS display_status,
+               a.start_time,
+               a.end_time,
+               GREATEST(TIMESTAMPDIFF(SECOND, NOW(), a.end_time), 0) AS seconds_left,
+               COALESCE(seller.username, '') AS seller_username,
+               COALESCE(winner.username, '') AS winner_username,
+               COALESCE(imgs.image_urls, '') AS image_urls,
+               COALESCE(attrs.attribute_lines, '') AS attribute_lines,
+               a.snipe_window_seconds,
+               a.snipe_extension_seconds
+        FROM auctions a
+        LEFT JOIN items i ON i.item_id = a.item_id
+        LEFT JOIN accounts seller ON seller.user_id = a.seller_id
+        LEFT JOIN accounts winner ON winner.user_id = a.current_winner_id
+        LEFT JOIN (
+            SELECT auction_id, COUNT(*) AS bid_count
+            FROM bid_transactions
+            GROUP BY auction_id
+        ) bid_counts ON bid_counts.auction_id = a.auction_id
+        LEFT JOIN (
+            SELECT item_id,
+                   GROUP_CONCAT(url ORDER BY is_primary DESC, sort_order ASC, image_id ASC
+                                SEPARATOR '\\n') AS image_urls
+            FROM item_images
+            GROUP BY item_id
+        ) imgs ON imgs.item_id = a.item_id
+        LEFT JOIN (
+            SELECT item_id,
+                   GROUP_CONCAT(CONCAT(attr_key, ': ', attr_value) ORDER BY attr_id ASC
+                                SEPARATOR '\\n') AS attribute_lines
+            FROM item_attributes
+            GROUP BY item_id
+        ) attrs ON attrs.item_id = a.item_id
+        WHERE a.status IN ('OPEN', 'RUNNING')
+          AND a.end_time > NOW()
+        ORDER BY a.end_time ASC, a.auction_id DESC
+        """;
+
+    // ============================================================
     // Public methods
     // ============================================================
 
@@ -579,4 +656,122 @@ public class AuctionDAO {
             ps.setInt(paramIndex, value);
         }
     }
+
+    // ============================================================
+    // Methods tách từ ClientHandler - SRP
+    // ============================================================
+
+    /**
+     * Kiểm tra một auction có thuộc về seller cho trước không.
+     * Tách từ ClientHandler.isAuctionOwnedByUser().
+     *
+     * @param auctionId ID phiên đấu giá
+     * @param sellerId  ID người bán cần kiểm tra
+     * @return {@code true} nếu auction thuộc về seller đó
+     */
+    public boolean isOwnedBySeller(int auctionId, int sellerId) {
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_IS_OWNED_BY_SELLER)) {
+            ps.setInt(1, auctionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt("seller_id") == sellerId;
+            }
+        } catch (SQLException e) {
+            logger.error("isOwnedBySeller() failed for auctionId={}", auctionId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Lấy danh sách auction đầy đủ cho Admin panel.
+     * Tách từ ClientHandler.sendAdminAuctions().
+     *
+     * @return danh sách {@link AdminAuctionRow}
+     */
+    public List<AdminAuctionRow> getAdminAuctionRows() {
+        List<AdminAuctionRow> rows = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_ADMIN_AUCTION_LIST);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                rows.add(new AdminAuctionRow(
+                    rs.getInt("auction_id"),
+                    rs.getInt("item_id"),
+                    rs.getString("item_name"),
+                    rs.getInt("seller_id"),
+                    rs.getString("seller_username"),
+                    rs.getBigDecimal("current_price"),
+                    rs.getInt("bid_count"),
+                    rs.getString("status"),
+                    rs.getTimestamp("start_time"),
+                    rs.getTimestamp("end_time"),
+                    rs.getString("winner_username")
+                ));
+            }
+        } catch (SQLException e) {
+            logger.error("getAdminAuctionRows() failed", e);
+        }
+        return rows;
+    }
+
+    /**
+     * Lấy danh sách auction đang mở dành cho User dashboard.
+     * Tách từ ClientHandler.sendUserAuctions().
+     *
+     * @return danh sách {@link UserAuctionRow}
+     */
+    public List<UserAuctionRow> getUserAuctionRows() {
+        List<UserAuctionRow> rows = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+            PreparedStatement ps = conn.prepareStatement(SQL_USER_AUCTION_LIST);
+            ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                rows.add(new UserAuctionRow(
+                    rs.getInt("auction_id"),
+                    rs.getInt("item_id"),
+                    rs.getString("item_name"),
+                    rs.getString("category_name"),
+                    rs.getString("description"),
+                    rs.getBigDecimal("current_price"),
+                    rs.getBigDecimal("min_bid_increment"),
+                    rs.getBigDecimal("reserve_price"),
+                    rs.getInt("bid_count"),
+                    rs.getString("display_status"),
+                    rs.getTimestamp("start_time"),
+                    rs.getTimestamp("end_time"),
+                    rs.getLong("seconds_left"),
+                    rs.getString("seller_username"),
+                    rs.getString("winner_username"),
+                    rs.getString("image_urls"),
+                    rs.getString("attribute_lines"),
+                    rs.getInt("snipe_window_seconds"),
+                    rs.getInt("snipe_extension_seconds")
+                ));
+            }
+        } catch (SQLException e) {
+            logger.error("getUserAuctionRows() failed", e);
+        }
+        return rows;
+    }
+
+    /** Dữ liệu một auction cho Admin panel. */
+    public record AdminAuctionRow(
+        int auctionId, int itemId, String itemName,
+        int sellerId, String sellerUsername,
+        java.math.BigDecimal currentPrice, int bidCount,
+        String status, java.sql.Timestamp startTime, java.sql.Timestamp endTime,
+        String winnerUsername
+    ) {}
+
+    /** Dữ liệu một auction đang mở cho User dashboard. */
+    public record UserAuctionRow(
+        int auctionId, int itemId, String itemName, String categoryName,
+        String description, java.math.BigDecimal currentPrice,
+        java.math.BigDecimal minBidIncrement, java.math.BigDecimal reservePrice,
+        int bidCount, String displayStatus,
+        java.sql.Timestamp startTime, java.sql.Timestamp endTime, long secondsLeft,
+        String sellerUsername, String winnerUsername,
+        String imageUrls, String attributeLines,
+        int snipeWindowSeconds, int snipeExtensionSeconds
+    ) {}
 }
