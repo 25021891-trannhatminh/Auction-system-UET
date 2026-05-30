@@ -33,6 +33,14 @@ public final class ProtocolConstants {
     public static final String LEAVE_AUCTION_SUCCESS =  "LEAVE_AUCTION_SUCCESS";
     public static final String LEAVE_AUCTION_FAIL = "LEAVE_AUCTION_FAIL";
 
+    // ========== ITEM ==========
+    public static final String CREATE_ITEM =  "CREATE_ITEM";
+
+    // ========== BID ==========
+    public static final String BID = "BID";
+    public static final String BID_SUCCESS = "BID_SUCCESS";
+    public static final String BID_FAIL = "BID_FAIL";
+
     // --- Reason codes cho BID_FAIL (client dùng để hiển thị message đúng) ---
     public static final String BID_REASON_NOT_LOGGED_IN      = "NOT_LOGGED_IN";
     public static final String BID_REASON_INVALID_FORMAT     = "INVALID_FORMAT";
@@ -47,11 +55,6 @@ public final class ProtocolConstants {
     public static final String BID_REASON_DB_FAILED            = "DB_PERSIST_FAILED";
     public static final String BID_REASON_SYSTEM_ERROR         = "SYSTEM_ERROR";
 
-    // ========== BID ==========
-    public static final String BID = "BID";
-    public static final String BID_SUCCESS = "BID_SUCCESS";
-    public static final String BID_FAIL = "BID_FAIL";
-    
     // ========== LIST ==========
     public static final String LIST = "LIST";
     public static final String LIST_BEGIN = "LIST_BEGIN";
@@ -69,9 +72,28 @@ public final class ProtocolConstants {
     public static final String ADMIN_BAN_SUCCESS = "ADMIN_BAN_SUCCESS";
     public static final String ADMIN_BAN_FAIL = "ADMIN_BAN_FAIL";
 
+    public static final String ADMIN_LIST_USERS = "ADMIN_LIST_USERS";
+    public static final String ADMIN_LIST_ITEMS = "ADMIN_LIST_ITEMS";
+    public static final String ADMIN_LIST_AUCTIONS = "ADMIN_LIST_AUCTIONS";
+
+    public static final String ADMIN_CREATE_AUCTION = "ADMIN_CREATE_AUCTION";
+    public static final String ADMIN_FORCE_CLOSE = "ADMIN_FORCE_CLOSE";
+    public static final String ADMIN_APPROVE_ITEM = "ADMIN_APPROVE_ITEM";
+    public static final String ADMIN_REJECT_ITEM = "ADMIN_REJECT_ITEM";
+
     public static final String ADMIN_UNBAN_USER = "ADMIN_UNBAN_USER";
     public static final String ADMIN_UNBAN_SUCCESS = "ADMIN_UNBAN_SUCCESS";
     public static final String ADMIN_UNBAN_FAIL = "ADMIN_UNBAN_FAIL";
+
+    // ========== USER ==========
+    public static final String USER_LIST_AUCTIONS = "USER_LIST_AUCTIONS";
+    public static final String USER_LIST_BIDS = "USER_LIST_BIDS";
+    public static final String USER_LIST_AUTOBIDS = "USER_LIST_AUTOBIDS";
+
+    public static final String USER_LIST_TRANSACTIONS = "USER_LIST_TRANSACTIONS";
+    public static final String USER_LIST_NOTIFICATIONS = "USER_LIST_NOTIFICATIONS";
+    public static final String USER_MARK_NOTIFICATIONS_READ = "USER_MARK_NOTIFICATIONS_READ";
+
     
     // ========== BROADCAST ==========
     public static final String NEW_BID = "NEW_BID";

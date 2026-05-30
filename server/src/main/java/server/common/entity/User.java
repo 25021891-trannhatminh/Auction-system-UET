@@ -8,11 +8,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
-/*
-    User: Bidder, Seller nói chung
-        DB: listedItemIds ánh xạ sang items.seller_id.
-        DAO sẽ lazy-load danh sách item khi cần.
-        UI: hiển thị trên profile trang Seller.
+/**
+ * Tài khoản người dùng thông thường — đóng vai trò Bidder, Seller.
+ *
+ * <p>DB: {@code listedItemIds} ánh xạ sang cột {@code items.seller_id}.
+ * DAO sẽ lazy-load danh sách item khi cần.
+ * UI: hiển thị trên trang profile của Seller.</p>
  */
 public class User extends Account {
     private BigDecimal balance;
@@ -21,7 +22,7 @@ public class User extends Account {
     private final List<String> itemIDs; // FK sang items.item_id
 
     public User(String username, String email, String passwordHash,
-                   String fullName, String phone) {
+                String fullName, String phone) {
         super(username, email, passwordHash, fullName, phone, AccountRole.USER);
         this.rating        = 0.0;
         this.itemIDs = new ArrayList<>();
@@ -36,7 +37,8 @@ public class User extends Account {
         this.balance    = other.balance;
         this.autoBidMap = new HashMap<>(other.autoBidMap);
     }
-    /* Constructor dùng khi load từ DB */
+
+    /** Constructor dùng khi load từ DB (không có balance). */
     public User(int id, LocalDateTime createdAt,
                 String username, String email, String passwordHash,
                 String fullName, String phone, AccountRole role,
@@ -48,10 +50,12 @@ public class User extends Account {
         this.balance    = BigDecimal.ZERO;
         this.autoBidMap = new HashMap<>();
     }
+
+    /** Constructor dùng khi load từ DB (có đủ rating và balance). */
     public User(int id, LocalDateTime createdAt,
-                   String username, String email, String passwordHash,
-                   String fullName, String phone, AccountRole role,
-                   UserStatus status, LocalDateTime lastLogin,double rating, BigDecimal balance) {
+                String username, String email, String passwordHash,
+                String fullName, String phone, AccountRole role,
+                UserStatus status, LocalDateTime lastLogin,double rating, BigDecimal balance) {
         super(id, createdAt, username, email, passwordHash, fullName, phone,
             role, status, lastLogin);
         this.rating        = rating;
@@ -60,13 +64,15 @@ public class User extends Account {
         this.autoBidMap = new HashMap<>();
     }
 
+    // ── Item management ───────────────────────────────────────────────────────
 
-    // == ITEM ==
     public void addItem(String itemId)    { itemIDs.add(itemId); }
     public void removeItem(String itemId) { itemIDs.remove(itemId); }
 
     public double          getRating()       { return rating; }
-    public List<String>    getItemIds(){ return Collections.unmodifiableList(itemIDs); }    // Return 1 tham chiếu (view) đến List (nhưng đã Override các phương thức để không thể sửa đổi)
+
+    /** Trả về view bất biến của danh sách item ID — caller không thể sửa trực tiếp. */
+    public List<String>    getItemIds(){ return Collections.unmodifiableList(itemIDs); }
 
     public void updateRating(double newRating) {
         if (newRating < 0 || newRating > 5)
@@ -74,19 +80,28 @@ public class User extends Account {
         this.rating = newRating;
     }
 
+    // ── Balance management ────────────────────────────────────────────────────
 
-    // == BID, BALANCE ==
     public BigDecimal getBalance() { return balance; }
 
-    // Nạp tiền
+    /**
+     * Nạp tiền vào ví người dùng.
+     *
+     * @param amount số tiền nạp, phải dương
+     * @throws IllegalArgumentException nếu {@code amount <= 0}
+     */
     public void deposit(double amount) {
         if (amount <= 0) throw new IllegalArgumentException("Deposit amount must be positive");
         this.balance = balance.add(BigDecimal.valueOf(amount));
     }
 
-    // Thanh toán
-    //Ném InsufficientBalanceException nếu không đủ số dư.
-
+    /**
+     * Trừ tiền từ ví người dùng (thanh toán).
+     *
+     * @param amount số tiền cần trừ, phải dương
+     * @throws IllegalArgumentException      nếu {@code amount <= 0}
+     * @throws InsufficientBalanceException  nếu số dư không đủ
+     */
     public void debit(double amount) {
         if (amount <= 0) throw new IllegalArgumentException("Debit amount must be positive");
         if (this.balance.compareTo(BigDecimal.valueOf(amount)) < 0)
@@ -94,22 +109,25 @@ public class User extends Account {
         this.balance = balance.subtract(BigDecimal.valueOf(amount));
     }
 
-    /* Kiểm tra nhanh mà không thay đổi state */
-    public boolean canAfford(double amount) {
-        return this.balance.compareTo(BigDecimal.valueOf(amount)) >= 0;
-    }
 
-    // __ Auto-Bid __
+    // ── Auto-Bid management ───────────────────────────────────────────────────
 
-    /*
-        Add hoặc update AutoBidConfig cho 1 Auction.
-        Nếu đã có config cũ cho auctionId này → ghi đè .
+    /**
+     * Thêm hoặc ghi đè {@link AutoBidConfig} cho một phiên đấu giá.
+     *
+     * <p>Nếu đã có config cũ cho {@code auctionId} → ghi đè bằng config mới.</p>
+     *
+     * @param config config auto-bid mới cần lưu
      */
     public void setAutoBid(AutoBidConfig config) {
         autoBidMap.put(config.getAuctionId(), config);
     }
 
-    /* Hủy auto-bid cho một phiên cụ thể */
+    /**
+     * Hủy auto-bid cho một phiên cụ thể và xóa khỏi map.
+     *
+     * @param auctionId ID phiên cần hủy auto-bid
+     */
     public void cancelAutoBid(int auctionId) {
         AutoBidConfig config = autoBidMap.get(auctionId);
         if (config != null) {
@@ -118,7 +136,7 @@ public class User extends Account {
         }
     }
 
-    /* Lấy config auto-bid đang active trong 1 auction */
+    /** Lấy config auto-bid đang active trong một phiên, hoặc {@code null} nếu không có. */
     public AutoBidConfig getAutoBidConfig(int auctionId) {
         return autoBidMap.getOrDefault(auctionId, null);
     }
@@ -126,5 +144,4 @@ public class User extends Account {
     public boolean hasAutoBid(int auctionId) {
         return autoBidMap.containsKey(auctionId);
     }
-
 }

@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -26,20 +27,11 @@ import server.repository.AccountDAO;
 import server.repository.AuctionDAO;
 import server.repository.AutoBidConfigDAO;
 import server.repository.BidTransactionDAO;
-import server.repository.ItemDAO;
 import server.repository.PaymentDAO;
-import server.repository.WalletDAO;
-import server.repository.WalletTransactionDAO;
 import server.common.model.BidHistoryDTO;
-import server.service.AdminService;
-import server.service.AuctionService;
-import server.service.ItemService;
-import server.service.NotificationService;
-import server.service.PaymentService;
-import server.service.ServerAuthService;
+import server.service.*;
 
 public class ClientHandler implements Runnable{
-//    private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int LOG_MESSAGE_LIMIT = 500;
@@ -57,21 +49,15 @@ public class ClientHandler implements Runnable{
     private String username = "Guest"; // Tên hiển thị mặc định
     private int userId = ProtocolConstants.NOTIFICATION_GLOBAL_USER_ID ;   // Default UserID
 
-    // DAOs
-    private final AccountDAO accountDAO          = new AccountDAO();
-    private final BidTransactionDAO bidTransactionDAO = new BidTransactionDAO();
-    private final AuctionDAO auctionDAO          = new AuctionDAO();
-    private final AutoBidConfigDAO autoBidConfigDAO   = new AutoBidConfigDAO();
-    private final WalletDAO walletDAO            = new WalletDAO();
-    private final WalletTransactionDAO walletTransactionDAO = new WalletTransactionDAO();
-    private final PaymentDAO paymentDAO          = new PaymentDAO();
-    private final NotificationService notificationService  = new NotificationService();
 
     // Services
     private final ServerAuthService authService;
     private final ItemService itemService;
     private final AuctionService auctionService;
     private final PaymentService paymentService;
+    private final AdminService adminService;
+    private final NotificationService notificationService  = new NotificationService();
+    private final BidTransactionService bidTransactionService;
     private final ItemCommandHandler itemCommandHandler;
     private final AuctionHandler auctionHandler;
     private final AuctionVisualisationHandler auctionVisualisationHandler;
@@ -86,6 +72,8 @@ public class ClientHandler implements Runnable{
         this.authService    = new ServerAuthService();
         this.itemService    = new ItemService();
         this.paymentService = new PaymentService();
+        this.adminService = new AdminService(auctionService);
+        this.bidTransactionService = new BidTransactionService();
         this.itemCommandHandler = new ItemCommandHandler(this, itemService, auctionService);
         this.bidHandler = new BidHandler(auctionService);
         this.autoBidHandler = new AutoBidHandler(auctionService);
@@ -187,6 +175,7 @@ public class ClientHandler implements Runnable{
                         String password = request[2];
                         User loginUser = authService.getUser(identifier, password); // Lấy đối tượng User đầy đủ
                         if (loginUser != null) {
+                            loginUser.recordLogin();
                             auctionService.registerOrGetUser(loginUser); // Đảm bảo user có trong AuctionManager
                         } else {
                             System.err.println("Không thể lấy thông tin User từ DB sau khi login thành công, userId=" + loggedInUserId);
@@ -202,11 +191,11 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.JOIN_AUCTION:
-                // 1. Thực hiện logic join phòng ban đầu của bạn
+                // 1. Thực hiện logic join phòng
                 String joinResponse = auctionHandler.handleJoin(request, this.userId);
                 send(joinResponse);
 
-                // 2. KÍCH HOẠT HÀM BIỂU ĐỒ TẠI ĐÂY
+                // 2. KÍCH HOẠT BIỂU ĐỒ TẠI ĐÂY
                 // Nếu join phòng thành công (Chuỗi trả về bắt đầu bằng JOIN_SUCCESS)
                 if (joinResponse != null && joinResponse.startsWith("AUCTION_SNAPSHOT")) {
                     try {
@@ -239,16 +228,16 @@ public class ClientHandler implements Runnable{
                 send(leaveResult);
                 break;
 
-            case "CONFIRM_PAYMENT": {
+            case ProtocolConstants.CONFIRM_PAYMENT: {
                 new PaymentCommandHandler(this, paymentService).handleConfirmPayment(request);
                 break;
             }
 
-            case "REFUND_PAYMENT": {
+            case ProtocolConstants.REFUND_PAYMENT: {
                 new PaymentCommandHandler(this, paymentService).handleRefundPayment(request);
                 break;
             }
-            case "CREATE_ITEM":
+            case ProtocolConstants.CREATE_ITEM:
                 itemCommandHandler.handleCreateItem(msg.length() > "CREATE_ITEM".length()
                     ? msg.substring("CREATE_ITEM".length()).trim()
                     : "", this.userId);
@@ -268,37 +257,37 @@ public class ClientHandler implements Runnable{
                     : "", this.userId);
                 break;
 
-            case "ADMIN_LIST_USERS":
-                if (!isActiveAdmin(this.userId)) {
+            case ProtocolConstants.ADMIN_LIST_USERS:
+                if (!adminService.isActiveAdmin(this.userId)) {
                     send("ADMIN_DATA_ERROR NOT_ADMIN");
                     break;
                 }
                 sendAdminUsers();
                 break;
 
-            case "ADMIN_LIST_ITEMS":
-                if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break; }
+            case ProtocolConstants.ADMIN_LIST_ITEMS:
+                if (!adminService.isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break; }
                 itemCommandHandler.sendAdminItems();
                 break;
 
-            case "ADMIN_LIST_AUCTIONS":
-                if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break;}
+            case ProtocolConstants.ADMIN_LIST_AUCTIONS:
+                if (!adminService.isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break;}
                 sendAdminAuctions();
                 break;
 
-            case "USER_LIST_AUCTIONS":
+            case ProtocolConstants.USER_LIST_AUCTIONS:
                 sendUserAuctions();
                 break;
 
-            case "USER_LIST_BIDS":
+            case ProtocolConstants.USER_LIST_BIDS:
                 sendUserBids(request);
                 break;
 
-            case "USER_LIST_AUTOBIDS":
+            case ProtocolConstants.USER_LIST_AUTOBIDS:
                 sendUserAutoBids(request);
                 break;
 
-            case "USER_LIST_TRANSACTIONS":
+            case ProtocolConstants.USER_LIST_TRANSACTIONS:
                 sendUserTransactions(request);
                 break;
 
@@ -314,16 +303,16 @@ public class ClientHandler implements Runnable{
                 send(auctionVisualisationHandler.handle(request, this.userId));
                 break;
 
-            case "USER_LIST_NOTIFICATIONS":
+            case ProtocolConstants.USER_LIST_NOTIFICATIONS:
                 sendUserNotifications(request);
                 break;
 
-            case "USER_MARK_NOTIFICATIONS_READ":
+            case ProtocolConstants.USER_MARK_NOTIFICATIONS_READ:
                 markUserNotificationsRead(request);
                 break;
 
-            case "ADMIN_CREATE_AUCTION":
-                if (!isActiveAdmin(this.userId)) {
+            case ProtocolConstants.ADMIN_CREATE_AUCTION:
+                if (!adminService.isActiveAdmin(this.userId)) {
                     send("ADMIN_CREATE_AUCTION_FAIL NOT_ADMIN");
                     break;
                 }
@@ -333,7 +322,7 @@ public class ClientHandler implements Runnable{
 
 
             case "LIST":
-                List<AuctionDTO> auctions = auctionDAO.getByStatus(AuctionStatus.RUNNING);
+                List<AuctionDTO> auctions = auctionService.getListAuctionByStatus(AuctionStatus.RUNNING);
                 for (AuctionDTO a : auctions){
                     send("ITEM "+ a.getAuctionId()+ " "+ a.getCurrentPrice());
                 }
@@ -378,28 +367,28 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.ADMIN_UNBAN_USER:
-                if (!isActiveAdmin(this.userId)) {
+                if (!adminService.isActiveAdmin(this.userId)) {
                     send("ADMIN_UNBAN_FAIL NOT_ADMIN");
                     break;
                 }
                 send(adminHandler.handleUnbanUser(request, this.userId));
                 break;
 
-            case "ADMIN_FORCE_CLOSE":
-                if (!isActiveAdmin(this.userId)) {
+            case ProtocolConstants.ADMIN_FORCE_CLOSE:
+                if (!adminService.isActiveAdmin(this.userId)) {
                     send("ADMIN_CLOSE_FAIL NOT_ADMIN");
                     break;
                 }
                 send(adminHandler.handleForceClose(request, this.userId));
                 break;
 
-            case "ADMIN_APPROVE_ITEM":
-                if (!isActiveAdmin(this.userId)) { send("ADMIN_APPROVE_FAIL NOT_ADMIN"); break; }
+            case ProtocolConstants.ADMIN_APPROVE_ITEM:
+                if (!adminService.isActiveAdmin(this.userId)) { send("ADMIN_APPROVE_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.approveItem(request.length > 1 ? request[1] : "", this.userId);
                 break;
 
-            case "ADMIN_REJECT_ITEM":
-                if (!isActiveAdmin(this.userId)) { send("ADMIN_REJECT_FAIL NOT_ADMIN"); break; }
+            case ProtocolConstants.ADMIN_REJECT_ITEM:
+                if (!adminService.isActiveAdmin(this.userId)) { send("ADMIN_REJECT_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.rejectItem(
                         request.length > 1 ? request[1] : "",
                         request.length > 2 ? String.join(" ", Arrays.copyOfRange(request, 2, request.length)) : "",
@@ -412,10 +401,7 @@ public class ClientHandler implements Runnable{
         }
     }
 
-    /** Ủy quyền kiểm tra admin cho AccountDAO (SRP). */
-    private boolean isActiveAdmin(int userId) {
-        return accountDAO.isActiveAdmin(userId);
-    }
+
 
 
     private int parseIntOrDefault(String value, int fallbackValue) {
@@ -430,7 +416,7 @@ public class ClientHandler implements Runnable{
     private void sendAdminUsers() {
         send("ADMIN_USERS_BEGIN");
         try {
-            List<AccountDAO.AdminUserRow> rows = accountDAO.getAdminUserRows();
+            List<AccountDAO.AdminUserRow> rows = adminService.getUserInfoRows();
             for (AccountDAO.AdminUserRow row : rows) {
                 send("ADMIN_USER " + fields(
                     row.userId(),
@@ -459,7 +445,7 @@ public class ClientHandler implements Runnable{
     private void sendAdminAuctions() {
         send("ADMIN_AUCTIONS_BEGIN");
         try {
-            List<AuctionDAO.AdminAuctionRow> rows = auctionDAO.getAdminAuctionRows();
+            List<AuctionDAO.AdminAuctionRow> rows = auctionService.getAuctionRowsForAdmin();
             for (AuctionDAO.AdminAuctionRow row : rows) {
                 send("ADMIN_AUCTION " + fields(
                     String.valueOf(row.auctionId()),
@@ -486,7 +472,7 @@ public class ClientHandler implements Runnable{
     private void sendUserAuctions() {
         send("USER_AUCTIONS_BEGIN");
         try {
-            List<AuctionDAO.UserAuctionRow> rows = auctionDAO.getUserAuctionRows();
+            List<AuctionDAO.UserAuctionRow> rows = auctionService.getAuctionRowsForUser();
             for (AuctionDAO.UserAuctionRow row : rows) {
                 send("USER_AUCTION " + fields(
                     row.auctionId(),
@@ -563,7 +549,7 @@ public class ClientHandler implements Runnable{
             return;
         }
         try {
-            List<AutoBidConfigDAO.UserAutoBidRow> rows = autoBidConfigDAO.getUserAutoBidRows(targetUserId);
+            List<AutoBidConfigDAO.UserAutoBidRow> rows = auctionService.getAutoBidById(targetUserId);
             for (AutoBidConfigDAO.UserAutoBidRow row : rows) {
                 send("USER_AUTOBID " + fields(
                     row.autoBidId(),
@@ -634,14 +620,14 @@ public class ClientHandler implements Runnable{
             return;
         }
         try {
-            BigDecimal currentWalletBalance = walletDAO.getBalanceByUserId(targetUserId);
+            BigDecimal currentWalletBalance = paymentService.getUserBalance(targetUserId);
             send("WALLET_UPDATE|" + targetUserId + "|" + currentWalletBalance.toPlainString());
 
             Map<Integer, BigDecimal> balanceAfterByTx =
-                walletTransactionDAO.buildBalanceAfterMap(targetUserId, currentWalletBalance);
+                paymentService.balanceAfterPay(targetUserId,currentWalletBalance);
 
             List<PaymentDAO.UserTransactionRow> rows =
-                paymentDAO.getUserTransactionRows(targetUserId);
+                paymentService.getPaymentList(targetUserId);
 
             for (PaymentDAO.UserTransactionRow row : rows) {
                 BigDecimal balanceAfter = balanceAfterByTx.get(row.walletTxId());
@@ -671,7 +657,7 @@ public class ClientHandler implements Runnable{
     }
 
     public String resolvePaymentCompletionFailure(int auctionId) {
-        PaymentDAO.PaymentWalletInfo info = paymentDAO.getPaymentWalletInfo(auctionId);
+        PaymentDAO.PaymentWalletInfo info = paymentService.getPaymentRecord(auctionId);
         if (info == null) {
             return "PAYMENT_NOT_FOUND";
         }
@@ -702,7 +688,7 @@ public class ClientHandler implements Runnable{
             return PaymentAuthorization.reject("NOT_LOGGED_IN");
         }
 
-        PaymentDAO.PaymentBuyerStatus info = paymentDAO.getPaymentBuyerStatus(auctionId);
+        PaymentDAO.PaymentBuyerStatus info = paymentService.getBuyerStatus(auctionId);
         if (info == null) {
             return PaymentAuthorization.reject("PAYMENT_NOT_FOUND");
         }
@@ -780,7 +766,7 @@ public class ClientHandler implements Runnable{
             send("SELLER_AUCTION_BIDS_END " + auctionId);
             return;
         }
-        if (!isAuctionOwnedByUser(auctionId, this.userId)) {
+        if (!auctionService.isAuctionOwnedByUser(auctionId, this.userId)) {
             send("SELLER_AUCTION_BIDS_ERROR " + fields(auctionId, "NOT_OWNER"));
             send("SELLER_AUCTION_BIDS_END " + auctionId);
             return;
@@ -788,7 +774,7 @@ public class ClientHandler implements Runnable{
 
         try {
             List<BidTransactionDAO.AuctionBidHistoryRow> rows =
-                bidTransactionDAO.getAuctionBidHistoryRows(auctionId);
+                bidTransactionService.getBidHistoryRowsFromDB(auctionId);
             for (BidTransactionDAO.AuctionBidHistoryRow row : rows) {
                 send("SELLER_AUCTION_BID " + fields(
                     auctionId,
@@ -808,12 +794,7 @@ public class ClientHandler implements Runnable{
         send("SELLER_AUCTION_BIDS_END " + auctionId);
     }
 
-    /**
-     * Checks that the authenticated seller owns the requested auction.
-     */
-    private boolean isAuctionOwnedByUser(int auctionId, int sellerId) {
-        return auctionDAO.isOwnedBySeller(auctionId, sellerId);
-    }
+
 
     /**
      * Sends the latest bid row for each auction the current user has joined.
@@ -833,7 +814,7 @@ public class ClientHandler implements Runnable{
 
         try {
             List<BidTransactionDAO.UserBidRow> bidRows =
-                bidTransactionDAO.getLatestBidsByBidder(targetUserId);
+                bidTransactionService.getLastestBidById(targetUserId);
             for (BidTransactionDAO.UserBidRow row : bidRows) {
                 send("USER_BID " + fields(
                     row.getBidId(),
@@ -908,32 +889,6 @@ public class ClientHandler implements Runnable{
         }
     }
 
-    // ==================== REALTIME BID EVENTS ====================
-    // Implement RealTimeObserver — nhận event từ Auction sau khi DB commit xong.
-    // Chỉ push command realtime về client qua socket, không xử lý business logic.
-//    @Override
-//    public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-//        // Command realtime để UI cập nhật giá, lịch sử bid
-//        send(String.format("BID_PLACED|%d|%d|%s|%s",
-//            auctionId, bidderId, itemName, amount.toPlainString()));
-//    }
-//
-//    @Override
-//    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-//        send(String.format("TIME_EXTENDED|%d|%s|%d",
-//            auctionId, itemName, addedSeconds));
-//    }
-//
-//    @Override
-//    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
-//        send(String.format("AUCTION_ENDED|%d|%d|%s|%s",
-//            auctionId, winnerId, itemName, finalPrice.toPlainString()));
-//    }
-//
-//    @Override
-//    public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-//
-//    }
     /**
      * Tự động gửi dữ liệu lịch sử giá xuống cho Client vẽ biểu đồ.
      * Sử dụng trực tiếp tài nguyên nội bộ out và bidTransactionDAO của lớp.
@@ -941,8 +896,8 @@ public class ClientHandler implements Runnable{
     public void sendChartHistory(int auctionId) {
         try {
             out.println(ResponseBuilder.historyStart());
-            List<BidHistoryDTO> historyList = bidTransactionDAO.getBidHistory(auctionId);
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
+            List<BidHistoryDTO> historyList = bidTransactionService.getBidHistoryFromDB(auctionId);
+            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
             if (historyList != null) {
                 for (BidHistoryDTO bid : historyList) {
                     String formattedTime = sdf.format(bid.getBidTime());

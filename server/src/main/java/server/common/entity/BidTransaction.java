@@ -1,29 +1,32 @@
 package server.common.entity;
 
-
 import server.common.enums.BidStatus;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
-/*
-      Ghi lại giao dịch đặt BID trong 1 Auction. Chỉ được tạo khi amount > current_price
-
-      Không được sửa chỉ status có thể thay đổi (WINNING → OUTBID khi có bid cao hơn).
-
-      DB:
-            bid_id      → id
-            auction_id  → auctionId
-            bidder_id   → bidderId
-            amount      → amount
-            bid_time    → bidTime
-            is_auto_bid → isAutoBid
-            status      → status
-
-       UI:
-          Lịch sử bid hiển thị danh sách BidTransaction (sort by bidTime DESC)
-          Biểu đồ giá LineChart dùng (bidTime, amount) của từng BidTransaction
+/**
+ * Ghi lại một giao dịch đặt giá (bid) trong một phiên đấu giá.
+ *
+ * <p>Chỉ được tạo khi {@code amount > currentPrice}.
+ * Sau khi tạo, các trường đều bất biến — chỉ {@link #status} có thể thay đổi
+ * (WINNING → OUTBID → WON/LOST) theo vòng đời của phiên đấu giá.</p>
+ *
+ * <p>DB:
+ * <ul>
+ *   <li>{@code bid_id}      → {@code id}</li>
+ *   <li>{@code auction_id}  → {@code auctionId}</li>
+ *   <li>{@code bidder_id}   → {@code bidderId}</li>
+ *   <li>{@code amount}      → {@code amount}</li>
+ *   <li>{@code bid_time}    → {@code bidTime}</li>
+ *   <li>{@code is_auto_bid} → {@code isAutoBid}</li>
+ *   <li>{@code status}      → {@code status}</li>
+ * </ul></p>
+ *
+ * <p>UI:
+ * <ul>
+ *   <li>Lịch sử bid: hiển thị danh sách {@code BidTransaction} (sort by {@code bidTime DESC}).</li>
+ *   <li>Biểu đồ giá LineChart: dùng cặp ({@code bidTime}, {@code amount}) của từng transaction.</li>
+ * </ul></p>
  */
 public class BidTransaction {
 
@@ -48,7 +51,7 @@ public class BidTransaction {
         this.status      = BidStatus.WINNING;
     }
 
-    /** Load từ DB */
+    /** Constructor load từ DB — toàn bộ trường đã được persist. */
     public BidTransaction(int id, int auctionId, int bidderId, String bidderName,
                           BigDecimal amount, LocalDateTime bidTime,
                           boolean isAutoBid, BidStatus status) {
@@ -62,25 +65,26 @@ public class BidTransaction {
         this.status      = status;
     }
 
-    // ── Status transitions ──
+    // ── Status transitions ────────────────────────────────────────────────────
 
-    /* Gọi khi có bid mới vượt qua bid này */
+    /** Gọi khi có bid mới vượt qua bid này — chuyển WINNING → OUTBID. */
     public void markOutbid() { this.status = BidStatus.OUTBID; }
 
-    /* Gọi khi phiên kết thúc và bid này đang dẫn đầu */
+    /** Gọi khi phiên kết thúc và bid này đang dẫn đầu — chuyển WINNING → WON. */
     public void markWon()    { this.status = BidStatus.WON; }
 
-    /* Gọi khi phiên kết thúc và bid này không phải cao nhất */
+    /** Gọi khi phiên kết thúc và bid này không phải cao nhất — chuyển thành LOST. */
     public void markLost()   { this.status = BidStatus.LOST; }
 
     /**
      * Hoàn tác OUTBID → WINNING.
-     * CHỈ gọi bởi Auction.rollbackLastBid() khi DB commit thất bại
-     * và bid này cần được khôi phục làm leader.
+     *
+     * <p><b>CHỈ</b> gọi bởi {@code Auction.rollbackLastBid()} khi DB commit thất bại
+     * và bid này cần được khôi phục làm leader.</p>
      */
     public void restoreWinning() { this.status = BidStatus.WINNING; }
 
-    // ── Getters ──
+    // ── Getters ───────────────────────────────────────────────────────────────
 
     public int        getId()          { return id; }
     public int        getAuctionId()   { return auctionId; }

@@ -1,20 +1,18 @@
 package server.common.entity;
 
-
 import org.mindrot.jbcrypt.BCrypt;
 import server.common.enums.AccountRole;
 import server.common.enums.UserStatus;
-import server.repository.AccountDAO;
 
 import java.time.LocalDateTime;
 
-/*
-    Account:
-    Mọi Account đều phải là User hoặc Admin.
-    password dưới dạng hash (bcrypt) — KHÔNG lưu plaintext.
-
-    UI: AccountRole được map sang cột role (ENUM) trong DB.
-
+/**
+ * Lớp trừu tượng đại diện cho một tài khoản trong hệ thống.
+ *
+ * <p>Mọi {@code Account} đều phải là {@link User} hoặc {@link Admin}.
+ * Mật khẩu được lưu dưới dạng bcrypt hash — KHÔNG lưu plaintext.</p>
+ *
+ * <p>DB: {@code AccountRole} được map sang cột {@code role (ENUM)} trong bảng {@code accounts}.</p>
  */
 public abstract class Account extends Entity {
 
@@ -51,11 +49,12 @@ public abstract class Account extends Entity {
     this.status     = other.status;
     this.lastLogin    = other.lastLogin;
   }
-  /* Constructor dùng khi load từ DB */
+
+  /** Constructor dùng khi load từ DB — toàn bộ trường đã được persist. */
   protected Account(int id, LocalDateTime createdAt,
-                 String username, String email, String passwordHash,
-                 String fullName, String phone, AccountRole role,
-                 UserStatus status, LocalDateTime lastLogin) {
+                    String username, String email, String passwordHash,
+                    String fullName, String phone, AccountRole role,
+                    UserStatus status, LocalDateTime lastLogin) {
     super(id, createdAt);
     this.username     = username;
     this.email        = email;
@@ -67,15 +66,24 @@ public abstract class Account extends Entity {
     this.lastLogin    = lastLogin;
   }
 
+  // ── Core logic ───────────────────────────────────────────────────────────
 
-  /*
-       Kiểm tra mật khẩu người dùng nhập có khớp hash không.
-       Tầng thực tế sẽ dùng BCrypt.checkpw(rawPassword, passwordHash).
+  /**
+   * Kiểm tra mật khẩu người dùng nhập có khớp hash không.
+   *
+   * <p>Sử dụng {@link BCrypt#checkpw(String, String)} để so sánh an toàn.
+   * KHÔNG so sánh plaintext trực tiếp.</p>
+   *
+   * @param plainPassword mật khẩu người dùng nhập vào (plaintext)
+   * @return {@code true} nếu khớp hash, {@code false} nếu không
    */
   public boolean verifyPassword(String plainPassword) {
     return BCrypt.checkpw(plainPassword, passwordHash);
   }
 
+  /**
+   * Ghi lại thời điểm đăng nhập gần nhất.
+   */
   public void recordLogin() {
     this.lastLogin = LocalDateTime.now();
   }
@@ -96,7 +104,7 @@ public abstract class Account extends Entity {
   public void setPhone(String phone)      { this.phone = phone; }
   public void setEmail(String email)      { this.email = email; }
   public void setPasswordHash(String hash)   { this.passwordHash = hash; }
-
+  public void setStatus (UserStatus status) {this.status = status;}
 
   @Override
   public void printInfo() {

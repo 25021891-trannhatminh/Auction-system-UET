@@ -7,6 +7,8 @@ import server.common.entity.Item;
 import server.common.entity.User;
 import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.AutoBidConfigException;
+import server.common.entity.exception.BidderException;
+import server.common.enums.UserStatus;
 import server.service.listeners.RealTimeObserver;
 import server.common.enums.AuctionStatus;
 import java.math.BigDecimal;
@@ -324,6 +326,9 @@ public class AuctionManager {
 
         if (!auction.isRunning()) {
             throw new AuctionStateException(auction.getId(),auction.getStatus());
+        }
+        if (bidder.getStatus() != UserStatus.ACTIVE){
+            throw new BidderException(bidder.getId(), bidder.getStatus());
         }
         BigDecimal currentPrice = auction.getCurrentPrice();
         BigDecimal newMaxBid = config.getMaxBid();
