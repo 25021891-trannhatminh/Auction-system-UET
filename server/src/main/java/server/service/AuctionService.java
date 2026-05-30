@@ -12,11 +12,13 @@ import server.common.entity.User;
 import server.common.entity.AutoBidConfig;
 import server.common.entity.BidTransaction;
 import server.common.entity.exception.AuctionStateException;
+import server.common.entity.exception.BidderException;
 import server.common.entity.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 import server.common.enums.ItemStatus;
+import server.common.enums.UserStatus;
 import server.common.model.AuctionDTO;
 import server.common.model.BidHistoryDTO;
 import server.database.DBConnection;
@@ -205,6 +207,9 @@ public class AuctionService {
     if (auction == null || bidder == null) {
       return false;
     }
+    if (bidder.getStatus() != UserStatus.ACTIVE){
+      return false;
+    }
 
     // ── Bước 1: DB lock + RAM core + DB sync ────────────────────────────────
     // executePlaceBidFlow tự quản lý snapshot + rollback RAM bên trong nếu DB fail.
@@ -270,6 +275,9 @@ public class AuctionService {
     if (auction == null) {
       throw new IllegalArgumentException("AUCTION_NOT_FOUND");
     }
+    if (bidder.getStatus() != UserStatus.ACTIVE){
+      throw new BidderException(bidderId, bidder.getStatus());
+    }
 
     AutoBidConfig authenticatedConfig = new AutoBidConfig(
         auctionId,
@@ -306,7 +314,7 @@ public class AuctionService {
     if (auction.getCurrentLeader() != null
         && bidder.getId() == auction.getCurrentLeader().getId()) {
       // Winner cancel -> Rollback RAM
-      BidTransaction secondWinnerBid = handleWinnerCancel(auction, bidder);
+      BidTransaction secondWinnerBid = rollBackLastAuctionStatus(auction, bidder);
       if (secondWinnerBid != null) {
         // Người thứ 2 đã được restore WINNING trong RAM — dùng executePlaceBidFlow
         // để persist DB + notify realtime đúng flow với SELECT FOR UPDATE.
@@ -669,7 +677,7 @@ public class AuctionService {
    *
    * @return true nếu xử lý thành công, false nếu có lỗi DB
    */
-  private BidTransaction handleWinnerCancel(Auction auction, User cancelledBidder){
+  private BidTransaction rollBackLastAuctionStatus(Auction auction, User cancelledBidder){
 
     BidTransaction winnerTransaction = auction.getWinningBid();
     // Duyệt bidHistory từ cuối lên, lấy bid OUTBID đầu tiên không phải của winner

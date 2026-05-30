@@ -53,7 +53,7 @@ public class Admin extends Account {
     public void grantPermission(AdminPermission permission) { permissions.add(permission); }
     public void revokePermission(AdminPermission permission) { permissions.remove(permission); }
 
-    public Set<AdminPermission> getPermissions() { return new HashSet<>(permissions); }  // Return bản sao
+    public Set<AdminPermission> getPermissions() { return new HashSet<>(permissions); }
 
 
     @Override

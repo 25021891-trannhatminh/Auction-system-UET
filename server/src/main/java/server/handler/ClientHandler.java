@@ -39,7 +39,6 @@ import server.service.PaymentService;
 import server.service.ServerAuthService;
 
 public class ClientHandler implements Runnable{
-//    private static final int GLOBAL_USER_ID = -1;
     private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int LOG_MESSAGE_LIMIT = 500;

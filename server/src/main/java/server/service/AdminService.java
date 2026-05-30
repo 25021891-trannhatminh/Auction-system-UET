@@ -35,6 +35,12 @@ public class AdminService {
     }
 
     boolean success = accountDAO.banUser(userId);
+    User bannedUser = auctionManager.findUserById(userId).orElse(null);
+    if (bannedUser == null){
+      logger.warn("User {} không tồn tại", userId);
+      return false;
+    }
+    bannedUser.setStatus(UserStatus.BANNED);
     if (success) {
       logger.info("Admin {} banned user {} | Reason: {}", adminId, userId, reason);
       auctionService.notifySystemNotification(userId, "Account Suspended",
@@ -48,6 +54,12 @@ public class AdminService {
     if (admin == null || !admin.hasPermission(AdminPermission.UNBAN_USER)) return false;
 
     boolean success = accountDAO.updateStatus(userId, UserStatus.ACTIVE);
+    User unBannedUser = auctionManager.findUserById(userId).orElse(null);
+    if (unBannedUser == null){
+      logger.warn("User {} không tồn tại", userId);
+      return false;
+    }
+    unBannedUser.setStatus(UserStatus.ACTIVE);
     if (success) {
       auctionService.notifySystemNotification(userId, "Account Reactivated",
           "Your account has been reactivated.");

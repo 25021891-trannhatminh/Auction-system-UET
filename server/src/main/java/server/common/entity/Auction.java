@@ -13,9 +13,10 @@ import java.util.concurrent.locks.ReentrantLock;
 import server.common.ProtocolConstants;
 import server.common.entity.exception.AuctionStateException;
 import server.common.entity.exception.InvalidBidException;
-import server.common.entity.exception.SelfBidException;
+import server.common.entity.exception.BidderException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
+import server.common.enums.UserStatus;
 import server.service.listeners.RealTimeObserver;
 
 /*
@@ -205,15 +206,18 @@ public class Auction extends Entity {
         }
 
         // Không cho phép seller tự bid vào phiên của mình hoặc winner self bid
+        if (bidder.getStatus() != UserStatus.ACTIVE){
+            throw new BidderException(bidder.getId(), bidder.getStatus());
+        }
         if (!isAutoBid && currentLeader != null){
             int winnerID = currentLeader.getId();
             if (bidder.getId() == winnerID){
-                throw new SelfBidException(sellerId, this.getId());
+                throw new BidderException(sellerId, this.getId());
             }
         }
 
         if (bidder.getId() == sellerId ) {
-            throw new SelfBidException(sellerId, this.getId());
+            throw new BidderException(sellerId, this.getId());
         }
 
          // ── Step 2: Acquire lock ──────────────────────────────────────────────

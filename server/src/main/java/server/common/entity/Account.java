@@ -96,6 +96,7 @@ public abstract class Account extends Entity {
   public void setPhone(String phone)      { this.phone = phone; }
   public void setEmail(String email)      { this.email = email; }
   public void setPasswordHash(String hash)   { this.passwordHash = hash; }
+  public void setStatus (UserStatus status) {this.status = status;}
 
 
   @Override
