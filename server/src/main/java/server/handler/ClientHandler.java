@@ -201,11 +201,11 @@ public class ClientHandler implements Runnable{
                 break;
 
             case ProtocolConstants.JOIN_AUCTION:
-                // 1. Thực hiện logic join phòng ban đầu của bạn
+                // 1. Thực hiện logic join phòng
                 String joinResponse = auctionHandler.handleJoin(request, this.userId);
                 send(joinResponse);
 
-                // 2. KÍCH HOẠT HÀM BIỂU ĐỒ TẠI ĐÂY
+                // 2. KÍCH HOẠT BIỂU ĐỒ TẠI ĐÂY
                 // Nếu join phòng thành công (Chuỗi trả về bắt đầu bằng JOIN_SUCCESS)
                 if (joinResponse != null && joinResponse.startsWith("AUCTION_SNAPSHOT")) {
                     try {
@@ -238,16 +238,16 @@ public class ClientHandler implements Runnable{
                 send(leaveResult);
                 break;
 
-            case "CONFIRM_PAYMENT": {
+            case ProtocolConstants.CONFIRM_PAYMENT: {
                 new PaymentCommandHandler(this, paymentService).handleConfirmPayment(request);
                 break;
             }
 
-            case "REFUND_PAYMENT": {
+            case ProtocolConstants.REFUND_PAYMENT: {
                 new PaymentCommandHandler(this, paymentService).handleRefundPayment(request);
                 break;
             }
-            case "CREATE_ITEM":
+            case ProtocolConstants.CREATE_ITEM:
                 itemCommandHandler.handleCreateItem(msg.length() > "CREATE_ITEM".length()
                     ? msg.substring("CREATE_ITEM".length()).trim()
                     : "", this.userId);
@@ -267,7 +267,7 @@ public class ClientHandler implements Runnable{
                     : "", this.userId);
                 break;
 
-            case "ADMIN_LIST_USERS":
+            case ProtocolConstants.ADMIN_LIST_USERS:
                 if (!isActiveAdmin(this.userId)) {
                     send("ADMIN_DATA_ERROR NOT_ADMIN");
                     break;
@@ -275,29 +275,29 @@ public class ClientHandler implements Runnable{
                 sendAdminUsers();
                 break;
 
-            case "ADMIN_LIST_ITEMS":
+            case ProtocolConstants.ADMIN_LIST_ITEMS:
                 if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break; }
                 itemCommandHandler.sendAdminItems();
                 break;
 
-            case "ADMIN_LIST_AUCTIONS":
+            case ProtocolConstants.ADMIN_LIST_AUCTIONS:
                 if (!isActiveAdmin(this.userId)) { send("ADMIN_DATA_ERROR NOT_ADMIN"); break;}
                 sendAdminAuctions();
                 break;
 
-            case "USER_LIST_AUCTIONS":
+            case ProtocolConstants.USER_LIST_AUCTIONS:
                 sendUserAuctions();
                 break;
 
-            case "USER_LIST_BIDS":
+            case ProtocolConstants.USER_LIST_BIDS:
                 sendUserBids(request);
                 break;
 
-            case "USER_LIST_AUTOBIDS":
+            case ProtocolConstants.USER_LIST_AUTOBIDS:
                 sendUserAutoBids(request);
                 break;
 
-            case "USER_LIST_TRANSACTIONS":
+            case ProtocolConstants.USER_LIST_TRANSACTIONS:
                 sendUserTransactions(request);
                 break;
 
@@ -313,15 +313,15 @@ public class ClientHandler implements Runnable{
                 send(auctionVisualisationHandler.handle(request, this.userId));
                 break;
 
-            case "USER_LIST_NOTIFICATIONS":
+            case ProtocolConstants.USER_LIST_NOTIFICATIONS:
                 sendUserNotifications(request);
                 break;
 
-            case "USER_MARK_NOTIFICATIONS_READ":
+            case ProtocolConstants.USER_MARK_NOTIFICATIONS_READ:
                 markUserNotificationsRead(request);
                 break;
 
-            case "ADMIN_CREATE_AUCTION":
+            case ProtocolConstants.ADMIN_CREATE_AUCTION:
                 if (!isActiveAdmin(this.userId)) {
                     send("ADMIN_CREATE_AUCTION_FAIL NOT_ADMIN");
                     break;
@@ -384,7 +384,7 @@ public class ClientHandler implements Runnable{
                 send(adminHandler.handleUnbanUser(request, this.userId));
                 break;
 
-            case "ADMIN_FORCE_CLOSE":
+            case ProtocolConstants.ADMIN_FORCE_CLOSE:
                 if (!isActiveAdmin(this.userId)) {
                     send("ADMIN_CLOSE_FAIL NOT_ADMIN");
                     break;
@@ -392,12 +392,12 @@ public class ClientHandler implements Runnable{
                 send(adminHandler.handleForceClose(request, this.userId));
                 break;
 
-            case "ADMIN_APPROVE_ITEM":
+            case ProtocolConstants.ADMIN_APPROVE_ITEM:
                 if (!isActiveAdmin(this.userId)) { send("ADMIN_APPROVE_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.approveItem(request.length > 1 ? request[1] : "", this.userId);
                 break;
 
-            case "ADMIN_REJECT_ITEM":
+            case ProtocolConstants.ADMIN_REJECT_ITEM:
                 if (!isActiveAdmin(this.userId)) { send("ADMIN_REJECT_FAIL NOT_ADMIN"); break; }
                 itemCommandHandler.rejectItem(
                         request.length > 1 ? request[1] : "",
@@ -907,32 +907,6 @@ public class ClientHandler implements Runnable{
         }
     }
 
-    // ==================== REALTIME BID EVENTS ====================
-    // Implement RealTimeObserver — nhận event từ Auction sau khi DB commit xong.
-    // Chỉ push command realtime về client qua socket, không xử lý business logic.
-//    @Override
-//    public void onBidPlacedSuccess(int bidderId, int auctionId, String itemName, BigDecimal amount) {
-//        // Command realtime để UI cập nhật giá, lịch sử bid
-//        send(String.format("BID_PLACED|%d|%d|%s|%s",
-//            auctionId, bidderId, itemName, amount.toPlainString()));
-//    }
-//
-//    @Override
-//    public void onTimeExtended(int auctionId, String itemName, int addedSeconds) {
-//        send(String.format("TIME_EXTENDED|%d|%s|%d",
-//            auctionId, itemName, addedSeconds));
-//    }
-//
-//    @Override
-//    public void onAuctionEnded(int winnerId, int auctionId, String itemName, BigDecimal finalPrice) {
-//        send(String.format("AUCTION_ENDED|%d|%d|%s|%s",
-//            auctionId, winnerId, itemName, finalPrice.toPlainString()));
-//    }
-//
-//    @Override
-//    public void onOutbid(int userId, int auctionId, String itemName, BigDecimal newPrice) {
-//
-//    }
     /**
      * Tự động gửi dữ liệu lịch sử giá xuống cho Client vẽ biểu đồ.
      * Sử dụng trực tiếp tài nguyên nội bộ out và bidTransactionDAO của lớp.
