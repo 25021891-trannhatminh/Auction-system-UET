@@ -83,6 +83,10 @@ final class TransactionData {
     return !isWallet() && "REFUNDED".equalsIgnoreCase(paymentStatus);
   }
 
+  boolean isRefundable() {
+    return isSeller() && isCompletedPayment();
+  }
+
   boolean isFailedPayment() {
     return !isWallet() && "FAILED".equalsIgnoreCase(paymentStatus);
   }

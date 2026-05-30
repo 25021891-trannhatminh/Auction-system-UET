@@ -388,6 +388,11 @@ public class CreateItemController {
         joinImageUris()
     );
 
+    if (networkManager == null || !networkManager.isConnected()) {
+      showErrorMessage("Không thể kết nối server. Vui lòng thử lại sau.");
+      return;
+    }
+
     saveDraftButton.setDisable(true);
     submitItemButton.setDisable(true);
     showNeutralMessage(

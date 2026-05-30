@@ -3160,7 +3160,8 @@
     -fx-text-alignment: center;
 }
 
-.user-dashboard-root .transaction-pay-btn {
+.user-dashboard-root .transaction-pay-btn,
+.user-dashboard-root .transaction-refund-btn {
     -fx-min-width: 58;
     -fx-pref-width: 58;
     -fx-max-width: 72;
@@ -3168,7 +3169,8 @@
     -fx-font-size: 11px;
 }
 
-.user-dashboard-root .transaction-pay-btn:disabled {
+.user-dashboard-root .transaction-pay-btn:disabled,
+.user-dashboard-root .transaction-refund-btn:disabled {
     -fx-opacity: 0.58;
 }
 
@@ -3835,7 +3837,8 @@
 .user-dashboard-root .mini-action-btn,
 .user-dashboard-root .more-action-btn,
 .user-dashboard-root .user-primary-action-btn,
-.user-dashboard-root .transaction-pay-btn {
+.user-dashboard-root .transaction-pay-btn,
+.user-dashboard-root .transaction-refund-btn {
     -fx-background-color: #302f2c;
     -fx-border-color: #4c4740;
     -fx-border-radius: 16;
@@ -3849,7 +3852,8 @@
 .user-dashboard-root .mini-action-btn:hover,
 .user-dashboard-root .more-action-btn:hover,
 .user-dashboard-root .user-primary-action-btn:hover,
-.user-dashboard-root .transaction-pay-btn:hover {
+.user-dashboard-root .transaction-pay-btn:hover,
+.user-dashboard-root .transaction-refund-btn:hover {
     -fx-background-color: #403d38;
     -fx-opacity: 1;
 }
@@ -3948,6 +3952,7 @@
 .user-dashboard-root .auction-market-bid-btn:disabled,
 .user-dashboard-root .auction-disabled-bid-btn,
 .user-dashboard-root .transaction-pay-btn:disabled,
+.user-dashboard-root .transaction-refund-btn:disabled,
 .user-dashboard-root .auction-detail-secondary-btn:disabled {
     -fx-background-color: #d4ccc2;
     -fx-border-color: #c3b8ac;
@@ -4595,6 +4600,7 @@
 .user-dashboard-root .more-action-btn,
 .user-dashboard-root .user-primary-action-btn,
 .user-dashboard-root .transaction-pay-btn,
+.user-dashboard-root .transaction-refund-btn,
 .user-dashboard-root .auction-market-bid-btn,
 .user-dashboard-root .auction-view-btn,
 .user-dashboard-root .auction-detail-side-panel .auction-market-bid-btn,
@@ -4616,6 +4622,7 @@
 .user-dashboard-root .more-action-btn:hover,
 .user-dashboard-root .user-primary-action-btn:hover,
 .user-dashboard-root .transaction-pay-btn:hover,
+.user-dashboard-root .transaction-refund-btn:hover,
 .user-dashboard-root .auction-market-bid-btn:hover,
 .user-dashboard-root .auction-view-btn:hover {
     -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
@@ -4700,6 +4707,7 @@
 .user-dashboard-root .auction-market-bid-btn:disabled,
 .user-dashboard-root .auction-disabled-bid-btn,
 .user-dashboard-root .transaction-pay-btn:disabled,
+.user-dashboard-root .transaction-refund-btn:disabled,
 .user-dashboard-root .auction-detail-secondary-btn:disabled {
     -fx-background-color: #d4c0a7;
     -fx-border-color: #c4a984;

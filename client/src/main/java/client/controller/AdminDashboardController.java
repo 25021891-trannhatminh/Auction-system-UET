@@ -9,8 +9,10 @@ import client.service.NetworkManager;
 import client.service.SessionManager;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import javafx.application.Platform;
@@ -66,6 +68,7 @@ public class AdminDashboardController extends BaseDashboardController {
     private final List<AdminRow> liveItemRows = new ArrayList<>();
     private final List<AdminRow> liveAuctionRows = new ArrayList<>();
     private final Map<String, Image> adminImageCache = new HashMap<>();
+    private final Set<String> pendingAdminActions = new HashSet<>();
 
     private List<AdminRow> incomingUserRows = new ArrayList<>();
     private List<AdminRow> incomingItemRows = new ArrayList<>();
@@ -104,6 +107,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         hideAdminDescriptions();
+        requestNotificationHistory();
         requestLiveAdminData();
     }
 
@@ -184,6 +188,16 @@ public class AdminDashboardController extends BaseDashboardController {
 
             if (message.startsWith("PUSH_NOTIF|")) {
                 Platform.runLater(() -> processPushNotification(message));
+                return;
+            }
+
+            if (isNotificationHistoryMessage(message)) {
+                Platform.runLater(() -> handleNotificationHistoryMessage(message));
+                return;
+            }
+
+            if (isNotificationMarkReadResponse(message)) {
+                Platform.runLater(() -> handleNotificationMarkReadResponse(message));
                 return;
             }
 
@@ -291,6 +305,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.equals("ADMIN_APPROVE_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess(
                 "Item approved",
@@ -306,6 +321,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_APPROVE_FAIL")) {
+            pendingAdminActions.clear();
             notifUIHandler.showError(
                 "Approve failed",
                 "Server không approve được item. Có thể item không còn ở PENDING_REVIEW."
@@ -318,6 +334,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_CREATE_AUCTION_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess(
                 "Auction created",
@@ -332,6 +349,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_CREATE_AUCTION_FAIL")) {
+            pendingAdminActions.clear();
             String errorMessage = decodeJoinedPayload(
                 msg.substring("ADMIN_CREATE_AUCTION_FAIL".length()).trim()
             );
@@ -341,6 +359,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.equals("ADMIN_REJECT_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess("Item rejected", "The item has been removed from the review queue.");
             showSection("items");
@@ -349,6 +368,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_REJECT_FAIL")) {
+            pendingAdminActions.clear();
             String reason = decodeJoinedPayload(msg.substring("ADMIN_REJECT_FAIL".length()).trim());
             notifUIHandler.showError("Reject failed", fallback(reason, "Server rejected the request."));
             showDetail("Reject failed", fallback(reason, "Server không reject được item."));
@@ -356,6 +376,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_BAN_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess("User banned", "Account status has been updated by the server.");
             showDetail("User banned", "Server đã xử lý ADMIN_BAN_USER và admin-home đã refresh Users.");
@@ -363,6 +384,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_BAN_FAIL")) {
+            pendingAdminActions.clear();
             String reason = decodeJoinedPayload(msg.substring("ADMIN_BAN_FAIL".length()).trim());
             notifUIHandler.showError("Ban failed", fallback(reason, "Server rejected the request."));
             showDetail("Ban failed", fallback(reason, "Server không ban được user."));
@@ -370,6 +392,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_UNBAN_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess("User restored", "Account has been restored to ACTIVE.");
             showDetail("User restored", "Server đã xử lý ADMIN_UNBAN_USER và admin-home đã refresh Users.");
@@ -377,6 +400,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_UNBAN_FAIL")) {
+            pendingAdminActions.clear();
             String reason = decodeJoinedPayload(msg.substring("ADMIN_UNBAN_FAIL".length()).trim());
             notifUIHandler.showError("Restore failed", fallback(reason, "Server rejected the request."));
             showDetail("Restore failed", fallback(reason, "Server không restore được user."));
@@ -384,6 +408,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_CLOSE_SUCCESS")) {
+            pendingAdminActions.clear();
             requestLiveAdminData();
             notifUIHandler.showSuccess("Auction canceled", "Auction has been canceled by the server.");
             showDetail("Auction canceled", "Server đã xử lý ADMIN_FORCE_CLOSE và refresh lại Auctions.");
@@ -391,6 +416,7 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.startsWith("ADMIN_CLOSE_FAIL")) {
+            pendingAdminActions.clear();
             String reason = decodeJoinedPayload(msg.substring("ADMIN_CLOSE_FAIL".length()).trim());
             notifUIHandler.showError("Cancel failed", fallback(reason, "Server rejected the request."));
             showDetail("Cancel failed", fallback(reason, "Server không cancel được auction."));
@@ -1915,13 +1941,26 @@ public class AdminDashboardController extends BaseDashboardController {
         renderWorkspace(targetSection, activeFilter);
     }
 
-    private void approveItem(AdminRow data) {
-        if (adminNetworkManager == null) {
-            showDetail("Approve failed", "Client chưa kết nối server.");
-            return;
+    private boolean canSendAdminCommand(String actionKey, String busyTitle, String busyMessage) {
+        if (adminNetworkManager == null || !adminNetworkManager.isConnected()) {
+            showDetail(busyTitle, "Client chưa kết nối server.");
+            return false;
         }
+        if (pendingAdminActions.contains(actionKey)) {
+            showDetail(busyTitle, busyMessage);
+            return false;
+        }
+        pendingAdminActions.add(actionKey);
+        return true;
+    }
+
+    private void approveItem(AdminRow data) {
         if (data == null || data.itemId == null || data.itemId.isBlank()) {
             showDetail("Approve failed", "Thiếu item_id từ dữ liệu server.");
+            return;
+        }
+        if (!canSendAdminCommand("APPROVE:" + data.itemId, "Approving item",
+            "Yêu cầu approve item này đang được server xử lý.")) {
             return;
         }
         adminNetworkManager.send("ADMIN_APPROVE_ITEM " + data.itemId);
@@ -1929,12 +1968,12 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void rejectItem(AdminRow data) {
-        if (adminNetworkManager == null) {
-            showDetail("Reject failed", "Client chưa kết nối server.");
-            return;
-        }
         if (data == null || data.itemId == null || data.itemId.isBlank()) {
             showDetail("Reject failed", "Thiếu item_id từ dữ liệu server.");
+            return;
+        }
+        if (!canSendAdminCommand("REJECT:" + data.itemId, "Rejecting item",
+            "Yêu cầu reject item này đang được server xử lý.")) {
             return;
         }
         adminNetworkManager.send("ADMIN_REJECT_ITEM " + data.itemId + " Rejected by admin review");
@@ -1942,13 +1981,13 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void banUser(AdminRow data) {
-        if (adminNetworkManager == null) {
-            showDetail("Ban failed", "Client chưa kết nối server.");
-            return;
-        }
         String userId = extractUserId(data);
         if (userId.isBlank()) {
             showDetail("Ban failed", "Thiếu user_id từ dữ liệu server.");
+            return;
+        }
+        if (!canSendAdminCommand("BAN:" + userId, "Banning user",
+            "Yêu cầu ban user này đang được server xử lý.")) {
             return;
         }
         adminNetworkManager.send("ADMIN_BAN_USER " + userId + " Banned by admin moderation");
@@ -1956,13 +1995,13 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void restoreUser(AdminRow data) {
-        if (adminNetworkManager == null) {
-            showDetail("Restore failed", "Client chưa kết nối server.");
-            return;
-        }
         String userId = extractUserId(data);
         if (userId.isBlank()) {
             showDetail("Restore failed", "Thiếu user_id từ dữ liệu server.");
+            return;
+        }
+        if (!canSendAdminCommand("RESTORE:" + userId, "Restoring user",
+            "Yêu cầu restore user này đang được server xử lý.")) {
             return;
         }
         adminNetworkManager.send("ADMIN_UNBAN_USER " + userId);
@@ -1970,13 +2009,13 @@ public class AdminDashboardController extends BaseDashboardController {
     }
 
     private void forceCloseAuction(AdminRow data) {
-        if (adminNetworkManager == null) {
-            showDetail("Force close failed", "Client chưa kết nối server.");
-            return;
-        }
         String auctionId = extractAuctionId(data);
         if (auctionId.isBlank()) {
             showDetail("Force close failed", "Thiếu auction_id từ dữ liệu server.");
+            return;
+        }
+        if (!canSendAdminCommand("CLOSE:" + auctionId, "Force closing auction",
+            "Yêu cầu cancel auction này đang được server xử lý.")) {
             return;
         }
         adminNetworkManager.send("ADMIN_FORCE_CLOSE " + auctionId + " Force closed from admin-home");
@@ -2283,11 +2322,6 @@ public class AdminDashboardController extends BaseDashboardController {
         String reservePrice,
         String snipeWindowSeconds,
         String snipeExtensionSeconds) {
-        if (adminNetworkManager == null) {
-            showDetail("Create auction failed", "Client chưa kết nối server.");
-            return;
-        }
-
         String validationError = validateAuctionForm(
             data,
             startTime,
@@ -2299,6 +2333,11 @@ public class AdminDashboardController extends BaseDashboardController {
         );
         if (!validationError.isBlank()) {
             showDetail("Create auction failed", validationError);
+            return;
+        }
+
+        if (!canSendAdminCommand("CREATE_AUCTION:" + data.itemId, "Creating auction",
+            "Yêu cầu tạo auction cho item này đang được server xử lý.")) {
             return;
         }
 

@@ -25,6 +25,24 @@ public class NetworkManager {
     private static final int MAX_RETRY_DELAY = 30000;
     private static final int HEARTBEAT_INTERVAL = 5000;
     private static final int LOG_MESSAGE_LIMIT = 500;
+    private static final Set<String> NON_REPLAYABLE_COMMAND_PREFIXES = Set.of(
+        "ADMIN_APPROVE_ITEM",
+        "ADMIN_BAN_USER",
+        "ADMIN_CREATE_AUCTION",
+        "ADMIN_FORCE_CLOSE",
+        "ADMIN_REJECT_ITEM",
+        "ADMIN_UNBAN_USER",
+        "AUTOBID_CANCEL",
+        "AUTOBID_REGISTER",
+        "BID",
+        "CONFIRM_PAYMENT",
+        "CREATE_ITEM",
+        "DEPOSIT_WALLET",
+        "REFUND_PAYMENT",
+        "UPLOAD_IMAGE",
+        "USER_MARK_NOTIFICATIONS_READ",
+        "USER_UPDATE_DRAFT_ITEM"
+    );
 
     private Socket socket;
     private BufferedReader in;
@@ -82,6 +100,7 @@ public class NetworkManager {
      */
     public void disconnect() {
         shouldReconnect = false;
+        messageQueue.clear();
         markDisconnected();
     }
 
@@ -209,8 +228,13 @@ public class NetworkManager {
         }
 
         if (!hasWritableSocket()) {
-            System.out.println("Queue message: " + safeMessageForLog(msg));
-            messageQueue.add(msg);
+            if (isReplaySafeCommand(msg)) {
+                System.out.println("Queue message: " + safeMessageForLog(msg));
+                messageQueue.add(msg);
+            } else {
+                System.out.println("Skip non-replayable message while disconnected: "
+                    + safeMessageForLog(msg));
+            }
             ensureConnected();
             return;
         }
@@ -220,8 +244,13 @@ public class NetworkManager {
         System.out.println("Sent: " + safeMessageForLog(msg));
 
         if (out.checkError()) {
-            System.out.println("Send failed, queue again: " + safeMessageForLog(msg));
-            messageQueue.add(msg);
+            if (isReplaySafeCommand(msg)) {
+                System.out.println("Send failed, queue again: " + safeMessageForLog(msg));
+                messageQueue.add(msg);
+            } else {
+                System.out.println("Send failed, not replaying non-idempotent message: "
+                    + safeMessageForLog(msg));
+            }
             markDisconnected();
             ensureConnected();
         }
@@ -251,6 +280,16 @@ public class NetworkManager {
                 break;
             }
         }
+    }
+
+
+    private boolean isReplaySafeCommand(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+
+        String command = msg.trim().split("\\s+", 2)[0].toUpperCase();
+        return !NON_REPLAYABLE_COMMAND_PREFIXES.contains(command);
     }
 
     /**
