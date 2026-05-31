@@ -173,6 +173,8 @@ public class UserDashboardController extends BaseDashboardController {
   private final Map<String, AuctionVisualisationData> auctionVisualisations = new HashMap<>();
   private final Map<String, Boolean> auctionVisualisationLoaded = new HashMap<>();
   private String pendingVisualisationAuctionId = "";
+  private List<VisualisationPoint> incomingLegacyHistoryPoints = new ArrayList<>();
+  private String incomingLegacyHistoryAuctionId = "";
   private SellerItemData activeSellerDetailItem;
   private VBox activeSellerBidHistorySection;
   private VBox activeAuctionVisualisationSection;
@@ -263,6 +265,10 @@ public class UserDashboardController extends BaseDashboardController {
       }
       if (isAuctionVisualisationMessage(msg)) {
         Platform.runLater(() -> handleAuctionVisualisationMessage(msg));
+        return;
+      }
+      if (isLegacyHistoryMessage(msg)) {
+        Platform.runLater(() -> handleLegacyHistoryMessage(msg));
         return;
       }
       if (isUserBidMessage(msg)) {
@@ -623,6 +629,12 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("AUCTION_VISUALISATION_FAIL"));
   }
 
+  private boolean isLegacyHistoryMessage(String message) {
+    return message != null && (message.equals("HISTORY_START")
+        || message.startsWith("HISTORY_ITEM ")
+        || message.equals("HISTORY_END"));
+  }
+
   private boolean isSellerBidHistoryMessage(String message) {
     return message != null && (message.startsWith("SELLER_AUCTION_BIDS_BEGIN")
         || message.startsWith("SELLER_AUCTION_BID ")
@@ -681,7 +693,8 @@ public class UserDashboardController extends BaseDashboardController {
         || message.startsWith("AUTOBID_FAIL")
         || message.startsWith("FAIL ")
         || message.startsWith("JOIN_AUCTION_FAIL")
-        || message.startsWith("LEAVE_AUCTION_SUCCESS");
+        || message.startsWith("LEAVE_AUCTION_SUCCESS")
+        || message.startsWith("LEAVE_AUCTION_FAIL");
   }
 
   private void handleUserAuctionServerMessage(String message) {
@@ -810,6 +823,69 @@ public class UserDashboardController extends BaseDashboardController {
         auctionVisualisationLoaded.put(auctionId, true);
         refreshActiveAuctionVisualisationSection(auctionId);
       }
+    }
+  }
+
+  private void handleLegacyHistoryMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+
+    if (message.equals("HISTORY_START")) {
+      incomingLegacyHistoryPoints = new ArrayList<>();
+      incomingLegacyHistoryAuctionId = fallback(activeAuctionDetailId, pendingVisualisationAuctionId);
+      return;
+    }
+
+    if (message.startsWith("HISTORY_ITEM ")) {
+      String payload = message.substring("HISTORY_ITEM ".length()).trim();
+      List<String> fields = splitPayload(payload);
+      if (fields.size() < 2) {
+        return;
+      }
+      BigDecimal amount = parseMoneyOrNull(safeField(fields, 1));
+      if (amount != null) {
+        incomingLegacyHistoryPoints.add(new VisualisationPoint(shortTimestamp(safeField(fields, 0)), amount));
+      }
+      return;
+    }
+
+    if (message.equals("HISTORY_END")) {
+      String auctionId = fallback(incomingLegacyHistoryAuctionId, activeAuctionDetailId);
+      if (auctionId.isBlank()) {
+        auctionId = pendingVisualisationAuctionId;
+      }
+      if (auctionId.isBlank()) {
+        return;
+      }
+
+      AuctionCardData card = latestAuctionCardById(auctionId);
+      AuctionVisualisationData existing = auctionVisualisations.get(auctionId);
+      if (existing != null && existing.points.size() >= incomingLegacyHistoryPoints.size()) {
+        auctionVisualisationLoaded.put(auctionId, true);
+        refreshActiveAuctionVisualisationSection(auctionId);
+        return;
+      }
+
+      String itemName = existing == null
+          ? card == null ? "Auction #" + auctionId : card.title
+          : existing.itemName;
+      String startingPrice = existing == null
+          ? card == null ? "" : fallback(card.reservePrice, card.price)
+          : existing.startingPrice;
+      String currentPrice = existing == null
+          ? card == null ? "" : card.price
+          : existing.currentPrice;
+
+      auctionVisualisations.put(auctionId, new AuctionVisualisationData(
+          auctionId,
+          itemName,
+          startingPrice,
+          currentPrice,
+          incomingLegacyHistoryPoints
+      ));
+      auctionVisualisationLoaded.put(auctionId, true);
+      refreshActiveAuctionVisualisationSection(auctionId);
     }
   }
 
@@ -1337,6 +1413,66 @@ public class UserDashboardController extends BaseDashboardController {
   @Override
   protected String getRoleTitle() {
     return "BIDDER / SELLER";
+  }
+
+  @Override
+  protected void handleRealtimeNotification(String rawMessage) {
+    String[] parts = rawMessage == null ? new String[0] : rawMessage.split("\\|", 4);
+    String type = parts.length > 1 ? parts[1].trim().toUpperCase() : "";
+    String title = parts.length > 2 ? parts[2].trim().toUpperCase() : "";
+    String body = parts.length > 3 ? parts[3].trim().toUpperCase() : "";
+
+    if (requiresPaymentRefresh(type, title, body)) {
+      reloadTransactionsFromServer();
+      requestUserBids();
+      requestUserAuctions();
+      requestUserAutoBids();
+    }
+
+    if (requiresAuctionRefresh(type, title, body)) {
+      requestUserAuctions();
+      requestUserBids();
+      requestUserAutoBids();
+      if (activeAuctionDetailId != null && !activeAuctionDetailId.isBlank()) {
+        requestFreshAuctionState(activeAuctionDetailId);
+        requestAuctionVisualisation(activeAuctionDetailId);
+      }
+    }
+
+    if (requiresItemRefresh(type, title, body)) {
+      sellerItemsLoaded = false;
+      sellerItemStatsLoaded = false;
+      requestCreateListingMetadata();
+      requestUserAuctions();
+    }
+  }
+
+  private boolean requiresPaymentRefresh(String type, String title, String body) {
+    return switch (type) {
+      case "PAYMENT_DUE", "PAYMENT_RECEIVED", "AUCTION_WON" -> true;
+      case "SYSTEM" -> title.contains("PAYMENT") || title.contains("REFUND")
+          || title.contains("DEPOSIT") || title.contains("WALLET")
+          || body.contains("PAYMENT") || body.contains("REFUND")
+          || body.contains("DEPOSIT") || body.contains("WALLET");
+      default -> false;
+    };
+  }
+
+  private boolean requiresAuctionRefresh(String type, String title, String body) {
+    return switch (type) {
+      case "BID_PLACED", "OUTBID", "AUCTION_WON", "AUCTION_LOST", "AUCTION_STARTED",
+          "AUCTION_ENDED", "TIME_EXTENDED", "PAYMENT_DUE", "PAYMENT_RECEIVED" -> true;
+      case "SYSTEM" -> title.contains("AUCTION") || body.contains("AUCTION");
+      default -> false;
+    };
+  }
+
+  private boolean requiresItemRefresh(String type, String title, String body) {
+    return switch (type) {
+      case "ITEM_APPROVED", "ITEM_REJECTED", "AUCTION_STARTED", "AUCTION_ENDED" -> true;
+      case "SYSTEM" -> title.contains("ITEM") || body.contains("ITEM");
+      default -> false;
+    };
   }
 
   /**
@@ -4128,6 +4264,10 @@ public class UserDashboardController extends BaseDashboardController {
     }
     if (message.startsWith("JOIN_AUCTION_FAIL")) {
       handleJoinAuctionFail(message);
+      return;
+    }
+    if (message.startsWith("LEAVE_AUCTION_FAIL")) {
+      handleLeaveAuctionFail(message);
     }
   }
 
@@ -4142,6 +4282,13 @@ public class UserDashboardController extends BaseDashboardController {
     } else {
       notifUIHandler.showError("Auction unavailable", readableMessage);
     }
+  }
+
+  private void handleLeaveAuctionFail(String message) {
+    String[] parts = message == null ? new String[0] : message.trim().split("\\s+", 2);
+    String reason = parts.length > 1 ? parts[1] : "";
+    String readableMessage = readableLeaveAuctionFailure(reason);
+    showAuctionRoomFeedback(readableMessage, true);
   }
 
   private void showAuctionRoomFeedback(String message, boolean error) {
@@ -4223,6 +4370,7 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
     String auctionId = safeField(fields, 0);
+    incomingLegacyHistoryAuctionId = auctionId;
     String status = safeField(fields, 1);
     String currentPrice = safeField(fields, 2);
     String leaderName = safeField(fields, 4);
@@ -4489,6 +4637,17 @@ public class UserDashboardController extends BaseDashboardController {
     return normalized.equals("AUCTION_CLOSED")
         || normalized.equals("AUCTION_FINISHED")
         || normalized.equals("AUCTION_ENDED");
+  }
+
+  private String readableLeaveAuctionFailure(String reason) {
+    String normalized = reason == null ? "" : reason.trim().toUpperCase();
+    return switch (normalized) {
+      case "NOT_LOGGED_IN" -> "Your session expired before leaving this auction room.";
+      case "INVALID_FORMAT", "INVALID_AUCTION_ID" -> "The auction room close request was invalid.";
+      default -> normalized.isBlank()
+          ? "The auction room could not be closed cleanly, but the screen is already detached."
+          : toSentenceCase(normalized.replace('_', ' '));
+    };
   }
 
   private String readableAutoBidFailure(String reason) {
