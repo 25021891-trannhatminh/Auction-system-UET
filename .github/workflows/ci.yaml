@@ -3,8 +3,8 @@ name: CI/CD for Auction System
 on:
   push:
     branches: [ main, dev , Refactor]
-#  pull_request:
-#    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build-and-test:
