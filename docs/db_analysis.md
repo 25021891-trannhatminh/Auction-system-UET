@@ -69,6 +69,7 @@ erDiagram
 - **Vai trò**: Quản lý đa phương tiện (URLs hình ảnh liên kết Cloudinary).
 - **Đặc điểm**: Cột `is_primary` và `sort_order` giúp UI Client kết xuất giao diện một cách đồng bộ.
 - **Hành động xóa**: `ON DELETE CASCADE` - tự động xóa toàn bộ bản ghi ảnh khi vật phẩm tương ứng bị xóa.
+> **Tích hợp Cloudinary:** Hệ thống không lưu dữ liệu nhị phân ảnh trực tiếp vào database mà chỉ lưu **URL chuỗi** (dạng `https://res.cloudinary.com/...`) trỏ tới file ảnh đang được host trên Cloudinary CDN. Luồng hoạt động như sau: khi người dùng tạo listing, `CloudMediaApiClient` phía Client thực hiện HTTP POST multipart trực tiếp lên Cloudinary (không qua server socket), nhận về `secure_url` trong JSON response, rồi đính kèm URL này vào payload `CREATE_ITEM` gửi lên server. Server sau đó INSERT từng URL vào bảng `item_images`. Thiết kế này giúp database giữ dung lượng nhỏ gọn (chỉ lưu chuỗi `VARCHAR` thay vì BLOB), đồng thời tận dụng Cloudinary như một CDN — ảnh được phân phối nhanh tới mọi client mà không tiêu tốn băng thông của server socket.
 #### Bảng `item_attributes` (Thiết kế EAV)
 - **Vai trò**: Lưu các thông số kỹ thuật mở rộng của vật phẩm.
 - **Đánh giá**: Sử dụng mô hình **Entity-Attribute-Value (EAV)** thông qua 2 cột `attr_key` và `attr_value`. Cho phép mở rộng động các thông tin tùy thuộc vào danh mục (Ví dụ: Danh mục *Xe cộ* cần các thuộc tính *Hãng xe, Số km đã đi*, còn danh mục *Nghệ thuật* cần *Tác giả, Chất liệu*) mà không cần thiết kế lại cấu trúc bảng.
