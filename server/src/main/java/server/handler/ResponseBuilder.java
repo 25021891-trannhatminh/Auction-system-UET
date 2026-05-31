@@ -2,7 +2,7 @@ package server.handler;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import java.math.BigDecimal;
 import server.common.enums.AuctionStatus;
 import server.common.model.AuctionVisualisationDTO;

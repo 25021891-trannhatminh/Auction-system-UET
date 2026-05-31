@@ -1,6 +1,5 @@
 package server.common.entity.model.item;
 
-import server.common.entity.Item;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 

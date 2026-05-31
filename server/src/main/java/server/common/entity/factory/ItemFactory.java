@@ -2,7 +2,7 @@ package server.common.entity.factory;
 
 import server.common.entity.model.item.Art;
 import server.common.entity.model.item.Electronics;
-import server.common.entity.Item;
+import server.common.entity.model.item.Item;
 import server.common.entity.model.item.Vehicle;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
@@ -55,7 +55,7 @@ public class ItemFactory {
 
         return switch (category) {
 
-            case ItemCategory.ELECTRONIC -> {
+            case ELECTRONIC -> {
                 String brand    = getAttr(attributes, "brand", "Unknown");
                 int warranty    = Integer.parseInt(getAttr(attributes, "warranty_months", "0"));
                 Electronics electronics   = new Electronics(sellerId, name, description, startingPrice, status, brand, warranty);
@@ -64,7 +64,7 @@ public class ItemFactory {
                 yield electronics;
             }
 
-            case ItemCategory.ART -> {
+            case ART -> {
                 String artist   = getAttr(attributes, "artist", "Unknown");
                 int year        = Integer.parseInt(getAttr(attributes, "year_created", "0"));
                 String medium   = getAttr(attributes, "medium", "");
@@ -74,7 +74,7 @@ public class ItemFactory {
                 yield art;
             }
 
-            case ItemCategory.VEHICLE -> {
+            case VEHICLE -> {
                 String brand    = getAttr(attributes, "brand", "Unknown");
                 String model    = getAttr(attributes, "model", "Unknown");
                 int year        = Integer.parseInt(getAttr(attributes, "year_manufactured", "2000"));
@@ -118,7 +118,7 @@ public class ItemFactory {
             throw new IllegalArgumentException("Category cannot be null");
 
         return switch (category) {
-            case ItemCategory.ELECTRONIC -> {
+            case ELECTRONIC -> {
                 String brand = getAttr(attributes, "brand", "Unknown");
                 int warranty = Integer.parseInt(getAttr(attributes, "warranty_months", "0"));
                 Electronics electronics = new Electronics(
@@ -129,7 +129,7 @@ public class ItemFactory {
                 yield electronics;
             }
 
-            case ItemCategory.ART -> {
+            case ART -> {
                 String artist = getAttr(attributes, "artist", "Unknown");
                 int year = Integer.parseInt(getAttr(attributes, "year_created", "0"));
                 String medium = getAttr(attributes, "medium", "");
@@ -141,7 +141,7 @@ public class ItemFactory {
                 yield art;
             }
 
-            case ItemCategory.VEHICLE -> {
+            case VEHICLE -> {
                 String brand = getAttr(attributes, "brand", "Unknown");
                 String model = getAttr(attributes, "model", "Unknown");
                 int year = Integer.parseInt(getAttr(attributes, "year_manufactured", "2000"));

@@ -1,7 +1,7 @@
 package server.repository;
 
 import server.common.enums.NotificationType;
-import server.common.entity.Notification;
+import server.listeners.Notification;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

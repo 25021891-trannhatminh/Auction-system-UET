@@ -12,7 +12,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import server.common.entity.Item;
+import server.common.entity.model.item.Item;
 import server.common.entity.factory.ItemFactory;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;

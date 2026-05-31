@@ -1,4 +1,4 @@
-package server.common;
+package server.common.protocol;
 
 /**
  * Hằng số giao thức giữa Client và Server.

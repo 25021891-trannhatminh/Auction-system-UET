@@ -1,9 +1,8 @@
 package server.handler;
 
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.network.ClientManager;
 import server.service.ServerAuthService;
-import server.handler.ClientHandler;
 
 /**
  * Xử lý lệnh LOGIN và REGISTER.

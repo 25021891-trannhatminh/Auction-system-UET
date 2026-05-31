@@ -1,8 +1,9 @@
 package server.common.entity;
 
+import server.common.entity.BidModel.AutoBidConfig;
 import server.common.enums.AccountRole;
 import server.common.enums.UserStatus;
-import server.common.entity.exception.InsufficientBalanceException;
+import server.common.exception.InsufficientBalanceException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

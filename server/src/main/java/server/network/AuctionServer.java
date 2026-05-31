@@ -8,8 +8,8 @@ import server.handler.ClientHandler;
 import server.service.AuctionService;
 import server.service.NotificationService;
 import server.service.PaymentService;
-import server.service.listeners.NotificationEventHandler;
-import server.service.listeners.PaymentTriggerObserver;
+import server.listeners.NotificationEventHandler;
+import server.listeners.PaymentTriggerObserver;
 
 public class AuctionServer {
     public static void main(String[] args) {

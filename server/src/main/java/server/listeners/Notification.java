@@ -1,4 +1,4 @@
-package server.common.entity;
+package server.listeners;
 
 import java.time.LocalDateTime;
 import server.common.enums.NotificationType;

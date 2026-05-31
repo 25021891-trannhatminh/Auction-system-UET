@@ -7,7 +7,7 @@
 Mọi request từ client đều đi qua một luồng cố định:
 
 ```
-Client (JSON qua Socket)
+Client (Socket)
   → ClientHandler        (parse & route request)
   → AuctionService       (business logic, orchestration)
   → BidTransactionService (DB transaction + RAM sync)
@@ -15,8 +15,6 @@ Client (JSON qua Socket)
   → DAO Layer            (persist xuống MySQL)
   → notify RealTimeObserver (push kết quả về client)
 ```
-
-`AuctionManager` là điểm trung tâm duy nhất — mọi thao tác với auction đều phải qua đây, không tầng nào tham chiếu trực tiếp tới `Auction` object.
 
 ---
 
@@ -61,7 +59,8 @@ Sau mỗi bid thủ công commit thành công, `AuctionService` gọi `AutoBidEn
 
 **Persist auto-bid** — Engine trả về `PlaceBidResult`, `AuctionService` gọi lại toàn bộ flow `placeBid()` với `isAutoBid=true` để persist qua đúng DB transaction, không duplicate code.
 
-Trigger được gọi trong 3 tình huống: auction bắt đầu (OPEN→RUNNING), sau mỗi bid thủ công thành công, và khi có config auto-bid mới đăng ký vào phiên đang chạy.
+Trigger được gọi trong 4 tình huống: auction bắt đầu (OPEN→RUNNING), sau mỗi bid thủ công thành công, khi có config auto-bid mới đăng ký vào phiên đang chạy hoặc hủy config đã đăng ký.
+Xử lý edge case: Leader (người dẫn đầu) cancel config -> Hệ thống rollback lại trạng thái trước khi Leader đó đặt bid (RAM + DB rollback)
 
 ---
 

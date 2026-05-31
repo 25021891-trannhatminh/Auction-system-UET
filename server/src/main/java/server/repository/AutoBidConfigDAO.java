@@ -1,7 +1,7 @@
 
 package server.repository;
 
-import server.common.entity.AutoBidConfig;
+import server.common.entity.BidModel.AutoBidConfig;
 import server.common.enums.AutoBidStatus;
 import server.database.DBConnection;
 import org.slf4j.Logger;

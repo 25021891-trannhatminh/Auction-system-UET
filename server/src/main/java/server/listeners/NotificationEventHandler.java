@@ -1,4 +1,4 @@
-package server.service.listeners;
+package server.listeners;
 
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -8,12 +8,9 @@ import server.common.entity.manager.AuctionManager;
 import server.handler.ResponseBuilder;
 import server.network.NotificationDispatcher;
 import server.service.NotificationService;
-import server.common.ProtocolConstants;
 import server.common.enums.NotificationType;
 
 import java.math.BigDecimal;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class NotificationEventHandler implements BusinessEventListener, RealTimeObserver {
   private static final Logger logger = LoggerFactory.getLogger(NotificationEventHandler.class);

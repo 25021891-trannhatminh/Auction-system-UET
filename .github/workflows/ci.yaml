@@ -8,11 +8,10 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
-    # strategy:
-    #   matrix:
-    #     os: [ubuntu-latest, windows-latest]
-    # runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout code
@@ -25,24 +24,31 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-#      - name: Build with Maven (skip docs)
-#        run: mvn clean install -DskipTests   # Build toàn bộ module, bỏ qua test để kiểm tra compile
-
       - name: Run tests
-        run: mvn test
+        run: mvn verify
 
-#      # JAR file cho client và server
-#      - name: Package application
-#        run: mvn package
-#
-#      - name: Upload client JAR
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: client-jar
-#          path: client/target/*.jar
-#
-#      - name: Upload server JAR
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: server-jar
-#          path: server/target/*.jar
+      - name: Package application
+        run: mvn package -DskipTests
+
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-jar
+          path: client/target/*.jar
+        if: success()
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-jar
+          path: server/target/*.jar
+        if: success()
+
+      - name: Upload JAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: auction-system-jars
+          path: |
+            server/target/auction-server.jar
+            client/target/auction-client.jar
+          if-no-files-found: error

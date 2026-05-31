@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import server.common.entity.Auction;
-import server.common.entity.Notification;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.NotificationType;
@@ -12,7 +11,7 @@ import server.common.enums.PaymentStatus;
 import server.common.enums.WalletTransactionType;
 import server.common.model.PaymentDTO;
 import server.common.model.WalletDTO;
-import server.common.model.WalletUpdateEvent;
+import server.listeners.WalletUpdateEvent;
 import server.database.DBConnection;
 import server.network.NotificationDispatcher;
 import server.repository.*;

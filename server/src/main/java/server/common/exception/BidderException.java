@@ -1,4 +1,4 @@
-package server.common.entity.exception;
+package server.common.exception;
 
 import server.common.enums.UserStatus;
 

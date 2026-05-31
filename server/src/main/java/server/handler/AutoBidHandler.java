@@ -1,9 +1,9 @@
 package server.handler;
 
 import java.math.BigDecimal;
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.entity.Auction;
-import server.common.entity.AutoBidConfig;
+import server.common.entity.BidModel.AutoBidConfig;
 import server.common.entity.User;
 import server.common.enums.AuctionStatus;
 import server.service.AuctionService;

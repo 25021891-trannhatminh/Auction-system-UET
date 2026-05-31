@@ -3,8 +3,8 @@ package server.model;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import server.common.entity.AutoBidConfig;
-import server.common.entity.exception.AutoBidConfigException;
+import server.common.entity.BidModel.AutoBidConfig;
+import server.common.exception.AutoBidConfigException;
 import server.common.enums.AutoBidStatus;
 
 import java.math.BigDecimal;

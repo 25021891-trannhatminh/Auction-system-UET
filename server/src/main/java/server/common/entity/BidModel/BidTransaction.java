@@ -1,4 +1,4 @@
-package server.common.entity;
+package server.common.entity.BidModel;
 
 import server.common.enums.BidStatus;
 import java.math.BigDecimal;

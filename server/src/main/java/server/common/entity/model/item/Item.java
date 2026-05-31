@@ -1,5 +1,6 @@
-package server.common.entity;
+package server.common.entity.model.item;
 
+import server.common.entity.Entity;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 

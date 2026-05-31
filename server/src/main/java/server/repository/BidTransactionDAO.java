@@ -1,10 +1,8 @@
 package server.repository;
 
-import server.common.entity.BidTransaction;
 import server.common.enums.BidStatus;
 import server.common.model.BidHistoryDTO;
 import server.common.model.BidPointDTO;
-import server.common.model.BidResultDTO;
 import server.database.DBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -376,35 +374,6 @@ public class BidTransactionDAO {
         }
     }
 
-    /**
-     * Hàm ánh xạ dữ liệu ngược từ DB lên RAM.
-     * Giải quyết điểm bất đối xứng bằng cách sử dụng String.valueOf() để chuyển int từ DB
-     * khớp hoàn toàn với constructor đầy đủ 8 tham số dạng String của file BidTransaction cũ.
-     */
-    private BidResultDTO getBidResultDTOByRow(ResultSet rs) throws SQLException {
-        // Tùy thuộc vào cấu trúc Constructor hiện tại của BidResultDTO của bạn.
-        // Nếu file BidResultDTO của bạn hỗ trợ Setter hoặc có Constructor tương ứng, ta nạp dữ liệu vào như sau:
-
-        AccountDAO accountDAO = new AccountDAO();
-        int dbBidderId = rs.getInt("bidder_id");
-        String bidderName = accountDAO.getUserById(dbBidderId).getFullName();
-
-        // Tạo ra thực thể phụ trợ độc lập để wrap bên trong DTO kết quả
-        BidTransaction tx = new BidTransaction(
-            rs.getInt("bid_id"),
-            rs.getInt("auction_id"),
-            dbBidderId,
-            bidderName,
-            rs.getBigDecimal("amount"),
-            rs.getTimestamp("bid_time").toLocalDateTime(),
-            rs.getBoolean("is_auto_bid"),
-            BidStatus.valueOf(rs.getString("status"))
-        );
-
-        // Trả về DTO tổng hợp (ở đây bọc thủ công hoặc tự động tùy cấu trúc DTO,
-        // mặc định nạp tx vào phần manualTransaction để bảo toàn dữ liệu lịch sử)
-        return new BidResultDTO(tx, null, rs.getBigDecimal("amount"), bidderName);
-    }
 
     /**
      * Projection row cho lịch sử bid trong màn seller view.
