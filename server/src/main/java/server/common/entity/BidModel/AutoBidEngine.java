@@ -1,15 +1,15 @@
-package server.common.entity;
+package server.common.entity.BidModel;
 
 
-import java.util.List;
+import server.common.entity.Auction;
 import server.common.entity.Auction.PlaceBidResult;
-import server.common.entity.exception.InvalidBidException;
+import server.common.entity.User;
+import server.common.exception.InvalidBidException;
 
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import server.service.BidTransactionService;
 
 /*
   AutoBidEngine — Xử lý đấu giá tự động (Auto-Bidding).

@@ -10,14 +10,16 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 
-import server.common.ProtocolConstants;
-import server.common.entity.exception.AuctionStateException;
-import server.common.entity.exception.InvalidBidException;
-import server.common.entity.exception.BidderException;
+import server.common.protocol.ProtocolConstants;
+import server.common.entity.BidModel.BidTransaction;
+import server.common.entity.model.item.Item;
+import server.common.exception.AuctionStateException;
+import server.common.exception.InvalidBidException;
+import server.common.exception.BidderException;
 import server.common.enums.AuctionStatus;
 import server.common.enums.BidStatus;
 import server.common.enums.UserStatus;
-import server.service.listeners.RealTimeObserver;
+import server.listeners.RealTimeObserver;
 
 /*
   ═══════════════════════════════════════════════════════════
@@ -40,7 +42,7 @@ import server.service.listeners.RealTimeObserver;
 public class Auction extends Entity {
 
     // ── Identity ─────────────────────────────────────────────────────────────
-    private final Item          item;
+    private final Item item;
     private final int        sellerId;
 
     // ── Time config ───────────────────────────────────────────────────────────

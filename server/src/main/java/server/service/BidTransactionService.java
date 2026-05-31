@@ -13,17 +13,16 @@ import org.slf4j.LoggerFactory;
 
 import server.common.entity.Auction;
 import server.common.entity.Auction.PlaceBidResult;
-import server.common.entity.BidTransaction;
+import server.common.entity.BidModel.BidTransaction;
 import server.common.entity.User;
-import server.common.entity.exception.AuctionStateException;
-import server.common.entity.exception.InvalidBidException;
+import server.common.exception.AuctionStateException;
+import server.common.exception.InvalidBidException;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.common.model.BidHistoryDTO;
 import server.database.DBConnection;
 import server.network.NotificationDispatcher;
 import server.repository.AccountDAO;
-import server.repository.AutoBidConfigDAO;
 import server.repository.BidTransactionDAO;
 import server.repository.BidTransactionDAO.AuctionLockInfo;
 

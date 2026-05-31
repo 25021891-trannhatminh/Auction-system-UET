@@ -1,9 +1,9 @@
 package server.handler;
 
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.entity.User;
-import server.common.entity.exception.AuctionStateException;
-import server.common.entity.exception.InvalidBidException;
+import server.common.exception.AuctionStateException;
+import server.common.exception.InvalidBidException;
 import server.network.ClientManager;
 import server.service.AuctionService;
 

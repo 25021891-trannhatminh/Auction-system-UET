@@ -1,6 +1,6 @@
 package server.handler;
 
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.model.AuctionVisualisationDTO;
 import server.service.AuctionVisualisationService;
 

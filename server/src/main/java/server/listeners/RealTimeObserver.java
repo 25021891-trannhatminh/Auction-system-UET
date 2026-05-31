@@ -1,4 +1,4 @@
-package server.service.listeners;
+package server.listeners;
 
 import java.math.BigDecimal;
 

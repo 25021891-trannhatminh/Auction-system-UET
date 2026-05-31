@@ -1,15 +1,15 @@
 package server.common.entity.manager;
 
-import server.common.entity.AutoBidEngine;
+import server.common.entity.BidModel.AutoBidEngine;
 import server.common.entity.Auction;
-import server.common.entity.AutoBidConfig;
-import server.common.entity.Item;
+import server.common.entity.BidModel.AutoBidConfig;
+import server.common.entity.model.item.Item;
 import server.common.entity.User;
-import server.common.entity.exception.AuctionStateException;
-import server.common.entity.exception.AutoBidConfigException;
-import server.common.entity.exception.BidderException;
+import server.common.exception.AuctionStateException;
+import server.common.exception.AutoBidConfigException;
+import server.common.exception.BidderException;
 import server.common.enums.UserStatus;
-import server.service.listeners.RealTimeObserver;
+import server.listeners.RealTimeObserver;
 import server.common.enums.AuctionStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

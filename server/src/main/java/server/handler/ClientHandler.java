@@ -15,8 +15,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import server.common.ProtocolConstants;
-import server.common.entity.Notification;
+import server.common.protocol.ProtocolConstants;
+import server.listeners.Notification;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;

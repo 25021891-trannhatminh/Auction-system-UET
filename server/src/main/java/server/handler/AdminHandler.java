@@ -1,8 +1,8 @@
 package server.handler;
 
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.entity.Auction;
-import server.common.entity.Item;
+import server.common.entity.model.item.Item;
 import server.common.enums.ItemStatus;
 import server.network.ClientManager;
 import server.repository.ItemDAO;

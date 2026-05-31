@@ -2,7 +2,7 @@ package server.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import server.common.entity.Item;
+import server.common.entity.model.item.Item;
 import server.common.model.AuctionDTO;
 import server.common.model.AuctionVisualisationDTO;
 import server.common.model.BidPointDTO;

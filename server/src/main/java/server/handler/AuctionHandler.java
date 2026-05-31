@@ -1,15 +1,13 @@
 package server.handler;
 
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.entity.Auction;
-import server.common.entity.BidTransaction;
+import server.common.entity.BidModel.BidTransaction;
 import server.common.entity.User;
 import server.common.entity.manager.AuctionManager;
 import server.common.enums.AuctionStatus;
 import server.network.NotificationDispatcher;
-import server.service.listeners.RealTimeObserver;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 

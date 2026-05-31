@@ -2,19 +2,18 @@ package server.network;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import server.common.ProtocolConstants;
+import server.common.protocol.ProtocolConstants;
 import server.common.entity.Auction;
-import server.common.entity.BidTransaction;
+import server.common.entity.BidModel.BidTransaction;
 import server.common.enums.NotificationType;
-import server.common.model.NotificationEvent;
+import server.listeners.NotificationEvent;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import server.common.model.WalletUpdateEvent;
+import server.listeners.WalletUpdateEvent;
 
 public class NotificationDispatcher implements Runnable {
 

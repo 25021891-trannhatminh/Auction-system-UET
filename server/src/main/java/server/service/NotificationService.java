@@ -2,8 +2,8 @@ package server.service;
 
 import java.util.List;
 
-import server.common.entity.Notification;
-import server.common.model.NotificationEvent;
+import server.listeners.Notification;
+import server.listeners.NotificationEvent;
 import server.network.NotificationDispatcher;
 import server.repository.NotificationDAO;
 import server.common.enums.NotificationType;

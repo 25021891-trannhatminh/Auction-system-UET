@@ -4,7 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.common.entity.*;
-import server.common.entity.Auction.PlaceBidResult;
+import server.common.entity.BidModel.AutoBidConfig;
+import server.common.entity.BidModel.AutoBidEngine;
+import server.common.entity.model.item.Item;
 import server.common.enums.ItemCategory;
 import server.common.enums.ItemStatus;
 

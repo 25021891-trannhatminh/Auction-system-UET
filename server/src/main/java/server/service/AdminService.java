@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.common.entity.*;
 import server.common.entity.manager.AuctionManager;
+import server.common.entity.model.item.Item;
 import server.common.enums.AdminPermission;
 import server.common.enums.UserStatus;
 import server.common.model.AuctionDTO;
@@ -106,7 +107,7 @@ public class AdminService {
 
     boolean rejected = itemDAO.rejectItem(itemId);
     if (rejected) {
-      server.common.entity.Item item = itemDAO.getById(itemId);
+      Item item = itemDAO.getById(itemId);
       if (item != null) {
         auctionService.rejectItem(item.getSellerId(), itemId, item.getName());
       }

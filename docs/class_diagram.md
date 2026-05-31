@@ -240,14 +240,14 @@ classDiagram
 
 ### Lớp trung tâm
 
-**`Auction`** là trái tim của hệ thống — quản lý toàn bộ state một phiên đấu giá trong RAM. Chứa `Item`, danh sách `BidTransaction`, con trỏ `currentLeader`, và `ReentrantLock(fair=true)` bảo vệ critical section. Ba chức năng cốt lõi:
+**`Auction`** là lớp lõi của hệ thống — quản lý toàn bộ state một phiên đấu giá trong RAM. Chứa `Item`, danh sách `BidTransaction`, con trỏ `currentLeader`, và `ReentrantLock(fair=true)` bảo vệ critical section. Ba chức năng cốt lõi:
 - `placeBid()` — validate + cập nhật state + anti-snipe, thread-safe qua lock.
 - `closeSession()` — xác định winner/canceled dựa trên reserve price và bid history.
 - `notifyBidCommitted()` — phát sự kiện tới tất cả `RealTimeObserver` sau khi DB commit.
 
 **`AuctionManager`** (Singleton) là điểm truy cập duy nhất vào tầng domain. Duy trì `auctionMap` và `userMap` trong RAM, sở hữu `AutoBidEngine` và `ScheduledExecutorService` để tự động mở/đóng phiên theo thời gian. Không tầng nào khác được tham chiếu trực tiếp tới `Auction` object mà không qua Manager.
 
-**`AutoBidEngine`** xử lý toàn bộ logic đặt giá tự động. Mỗi auction có một `PriorityQueue<AutoBidConfig>` riêng — config `maxBid` cao hơn được ưu tiên, bằng nhau thì ai đăng ký sớm hơn thắng (FIFO tie-breaking). Trigger được gọi sau mỗi bid thủ công, khi auction mở, hoặc khi có config mới đăng ký.
+**`AutoBidEngine`** xử lý toàn bộ logic đặt giá tự động. Mỗi auction có một `PriorityQueue<AutoBidConfig>` riêng — config `maxBid` cao hơn được ưu tiên, bằng nhau thì ai đăng ký sớm hơn thắng (FIFO tie-breaking). Trigger được gọi sau mỗi bid thủ công, khi auction mở, hoặc khi có config mới đăng ký / hủy,.
 
 **`RealTimeObserver`** (interface) tách biệt domain logic khỏi network layer. `Auction` chỉ biết gọi `onBidPlacedSuccess()`, `onOutbid()`, `onTimeExtended()` — không quan tâm phía sau là socket hay bất kỳ cơ chế gì khác (Observer Pattern).
 
@@ -270,4 +270,3 @@ classDiagram
 | **Observer** | `Auction → RealTimeObserver` — notify realtime sau khi DB commit |
 
 ---
-```

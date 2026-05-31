@@ -1,4 +1,4 @@
-package server.common.model;
+package server.listeners;
 
 import server.common.enums.NotificationType;
 import server.service.NotificationService;

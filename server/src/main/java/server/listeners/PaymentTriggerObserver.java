@@ -1,9 +1,8 @@
-package server.service.listeners;
+package server.listeners;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.common.enums.AuctionStatus;
-import server.common.enums.NotificationType;
 import server.service.PaymentService;
 
 import java.math.BigDecimal;
