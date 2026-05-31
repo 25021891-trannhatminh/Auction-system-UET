@@ -1300,6 +1300,7 @@ public class UserDashboardController extends BaseDashboardController {
         seller,
         winner,
         "",
+        "",
         "300",
         "60"
     );
@@ -1358,6 +1359,7 @@ public class UserDashboardController extends BaseDashboardController {
         endTime,
         seller,
         winner,
+        "",
         attributes,
         snipeWindow,
         snipeExtension
@@ -1601,6 +1603,7 @@ public class UserDashboardController extends BaseDashboardController {
         "not available",
         "not available",
         "not available",
+        "",
         "",
         "",
         "300",
@@ -2157,6 +2160,7 @@ public class UserDashboardController extends BaseDashboardController {
         "not available",
         fallback(bid.endTime, "not available"),
         "",
+        "",
         bid.winnerId,
         "",
         "300",
@@ -2264,6 +2268,7 @@ public class UserDashboardController extends BaseDashboardController {
         "not available",
         fallback(rule.endTime, "not available"),
         fallback(rule.seller, ""),
+        "",
         "",
         "",
         "300",
@@ -3408,9 +3413,9 @@ public class UserDashboardController extends BaseDashboardController {
     Button autoBidCancelButton = new Button("Cancel Auto");
     VBox autoBidPanel = null;
     Label bidMessage = new Label();
+    boolean manualBidPending = !sellerView && isManualBidSubmitting(displayData.auctionId);
 
     if (!sellerView) {
-      boolean manualBidPending = isManualBidSubmitting(displayData.auctionId);
       bidInput.setPromptText("Enter bid amount");
       bidInput.setDisable(!isAuctionBidEnabled(displayData) || manualBidPending);
       bidInput.getStyleClass().add("auction-detail-bid-input");
@@ -3426,15 +3431,14 @@ public class UserDashboardController extends BaseDashboardController {
       bidRow.getChildren().addAll(bidInput, placeBidButton);
       autoBidPanel = buildAutoBidPanel(
           displayData, autoBidMaxInput, autoBidIncrementInput, autoBidRegisterButton, autoBidCancelButton);
-      bidMessage.setText(manualBidPending
-          ? "Your bid is being confirmed by the server..."
-          : isAuctionBidEnabled(displayData)
-              ? "Minimum increment: " + displayData.minimumIncrement
-              : bidDisabledReason(displayData));
     }
 
     bidMessage.getStyleClass().add("auction-detail-end-note");
     bidMessage.setWrapText(true);
+    bidMessage.setMaxWidth(Double.MAX_VALUE);
+    if (!sellerView) {
+      refreshBidMessage(bidMessage, displayData, manualBidPending, false);
+    }
 
     Label endNote = new Label(displayData.endTime == null || displayData.endTime.isBlank()
         ? "Auction schedule is not available yet."
@@ -3764,6 +3768,7 @@ public class UserDashboardController extends BaseDashboardController {
         item.auctionEndTime,
         currentUsername(),
         item.highestBidder,
+        item.highestBidderId,
         item.attributes,
         "300",
         "60"
@@ -3935,7 +3940,7 @@ public class UserDashboardController extends BaseDashboardController {
       return "You cannot bid on your own auction.";
     }
     if (isCurrentUserWinning(latestData)) {
-      return "You are currently leading this auction, so you cannot place another bid right now.";
+      return leaderBidWarningText();
     }
     return "This auction is not accepting bids right now.";
   }
@@ -4186,10 +4191,7 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void showBidFeedback(String message, boolean error) {
     if (activeAuctionBidMessageLabel != null) {
-      activeAuctionBidMessageLabel.setText(message == null ? "" : message);
-      activeAuctionBidMessageLabel.setStyle(error
-          ? "-fx-text-fill: #9f4f45; -fx-font-size: 11px; -fx-font-weight: bold;"
-          : "-fx-text-fill: #738581; -fx-font-size: 11px;");
+      setBidMessage(activeAuctionBidMessageLabel, message, error);
     }
     if (error) {
       notifUIHandler.showError("Bid failed", message);
@@ -4373,6 +4375,7 @@ public class UserDashboardController extends BaseDashboardController {
     incomingLegacyHistoryAuctionId = auctionId;
     String status = safeField(fields, 1);
     String currentPrice = safeField(fields, 2);
+    String leaderId = safeField(fields, 3);
     String leaderName = safeField(fields, 4);
     String endTime = safeField(fields, 5);
     int totalBids = parseIntOrDefault(safeField(fields, 6), 0);
@@ -4383,7 +4386,7 @@ public class UserDashboardController extends BaseDashboardController {
       secondsLeft = secondsUntil(endTime, -1L);
     }
 
-    replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderName, status);
+    replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderId, leaderName, status);
 
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionPrice(currentPrice, totalBids);
@@ -4398,13 +4401,14 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
     String auctionId = safeField(fields, 0);
+    String leaderId = safeField(fields, 1);
     String amount = safeField(fields, 2);
     int totalBids = parseIntOrDefault(safeField(fields, 3), 0);
     String leaderName = safeField(fields, 4);
     long secondsLeft = parseLongOrDefault(safeField(fields, 5), -1L);
     String endTime = safeField(fields, 6);
 
-    replaceAuctionCardBid(auctionId, amount, totalBids, secondsLeft, endTime, leaderName, "");
+    replaceAuctionCardBid(auctionId, amount, totalBids, secondsLeft, endTime, leaderId, leaderName, "");
     if (myBidsLoaded || "myBids".equals(currentSectionKey)) {
       requestUserBids();
     }
@@ -4420,9 +4424,9 @@ public class UserDashboardController extends BaseDashboardController {
       updateActiveAuctionPrice(amount, totalBids);
       updateActiveAuctionCountdown(secondsLeft);
       updateActiveBidControls(latestAuctionCardById(auctionId));
-      showBidFeedback(isCurrentUserWinning(latestAuctionCardById(auctionId))
-          ? "You are currently leading this auction."
-          : "Current price updated in real time.", false);
+      if (!isCurrentUserWinning(latestAuctionCardById(auctionId))) {
+        showBidFeedback("Current price updated in real time.", false);
+      }
     } else if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
       renderWorkspace(currentSectionKey, activeFilter);
     }
@@ -4435,12 +4439,13 @@ public class UserDashboardController extends BaseDashboardController {
     }
     String auctionId = safeField(fields, 0);
     String currentPrice = safeField(fields, 1);
+    String leaderId = safeField(fields, 2);
     String leaderName = safeField(fields, 3);
     String endTime = safeField(fields, 4);
     int totalBids = parseIntOrDefault(safeField(fields, 5), 0);
     long secondsLeft = secondsUntil(endTime, -1L);
 
-    replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderName, "");
+    replaceAuctionCardBid(auctionId, currentPrice, totalBids, secondsLeft, endTime, leaderId, leaderName, "");
     if (myBidsLoaded || "myBids".equals(currentSectionKey)) {
       requestUserBids();
     }
@@ -4458,9 +4463,9 @@ public class UserDashboardController extends BaseDashboardController {
         updateActiveAuctionCountdown(secondsLeft);
       }
       updateActiveBidControls(latestAuctionCardById(auctionId));
-      showBidFeedback(isCurrentUserWinning(latestAuctionCardById(auctionId))
-          ? "You are currently leading this auction."
-          : "Current price updated in real time.", false);
+      if (!isCurrentUserWinning(latestAuctionCardById(auctionId))) {
+        showBidFeedback("Current price updated in real time.", false);
+      }
     } else if ("auctions".equals(currentSectionKey) || "dashboard".equals(currentSectionKey)) {
       renderWorkspace(currentSectionKey, activeFilter);
     }
@@ -4475,7 +4480,7 @@ public class UserDashboardController extends BaseDashboardController {
     long secondsLeft = parseLongOrDefault(safeField(fields, 1), -1L);
     String endTime = safeField(fields, 2);
     int addedSeconds = parseIntOrDefault(safeField(fields, 3), 0);
-    replaceAuctionCardBid(auctionId, null, -1, secondsLeft, endTime, "", "");
+    replaceAuctionCardBid(auctionId, null, -1, secondsLeft, endTime, "", "", "");
     if (isActiveAuction(auctionId)) {
       updateActiveAuctionCountdown(secondsLeft);
       updateActiveBidControls(latestAuctionCardById(auctionId));
@@ -4503,8 +4508,9 @@ public class UserDashboardController extends BaseDashboardController {
     String auctionId = safeField(fields, 0);
     String status = safeField(fields, 1);
     String finalPrice = safeField(fields, 2);
+    String winnerId = safeField(fields, 3);
     String winnerName = safeField(fields, 4);
-    replaceAuctionCardBid(auctionId, finalPrice, -1, 0L, "", winnerName, status);
+    replaceAuctionCardBid(auctionId, finalPrice, -1, 0L, "", winnerId, winnerName, status);
     applyClosedAuctionUiState(auctionId, finalPrice, status);
   }
 
@@ -4541,7 +4547,7 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private void replaceAuctionCardBid(String auctionId, String rawAmount, int totalBids,
-      long secondsLeft, String endTime, String winner, String status) {
+      long secondsLeft, String endTime, String winnerId, String winner, String status) {
     for (int i = 0; i < liveAuctionCards.size(); i++) {
       AuctionCardData card = liveAuctionCards.get(i);
       if (!card.auctionId.equals(auctionId)) {
@@ -4558,7 +4564,8 @@ public class UserDashboardController extends BaseDashboardController {
               ? card.endTime
               : shortTimestamp(endTime.replace('T', ' ')),
           status,
-          winner
+          winner,
+          winnerId
       ));
       return;
     }
@@ -4578,14 +4585,15 @@ public class UserDashboardController extends BaseDashboardController {
           0,
           card.endTime,
           status,
-          card.winner
+          card.winner,
+          card.winnerId
       ));
       return;
     }
   }
 
   private AuctionCardData copyAuctionCard(AuctionCardData card, String price, int bidCount,
-      long secondsLeft, String endTime, String status, String winner) {
+      long secondsLeft, String endTime, String status, String winner, String winnerId) {
     String normalizedStatus = fallback(status, card.status);
     String badge = normalizedStatus;
     return new AuctionCardData(
@@ -4610,6 +4618,7 @@ public class UserDashboardController extends BaseDashboardController {
         fallback(endTime, card.endTime),
         card.seller,
         fallback(winner, card.winner),
+        fallback(winnerId, card.winnerId),
         card.attributes,
         card.snipeWindowSeconds,
         card.snipeExtensionSeconds
@@ -5277,9 +5286,50 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private boolean isCurrentUserWinning(AuctionCardData data) {
-    String current = normalize(currentUsername());
-    String winner = normalize(data == null ? "" : data.winner);
-    return !current.isBlank() && !winner.isBlank() && current.equals(winner);
+    if (data == null) {
+      return false;
+    }
+
+    String currentUserId = normalize(currentUserIdString());
+    String leaderId = normalize(data.winnerId);
+    if (isKnownLeaderId(leaderId) && !currentUserId.isBlank()) {
+      return currentUserId.equals(leaderId);
+    }
+
+    String leaderName = normalize(data.winner);
+    if (isKnownLeaderId(leaderName) && !currentUserId.isBlank()) {
+      return currentUserId.equals(leaderName);
+    }
+    if (!isKnownLeaderName(leaderName)) {
+      return false;
+    }
+
+    String currentUsername = normalize(currentUsername());
+    return !currentUsername.isBlank() && currentUsername.equals(leaderName);
+  }
+
+  private boolean isKnownLeaderId(String leaderId) {
+    return leaderId != null
+        && !leaderId.isBlank()
+        && !leaderId.equals("-1")
+        && !leaderId.equals("0")
+        && !leaderId.equals("none")
+        && !leaderId.equals("null")
+        && leaderId.chars().allMatch(Character::isDigit);
+  }
+
+  private boolean isKnownLeaderName(String leaderName) {
+    return leaderName != null
+        && !leaderName.isBlank()
+        && !leaderName.equals("-1")
+        && !leaderName.equals("0")
+        && !leaderName.equals("none")
+        && !leaderName.equals("null");
+  }
+
+  private String leaderBidWarningText() {
+    return "You are currently leading this auction.\n"
+        + "You cannot place another bid until another user outbids you.";
   }
 
   private void updateActiveBidControls(AuctionCardData data) {
@@ -5307,14 +5357,42 @@ public class UserDashboardController extends BaseDashboardController {
       activeAutoBidCancelButton.setDisable(baseDisabled || autoPending);
     }
     if (activeAuctionBidMessageLabel != null && latestData != null) {
-      if (manualPending) {
-        activeAuctionBidMessageLabel.setText("Your bid is being confirmed by the server...");
-      } else if (autoPending) {
-        activeAuctionBidMessageLabel.setText("Your auto-bid change is being confirmed by the server...");
-      } else if (baseDisabled) {
-        activeAuctionBidMessageLabel.setText(bidDisabledReason(latestData));
-      }
+      refreshBidMessage(activeAuctionBidMessageLabel, latestData, manualPending, autoPending);
     }
+  }
+
+  private void refreshBidMessage(
+      Label targetLabel, AuctionCardData latestData, boolean manualPending, boolean autoPending) {
+    if (targetLabel == null || latestData == null) {
+      return;
+    }
+    if (manualPending) {
+      setBidMessage(targetLabel, "Your bid is being confirmed by the server...", false);
+      return;
+    }
+    if (autoPending) {
+      setBidMessage(targetLabel, "Your auto-bid change is being confirmed by the server...", false);
+      return;
+    }
+    if (isCurrentUserWinning(latestData)) {
+      setBidMessage(targetLabel, leaderBidWarningText(), true);
+      return;
+    }
+    if (!isAuctionBidEnabled(latestData)) {
+      setBidMessage(targetLabel, bidDisabledReason(latestData), false);
+      return;
+    }
+    setBidMessage(targetLabel, "Minimum increment: " + latestData.minimumIncrement, false);
+  }
+
+  private void setBidMessage(Label targetLabel, String message, boolean warning) {
+    if (targetLabel == null) {
+      return;
+    }
+    targetLabel.setText(message == null ? "" : message);
+    targetLabel.setStyle(warning
+        ? "-fx-text-fill: #b3342b; -fx-font-size: 12px; -fx-font-weight: 900;"
+        : "-fx-text-fill: #4d453d; -fx-font-size: 12px;");
   }
 
   private void removeAutoBidRule(String auctionId) {

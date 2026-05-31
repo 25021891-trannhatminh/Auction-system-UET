@@ -25,6 +25,7 @@ final class AuctionCardData {
   final String endTime;
   final String seller;
   final String winner;
+  final String winnerId;
   final String attributes;
   final String snipeWindowSeconds;
   final String snipeExtensionSeconds;
@@ -51,6 +52,7 @@ final class AuctionCardData {
         String endTime,
         String seller,
         String winner,
+        String winnerId,
         String attributes,
         String snipeWindowSeconds,
         String snipeExtensionSeconds) {
@@ -75,6 +77,7 @@ final class AuctionCardData {
       this.endTime = endTime;
       this.seller = seller;
       this.winner = winner;
+      this.winnerId = winnerId;
       this.attributes = attributes;
       this.snipeWindowSeconds = snipeWindowSeconds;
       this.snipeExtensionSeconds = snipeExtensionSeconds;
