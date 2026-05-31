@@ -1,0 +1,184 @@
+
+<style>
+#erd svg { width:100%; height:auto; }
+#erd svg.erDiagram .divider path { stroke-opacity:0.4; }
+#erd svg.erDiagram .row-rect-odd path,
+#erd svg.erDiagram .row-rect-odd rect,
+#erd svg.erDiagram .row-rect-even path,
+#erd svg.erDiagram .row-rect-even rect { stroke:none !important; }
+</style>
+<div id="erd" style="padding:4px 0"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '12px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    primaryColor: dark ? '#3C3489' : '#EEEDFE',
+    primaryTextColor: dark ? '#CECBF6' : '#26215C',
+    primaryBorderColor: dark ? '#534AB7' : '#AFA9EC',
+    secondaryColor: dark ? '#085041' : '#E1F5EE',
+    tertiaryColor: dark ? '#633806' : '#FAEEDA',
+  },
+});
+const diagram = `erDiagram
+  USERS {
+    int user_id PK
+    varchar username
+    varchar email
+    varchar password_hash
+    varchar full_name
+    varchar phone
+    enum role
+    boolean is_active
+    timestamp last_login
+    timestamp created_at
+  }
+  WALLETS {
+    int wallet_id PK
+    int user_id FK
+    decimal balance
+    timestamp updated_at
+  }
+  WALLET_TRANSACTIONS {
+    int tx_id PK
+    int wallet_id FK
+    enum type
+    decimal amount
+    int ref_auction_id
+    varchar note
+    timestamp created_at
+  }
+  ITEM_CATEGORIES {
+    int category_id PK
+    varchar name
+    int parent_id FK
+  }
+  ITEMS {
+    int item_id PK
+    int seller_id FK
+    int category_id FK
+    varchar name
+    text description
+    decimal starting_price
+    enum status
+    timestamp created_at
+  }
+  ITEM_IMAGES {
+    int image_id PK
+    int item_id FK
+    varchar url
+    boolean is_primary
+    int sort_order
+  }
+  ITEM_ATTRIBUTES {
+    int attr_id PK
+    int item_id FK
+    varchar attr_key
+    varchar attr_value
+  }
+  AUCTIONS {
+    int auction_id PK
+    int item_id FK
+    int seller_id FK
+    datetime start_time
+    datetime end_time
+    timestamp last_bid_time
+    decimal min_bid_increment
+    decimal reserve_price
+    smallint snipe_window_seconds
+    smallint snipe_extension_seconds
+    decimal current_price
+    int current_winner_id FK
+    enum status
+    timestamp created_at
+  }
+  BIDS {
+    int bid_id PK
+    int auction_id FK
+    int bidder_id FK
+    decimal amount
+    timestamp bid_time
+    boolean is_auto_bid
+    enum status
+  }
+  AUTO_BIDS {
+    int auto_bid_id PK
+    int auction_id FK
+    int bidder_id FK
+    decimal max_bid
+    decimal increment
+    enum status
+    timestamp created_at
+    timestamp updated_at
+  }
+  PAYMENTS {
+    int payment_id PK
+    int auction_id FK
+    int buyer_id FK
+    int seller_id FK
+    decimal amount
+    enum status
+    timestamp paid_at
+    timestamp created_at
+  }
+  NOTIFICATIONS {
+    int notif_id PK
+    int user_id FK
+    enum type
+    varchar title
+    text content
+    boolean is_read
+    int related_id
+    timestamp created_at
+  }
+
+  USERS ||--o| WALLETS : "has"
+  WALLETS ||--o{ WALLET_TRANSACTIONS : "records"
+  USERS ||--o{ ITEMS : "lists"
+  ITEM_CATEGORIES ||--o{ ITEMS : "classifies"
+  ITEM_CATEGORIES ||--o{ ITEM_CATEGORIES : "parent"
+  ITEMS ||--o{ ITEM_IMAGES : "has"
+  ITEMS ||--o{ ITEM_ATTRIBUTES : "has"
+  ITEMS ||--o| AUCTIONS : "auctioned in"
+  USERS ||--o{ AUCTIONS : "hosts"
+  USERS ||--o| AUCTIONS : "leads"
+  AUCTIONS ||--o{ BIDS : "receives"
+  USERS ||--o{ BIDS : "places"
+  AUCTIONS ||--o{ AUTO_BIDS : "has"
+  USERS ||--o{ AUTO_BIDS : "registers"
+  AUCTIONS ||--o| PAYMENTS : "settled by"
+  USERS ||--o{ NOTIFICATIONS : "receives"
+`;
+const { svg } = await mermaid.render('erd-main', diagram);
+document.getElementById('erd').innerHTML = svg;
+document.querySelectorAll('#erd svg.erDiagram .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0],nums[2],nums[4],nums[6]];
+  const ys = [nums[1],nums[3],nums[5],nums[7]];
+  const x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;
+  const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+  rect.setAttribute('x',x);rect.setAttribute('y',y);
+  rect.setAttribute('width',w);rect.setAttribute('height',h);
+  rect.setAttribute('rx','8');
+  for(const a of ['fill','stroke','stroke-width','class','style']){
+    if(firstPath.hasAttribute(a))rect.setAttribute(a,firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+document.querySelectorAll('#erd svg.erDiagram .row-rect-odd path, #erd svg.erDiagram .row-rect-even path').forEach(p=>{
+  p.setAttribute('stroke','none');
+});
+</script>

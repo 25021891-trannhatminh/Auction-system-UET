@@ -38,15 +38,15 @@ Phạm vi hệ thống tập trung vào các chức năng cốt lõi của một
 ## 3. Cấu trúc thư mục
 ```text
 project-root/
-├── server/
+├── server/ (Logic Java, Database, Socket server)
 │   ├── src/main/java/server
 │   ├── resources/
 │   └── ...
-├── client/
+├── client/ (GUI, FXML, Socket client)
 │   ├── src/main/java/client
 │   ├── resources/
 │   └── ...
-├── docs/
+├── docs/ (Tài liệu kỹ thuật, báo cáo)
 │   ├── report.pdf
 │   └── demo.mp4
 └── README.md
@@ -98,7 +98,7 @@ java -jar client/target/auction-client.jar
 
 ## 6. Tài liệu và demo
 - **Báo cáo PDF:** [AuctionSystem_Report](docs/AuctionSystem_Report.pdf)
-- **Video demo:** [link video](________________)
+- **Video demo:** [Video Demo](https://drive.google.com/file/d/11asuA44a46hL5MKsjkDKKm3QwOxHVpqL/view?usp=sharing)
 
 ## 7. Thành viên nhóm
 - `Trần Nhật Minh` - `Xây dựng domain, logic đặt giá, Auto-Bidding, Anti-snipping`

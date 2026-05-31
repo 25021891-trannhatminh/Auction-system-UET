@@ -27,28 +27,23 @@ jobs:
       - name: Run tests
         run: mvn verify
 
-      - name: Package application
+
+      # Build Fat JAR (shade plugin bundle cả 3 platform natives)
+      - name: Package Fat JARs
         run: mvn package -DskipTests
 
-      - name: Upload client artifact
+      - name: Upload client Fat JAR
         uses: actions/upload-artifact@v4
         with:
-          name: client-jar
-          path: client/target/*.jar
-        if: success()
-
-      - name: Upload server artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-jar
-          path: server/target/*.jar
-        if: success()
-
-      - name: Upload JAR artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: auction-system-jars
-          path: |
-            server/target/auction-server.jar
-            client/target/auction-client.jar
+          name: auction-client
+          # Lấy file không có "-original" suffix (file shade tạo ra)
+          path: client/target/auction-client.jar
           if-no-files-found: error
+
+      - name: Upload server JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: auction-server
+          path: server/target/auction-server.jar
+          if-no-files-found: error
+
