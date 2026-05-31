@@ -1329,6 +1329,7 @@ public class UserDashboardController extends BaseDashboardController {
     long secondsLeft = parseLongOrDefault(safeField(fields, 12), 0L);
     String seller = fallback(safeField(fields, 13), "Seller #" + itemId);
     String winner = safeField(fields, 14);
+    String winnerId = fields.size() > 19 ? safeField(fields, 19) : "";
     String imagePayload = safeField(fields, 15);
     String attributes = safeField(fields, 16);
     String snipeWindow = fallback(safeField(fields, 17), "300");
@@ -1359,7 +1360,7 @@ public class UserDashboardController extends BaseDashboardController {
         endTime,
         seller,
         winner,
-        "",
+        winnerId,
         attributes,
         snipeWindow,
         snipeExtension
@@ -3206,7 +3207,6 @@ public class UserDashboardController extends BaseDashboardController {
     Button bid = new Button("Place Bid");
     bid.setMnemonicParsing(false);
     bid.getStyleClass().add("auction-market-bid-btn");
-    bid.setDisable(!isAuctionBidEnabled(data));
     bid.setMaxWidth(Double.MAX_VALUE);
     bid.setOnAction(event -> renderAuctionDetailPage(latestAuctionCard(data)));
 
@@ -3417,14 +3417,14 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (!sellerView) {
       bidInput.setPromptText("Enter bid amount");
-      bidInput.setDisable(!isAuctionBidEnabled(displayData) || manualBidPending);
+      bidInput.setDisable(manualBidPending);
       bidInput.getStyleClass().add("auction-detail-bid-input");
       bidInput.setMinWidth(0);
       HBox.setHgrow(bidInput, Priority.ALWAYS);
 
       placeBidButton.setMnemonicParsing(false);
       placeBidButton.getStyleClass().add("auction-market-bid-btn");
-      placeBidButton.setDisable(!isAuctionBidEnabled(displayData) || manualBidPending);
+      placeBidButton.setDisable(manualBidPending);
       lockRegionWidth(placeBidButton, 104);
       placeBidButton.setOnAction(event -> submitManualBid(displayData, bidInput));
 
@@ -3704,7 +3704,7 @@ public class UserDashboardController extends BaseDashboardController {
     for (TextField input : new TextField[] {maxInput, incrementInput}) {
       input.getStyleClass().add("auction-detail-bid-input");
       input.setMinWidth(0);
-      input.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
+      input.setDisable(autoBidPending);
       HBox.setHgrow(input, Priority.ALWAYS);
     }
     incrementInput.setText(normalize(latestData.minimumIncrement).equals("0 vnd") ? "" : latestData.minimumIncrement);
@@ -3716,13 +3716,13 @@ public class UserDashboardController extends BaseDashboardController {
     actions.getColumnConstraints().addAll(percentColumn(50), percentColumn(50));
     registerButton.setMnemonicParsing(false);
     registerButton.getStyleClass().add("auction-market-bid-btn");
-    registerButton.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
+    registerButton.setDisable(autoBidPending);
     registerButton.setMaxWidth(Double.MAX_VALUE);
     registerButton.setOnAction(event -> submitAutoBid(latestData, maxInput, incrementInput));
 
     cancelButton.setMnemonicParsing(false);
     cancelButton.getStyleClass().add("auction-detail-secondary-btn");
-    cancelButton.setDisable(!isAuctionBidEnabled(latestData) || autoBidPending);
+    cancelButton.setDisable(autoBidPending);
     cancelButton.setMaxWidth(Double.MAX_VALUE);
     cancelButton.setOnAction(event -> cancelAutoBid(latestData));
 
@@ -3924,8 +3924,7 @@ public class UserDashboardController extends BaseDashboardController {
     return latestData != null
         && normalize(latestData.status).equals("running")
         && currentSecondsLeft(latestData) > 0
-        && !isOwnAuction(latestData)
-        && !isCurrentUserWinning(latestData);
+        && !isOwnAuction(latestData);
   }
 
   private String bidDisabledReason(AuctionCardData data) {
@@ -3938,9 +3937,6 @@ public class UserDashboardController extends BaseDashboardController {
     }
     if (isOwnAuction(latestData)) {
       return "You cannot bid on your own auction.";
-    }
-    if (isCurrentUserWinning(latestData)) {
-      return leaderBidWarningText();
     }
     return "This auction is not accepting bids right now.";
   }
@@ -4003,11 +3999,6 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    if (!isAuctionBidEnabled(latestData)) {
-      showBidFeedback(bidDisabledReason(latestData), true);
-      updateActiveBidControls(latestData);
-      return;
-    }
     if (isManualBidSubmitting(latestData.auctionId)) {
       showBidFeedback("Your previous bid is still being confirmed by the server.", false);
       updateActiveBidControls(latestData);
@@ -4032,20 +4023,6 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    BigDecimal currentBidValue = moneyValue(latestData.price);
-    if (bidValue.compareTo(currentBidValue) <= 0) {
-      showBidFeedback("Bid must be greater than current price "
-          + formatMoney(currentBidValue.toPlainString()) + ".", true);
-      return;
-    }
-
-    BigDecimal minimumIncrement = moneyValue(latestData.minimumIncrement);
-    BigDecimal minimumAcceptedBid = currentBidValue.add(minimumIncrement);
-    if (minimumIncrement.compareTo(BigDecimal.ZERO) > 0
-        && bidValue.compareTo(minimumAcceptedBid) < 0) {
-      showBidFeedback("Bid must be at least " + formatMoney(minimumAcceptedBid.toPlainString()) + ".", true);
-      return;
-    }
 
     if (networkManager == null) {
       networkManager = NetworkManager.getInstance();
@@ -4067,11 +4044,6 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
 
-    if (!isAuctionBidEnabled(latestData)) {
-      showBidFeedback(bidDisabledReason(latestData), true);
-      updateActiveBidControls(latestData);
-      return;
-    }
     if (isAutoBidSubmitting(latestData.auctionId)) {
       showBidFeedback("Your auto-bid change is still being confirmed by the server.", false);
       updateActiveBidControls(latestData);
@@ -4097,14 +4069,6 @@ public class UserDashboardController extends BaseDashboardController {
 
     if (maxBidValue.compareTo(BigDecimal.ZERO) <= 0 || incrementValue.compareTo(BigDecimal.ZERO) <= 0) {
       showBidFeedback("Auto-bid max and increment must be greater than 0.", true);
-      return;
-    }
-    if (maxBidValue.compareTo(moneyValue(latestData.price)) <= 0) {
-      showBidFeedback("Auto-bid max must be higher than the current price.", true);
-      return;
-    }
-    if (incrementValue.compareTo(moneyValue(latestData.minimumIncrement)) < 0) {
-      showBidFeedback("Auto-bid increment must meet the minimum increment.", true);
       return;
     }
 
@@ -4258,9 +4222,7 @@ public class UserDashboardController extends BaseDashboardController {
     if (message.startsWith("FAIL ") && activeAuctionDetailId != null) {
       clearManualBidSubmitting(activeAuctionDetailId);
       clearAutoBidSubmitting(activeAuctionDetailId);
-      if (activeAuctionBidButton != null) {
-        activeAuctionBidButton.setDisable(false);
-      }
+      updateActiveBidControls(latestAuctionCardById(activeAuctionDetailId));
       showBidFeedback(readableBidFailure(message.substring("FAIL ".length())), true);
       return;
     }
@@ -4359,9 +4321,7 @@ public class UserDashboardController extends BaseDashboardController {
         && (auctionId.isBlank()
         || "-1".equals(auctionId)
         || activeAuctionDetailId.equals(auctionId))) {
-      if (activeAuctionBidButton != null) {
-        activeAuctionBidButton.setDisable(false);
-      }
+      updateActiveBidControls(latestAuctionCardById(activeAuctionDetailId));
       showBidFeedback(readableBidFailure(reason), true);
     }
   }
@@ -4516,13 +4476,6 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void applyClosedAuctionUiState(String auctionId, String finalPrice, String status) {
     if (isActiveAuction(auctionId)) {
-      if (activeAuctionBidInput != null) {
-        activeAuctionBidInput.setDisable(true);
-      }
-      if (activeAuctionBidButton != null) {
-        activeAuctionBidButton.setDisable(true);
-      }
-      setAutoBidControlsDisabled(true);
       updateActiveAuctionPrice(finalPrice, -1);
       updateActiveAuctionCountdown(0);
       showBidFeedback("This auction has closed with status " + status + ".", false);
@@ -4669,6 +4622,8 @@ public class UserDashboardController extends BaseDashboardController {
       case "AUCTION_CLOSED" -> "This auction is closed.";
       case "AUCTION_NOT_FOUND" -> "This auction could not be found.";
       case "OWN_AUCTION" -> "You cannot auto bid on your own auction.";
+      case "SELF_OUTBID", "ALREADY_LEADING", "USER_ALREADY_LEADING" ->
+          "You are currently leading this auction. Wait until another user outbids you.";
       case "BELOW_CURRENT_PRICE" -> "Auto-bid max must be higher than the current price.";
       case "BELOW_MIN_INCREMENT" -> "Auto-bid increment must meet the minimum increment.";
       case "AUTO_BID_NOT_FOUND" -> "No active auto-bid rule was found for this auction.";
@@ -4691,6 +4646,8 @@ public class UserDashboardController extends BaseDashboardController {
       case "AMOUNT_MUST_BE_POSITIVE" -> "Bid amount must be greater than 0.";
       case "AMOUNT_NOT_POSITIVE" -> "Bid amount must be greater than 0.";
       case "OWN_AUCTION" -> "You cannot bid on your own auction.";
+      case "SELF_OUTBID", "ALREADY_LEADING", "USER_ALREADY_LEADING" ->
+          "You are currently leading this auction. Wait until another user outbids you.";
       case "BELOW_MIN_INCREMENT" -> "Your bid must meet the minimum increment.";
       case "BELOW_CURRENT_PRICE" -> "Your bid must be higher than the current price.";
       case "AUCTION_NOT_FOUND" -> "This auction could not be found.";
@@ -5334,27 +5291,26 @@ public class UserDashboardController extends BaseDashboardController {
 
   private void updateActiveBidControls(AuctionCardData data) {
     AuctionCardData latestData = latestAuctionCard(data);
-    boolean baseDisabled = !isAuctionBidEnabled(latestData);
     boolean manualPending = latestData != null && isManualBidSubmitting(latestData.auctionId);
     boolean autoPending = latestData != null && isAutoBidSubmitting(latestData.auctionId);
 
     if (activeAuctionBidInput != null) {
-      activeAuctionBidInput.setDisable(baseDisabled || manualPending);
+      activeAuctionBidInput.setDisable(manualPending);
     }
     if (activeAuctionBidButton != null) {
-      activeAuctionBidButton.setDisable(baseDisabled || manualPending);
+      activeAuctionBidButton.setDisable(manualPending);
     }
     if (activeAutoBidMaxInput != null) {
-      activeAutoBidMaxInput.setDisable(baseDisabled || autoPending);
+      activeAutoBidMaxInput.setDisable(autoPending);
     }
     if (activeAutoBidIncrementInput != null) {
-      activeAutoBidIncrementInput.setDisable(baseDisabled || autoPending);
+      activeAutoBidIncrementInput.setDisable(autoPending);
     }
     if (activeAutoBidRegisterButton != null) {
-      activeAutoBidRegisterButton.setDisable(baseDisabled || autoPending);
+      activeAutoBidRegisterButton.setDisable(autoPending);
     }
     if (activeAutoBidCancelButton != null) {
-      activeAutoBidCancelButton.setDisable(baseDisabled || autoPending);
+      activeAutoBidCancelButton.setDisable(autoPending);
     }
     if (activeAuctionBidMessageLabel != null && latestData != null) {
       refreshBidMessage(activeAuctionBidMessageLabel, latestData, manualPending, autoPending);
