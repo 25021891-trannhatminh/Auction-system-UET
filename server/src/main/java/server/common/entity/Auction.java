@@ -211,12 +211,6 @@ public class Auction extends Entity {
         if (bidder.getStatus() != UserStatus.ACTIVE){
             throw new BidderException(bidder.getId(), bidder.getStatus());
         }
-        if (!isAutoBid && currentLeader != null){
-            int winnerID = currentLeader.getId();
-            if (bidder.getId() == winnerID){
-                throw new BidderException(sellerId, this.getId());
-            }
-        }
 
         if (bidder.getId() == sellerId ) {
             throw new BidderException(sellerId, this.getId());
