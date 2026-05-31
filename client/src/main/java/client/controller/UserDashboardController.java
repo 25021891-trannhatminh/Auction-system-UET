@@ -2307,8 +2307,6 @@ public class UserDashboardController extends BaseDashboardController {
         "Refunded",
         "Deposit",
         "Withdraw",
-        "Hold",
-        "Release",
         "Payment",
         "Refund"
     );
@@ -2699,27 +2697,16 @@ public class UserDashboardController extends BaseDashboardController {
       Button payButton = new Button(submitting ? "Paying" : "Pay");
       payButton.setMnemonicParsing(false);
       payButton.getStyleClass().addAll("mini-action-btn", "transaction-pay-btn");
-      payButton.setMaxWidth(Double.MAX_VALUE);
+      lockRegionWidth(payButton, 42);
+      payButton.setMinHeight(20);
+      payButton.setPrefHeight(20);
+      payButton.setMaxHeight(20);
       payButton.setDisable(submitting);
       payButton.setOnAction(event -> {
         submitTransactionPayment(transaction);
         event.consume();
       });
       return payButton;
-    }
-
-    if (transaction.isRefundable()) {
-      boolean submitting = isRefundSubmitting(transaction);
-      Button refundButton = new Button(submitting ? "Refunding" : "Refund");
-      refundButton.setMnemonicParsing(false);
-      refundButton.getStyleClass().addAll("mini-action-btn", "transaction-refund-btn");
-      refundButton.setMaxWidth(Double.MAX_VALUE);
-      refundButton.setDisable(submitting);
-      refundButton.setOnAction(event -> {
-        submitTransactionRefund(transaction);
-        event.consume();
-      });
-      return refundButton;
     }
 
     Label status = transactionTableLabel(resolveTransactionStatus(transaction), "transaction-status-cell");
@@ -3157,21 +3144,31 @@ public class UserDashboardController extends BaseDashboardController {
   }
 
   private VBox buildAuctionProductCard(AuctionCardData data) {
+    AuctionCardData latestData = latestAuctionCard(data);
+    if (latestData == null) {
+      latestData = data;
+    }
+    boolean currentUserLeading = isCurrentUserWinning(latestData);
+
     VBox card = new VBox(10);
     card.getStyleClass().add("auction-market-card");
     card.setMinWidth(0);
     card.setMaxWidth(Double.MAX_VALUE);
+    card.setStyle("-fx-cursor: hand;");
+    card.setOnMouseClicked(event -> renderAuctionDetailPage(latestAuctionCard(data)));
 
-    StackPane imageWrap = createAuctionImageWrap(data.imagePath, 205);
+    StackPane imageWrap = createAuctionImageWrap(latestData.imagePath, 205);
 
-    Label reserveBadge = new Label(isNoReserve(data.reservePrice) ? "No Reserve" : "Reserve Set");
+    Label reserveBadge = new Label(
+        isNoReserve(latestData.reservePrice) ? "No Reserve" : "Reserve Set"
+    );
     reserveBadge.getStyleClass().add("auction-market-badge");
     reserveBadge.getStyleClass().add(
-        isNoReserve(data.reservePrice) ? "status-neutral" : "status-good"
+        isNoReserve(latestData.reservePrice) ? "status-neutral" : "status-good"
     );
     StackPane.setAlignment(reserveBadge, Pos.TOP_LEFT);
 
-    Label timeBadge = new Label(formatTimeLeft(currentSecondsLeft(data)));
+    Label timeBadge = new Label(formatTimeLeft(currentSecondsLeft(latestData)));
     timeBadge.getStyleClass().add("auction-market-time");
     StackPane.setAlignment(timeBadge, Pos.TOP_RIGHT);
     imageWrap.getChildren().addAll(reserveBadge, timeBadge);
@@ -3179,38 +3176,43 @@ public class UserDashboardController extends BaseDashboardController {
     VBox content = new VBox(8);
     content.getStyleClass().add("auction-market-content");
 
-    Label title = new Label(data.title);
+    Label title = new Label(latestData.title);
     title.getStyleClass().add("auction-market-title");
     title.setWrapText(true);
 
-    Label meta = new Label(data.category + " • " + data.status + " • Seller " + data.seller);
+    Label meta = new Label(latestData.category + " • " + latestData.status + " • Seller "
+        + latestData.seller);
     meta.getStyleClass().add("auction-market-meta");
     meta.setWrapText(true);
 
     VBox priceBox = new VBox(2);
     Label currentBidLabel = new Label("Current Bid");
     currentBidLabel.getStyleClass().add("auction-market-label");
-    Label currentBid = new Label(data.price);
+    Label currentBid = new Label(latestData.price);
     currentBid.getStyleClass().add("auction-market-price");
     priceBox.getChildren().addAll(currentBidLabel, currentBid);
 
     HBox facts = new HBox(12);
     facts.getStyleClass().add("auction-market-facts");
-    Label bidCount = new Label(data.bids);
+    Label bidCount = new Label(latestData.bids);
     bidCount.getStyleClass().add("auction-market-small-fact");
-    Label increment = new Label("Min increment " + data.minimumIncrement);
+    Label increment = new Label("Min increment " + latestData.minimumIncrement);
     increment.getStyleClass().add("auction-market-small-fact");
     Region factSpacer = new Region();
     HBox.setHgrow(factSpacer, Priority.ALWAYS);
     facts.getChildren().addAll(bidCount, factSpacer, increment);
 
+    VBox bidActionBox = new VBox(5);
+    bidActionBox.setMaxWidth(Double.MAX_VALUE);
     Button bid = new Button("Place Bid");
     bid.setMnemonicParsing(false);
     bid.getStyleClass().add("auction-market-bid-btn");
     bid.setMaxWidth(Double.MAX_VALUE);
+    bid.setDisable(currentUserLeading);
     bid.setOnAction(event -> renderAuctionDetailPage(latestAuctionCard(data)));
+    bidActionBox.getChildren().add(bid);
 
-    content.getChildren().addAll(title, meta, priceBox, facts, bid);
+    content.getChildren().addAll(title, meta, priceBox, facts, bidActionBox);
     card.getChildren().addAll(imageWrap, content);
     return card;
   }
@@ -3411,9 +3413,11 @@ public class UserDashboardController extends BaseDashboardController {
     TextField autoBidIncrementInput = new TextField();
     Button autoBidRegisterButton = new Button("Enable Auto");
     Button autoBidCancelButton = new Button("Cancel Auto");
+    VBox manualBidSection = null;
     VBox autoBidPanel = null;
     Label bidMessage = new Label();
     boolean manualBidPending = !sellerView && isManualBidSubmitting(displayData.auctionId);
+    boolean currentUserLeading = !sellerView && isCurrentUserWinning(displayData);
 
     if (!sellerView) {
       bidInput.setPromptText("Enter bid amount");
@@ -3424,13 +3428,20 @@ public class UserDashboardController extends BaseDashboardController {
 
       placeBidButton.setMnemonicParsing(false);
       placeBidButton.getStyleClass().add("auction-market-bid-btn");
-      placeBidButton.setDisable(manualBidPending);
+      placeBidButton.setDisable(manualBidPending || currentUserLeading);
       lockRegionWidth(placeBidButton, 104);
       placeBidButton.setOnAction(event -> submitManualBid(displayData, bidInput));
 
       bidRow.getChildren().addAll(bidInput, placeBidButton);
+      manualBidSection = new VBox(5);
+      manualBidSection.setMaxWidth(Double.MAX_VALUE);
+      manualBidSection.getChildren().add(bidRow);
       autoBidPanel = buildAutoBidPanel(
-          displayData, autoBidMaxInput, autoBidIncrementInput, autoBidRegisterButton, autoBidCancelButton);
+          displayData,
+          autoBidMaxInput,
+          autoBidIncrementInput,
+          autoBidRegisterButton,
+          autoBidCancelButton);
     }
 
     bidMessage.getStyleClass().add("auction-detail-end-note");
@@ -3438,6 +3449,7 @@ public class UserDashboardController extends BaseDashboardController {
     bidMessage.setMaxWidth(Double.MAX_VALUE);
     if (!sellerView) {
       refreshBidMessage(bidMessage, displayData, manualBidPending, false);
+      manualBidSection.getChildren().add(bidMessage);
     }
 
     Label endNote = new Label(displayData.endTime == null || displayData.endTime.isBlank()
@@ -3449,9 +3461,6 @@ public class UserDashboardController extends BaseDashboardController {
     VBox timeNotes = new VBox(3);
     timeNotes.getStyleClass().add("auction-detail-time-notes");
     timeNotes.setMaxWidth(Double.MAX_VALUE);
-    if (!sellerView) {
-      timeNotes.getChildren().add(bidMessage);
-    }
     timeNotes.getChildren().add(endNote);
 
     sidePanel.getChildren().addAll(timeTitle, countdown, metaRow, priceBox);
@@ -3459,7 +3468,7 @@ public class UserDashboardController extends BaseDashboardController {
       sidePanel.getChildren().add(buildSellerPerformancePanel(displayData));
       sidePanel.getChildren().add(timeNotes);
     } else {
-      sidePanel.getChildren().add(bidRow);
+      sidePanel.getChildren().add(manualBidSection);
       if (autoBidPanel != null) {
         sidePanel.getChildren().add(autoBidPanel);
       }
@@ -4002,6 +4011,11 @@ public class UserDashboardController extends BaseDashboardController {
     if (isManualBidSubmitting(latestData.auctionId)) {
       showBidFeedback("Your previous bid is still being confirmed by the server.", false);
       updateActiveBidControls(latestData);
+      return;
+    }
+    if (isCurrentUserWinning(latestData)) {
+      updateActiveBidControls(latestData);
+      showBidFeedback(leaderBidWarningText(), true);
       return;
     }
 
@@ -5247,16 +5261,13 @@ public class UserDashboardController extends BaseDashboardController {
       return false;
     }
 
-    String currentUserId = normalize(currentUserIdString());
     String leaderId = normalize(data.winnerId);
-    if (isKnownLeaderId(leaderId) && !currentUserId.isBlank()) {
-      return currentUserId.equals(leaderId);
+    if (isKnownLeaderId(leaderId)) {
+      String currentUserId = normalize(currentUserIdString());
+      return !currentUserId.isBlank() && currentUserId.equals(leaderId);
     }
 
     String leaderName = normalize(data.winner);
-    if (isKnownLeaderId(leaderName) && !currentUserId.isBlank()) {
-      return currentUserId.equals(leaderName);
-    }
     if (!isKnownLeaderName(leaderName)) {
       return false;
     }
@@ -5293,12 +5304,13 @@ public class UserDashboardController extends BaseDashboardController {
     AuctionCardData latestData = latestAuctionCard(data);
     boolean manualPending = latestData != null && isManualBidSubmitting(latestData.auctionId);
     boolean autoPending = latestData != null && isAutoBidSubmitting(latestData.auctionId);
+    boolean currentUserLeading = latestData != null && isCurrentUserWinning(latestData);
 
     if (activeAuctionBidInput != null) {
       activeAuctionBidInput.setDisable(manualPending);
     }
     if (activeAuctionBidButton != null) {
-      activeAuctionBidButton.setDisable(manualPending);
+      activeAuctionBidButton.setDisable(manualPending || currentUserLeading);
     }
     if (activeAutoBidMaxInput != null) {
       activeAutoBidMaxInput.setDisable(autoPending);
@@ -5346,9 +5358,20 @@ public class UserDashboardController extends BaseDashboardController {
       return;
     }
     targetLabel.setText(message == null ? "" : message);
-    targetLabel.setStyle(warning
-        ? "-fx-text-fill: #b3342b; -fx-font-size: 12px; -fx-font-weight: 900;"
-        : "-fx-text-fill: #4d453d; -fx-font-size: 12px;");
+    if (warning) {
+      styleLeaderWarning(targetLabel);
+    } else {
+      targetLabel.setStyle("-fx-text-fill: #4d453d; -fx-font-size: 12px;");
+    }
+  }
+
+  private void styleLeaderWarning(Label targetLabel) {
+    if (targetLabel == null) {
+      return;
+    }
+    targetLabel.setMinHeight(Region.USE_PREF_SIZE);
+    targetLabel.setStyle("-fx-text-fill: #b3342b; -fx-font-size: 12px; -fx-font-weight: 900;"
+        + " -fx-line-spacing: 2px;");
   }
 
   private void removeAutoBidRule(String auctionId) {
