@@ -3,6 +3,7 @@
 
 # Online Auction System - Hệ thống đấu giá trực tuyến
 Advanced Programming Project - Computer Science - UET
+- **Link Repository:** [https://github.com/25021891-trannhatminh/Auction-system-UET](https://github.com/25021891-trannhatminh/Auction-system-UET)
 ## 1. Mô tả hệ thống
 Dự án xây dựng một hệ thống đấu giá trực tuyến
 - Hệ thống hỗ trợ các vai trò chính gồm **Bidder**, **Seller** và **Admin**, đồng thời cho phép quản lý sản phẩm, tham gia đấu giá, cập nhật realtime và xử lý kết thúc phiên đấu giá theo thời gian quy định.
@@ -20,22 +21,19 @@ Phạm vi hệ thống tập trung vào các chức năng cốt lõi của một
 - **Kiến trúc:** `Client–Server`
 - **Networking:** `Socket`
 - **Build tool:** `Maven multi-module`
-- **Database:** `MySQL, TiDB`
-- **Testing:** `________________`
+- **Database:** `MySQL, TiDB, HikariCP`
+- **Testing:** `JUnit 5`
 - **CI/CD:** `GitHub Actions + JUnit5`
 
 ### Môi trường chạy
 - **Hệ điều hành:** `Windows, Linux, MacOS`
 - **JDK:** `25`
-- **IDE:** `IntelliJ, Visual Studio Code`
-- **Phiên bản JavaFX:** `________________`
+- **Phiên bản JavaFX:** `23`
 
 ### Yêu cầu cài đặt
-1. Cài đặt `________________`.
-2. Cấu hình `________________`.
-3. Import project vào `________________`.
-4. Thiết lập database `________________`.
-5. Chạy server trước, sau đó mới chạy client.
+1. Cài đặt `Java JDK 25, Maven 3.8+`.
+2. Thiết lập database `MySQL WorkBench`.
+3. Chạy server trước, sau đó mới chạy client.
 
 ## 3. Cấu trúc thư mục
 ```text
@@ -55,21 +53,21 @@ project-root/
 ```
 
 ### Các module chính
-- `________________`: xử lý giao diện người dùng.
+- `Controller`: xử lý giao diện người dùng.
 - `Service`: xử lý nghiệp vụ đấu giá.
-- `________________`: quản lý kết nối và dữ liệu.
-- `________________`: lưu trữ entity / model / DTO.
+- `NetworkManager, AuctionServer`: quản lý kết nối.
+- `Entity`: lưu trữ entity / model / DTO.
 - `Repository`: xử lý các thao tác với database.
 
 ## 4. Hướng dẫn chạy hệ thống
 ### Bước 1: Khởi động Server
 ```bash
-________________
+java -jar server/target/auction-server.jar
 ```
 
 ### Bước 2: Khởi động Client
 ```bash
-________________
+java -jar client/target/auction-client.jar
 ```
 
 ### Bước 3: Đăng nhập và sử dụng hệ thống
@@ -99,7 +97,7 @@ ________________
 - [x] Bid History Visualization.
 
 ## 6. Tài liệu và demo
-- **Báo cáo PDF:** [link báo cáo](________________)
+- **Báo cáo PDF:** [AuctionSystem_Report](docs/AuctionSystem_Report.pdf)
 - **Video demo:** [link video](________________)
 
 ## 7. Thành viên nhóm
