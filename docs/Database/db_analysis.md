@@ -1,5 +1,5 @@
 # BÁO CÁO PHÂN TÍCH CHI TIẾT SƠ ĐỒ CƠ SỞ DỮ LIỆU (DATABASE SCHEMA)
-Tài liệu này cung cấp cái nhìn chi tiết và phân tích sâu về thiết kế cơ sở dữ liệu của hệ thống đấu giá trực tuyến (Online Auction System) dựa trên file định nghĩa [01_schema.sql](../database/01_schema.sql).
+Tài liệu này cung cấp cái nhìn chi tiết và phân tích sâu về thiết kế cơ sở dữ liệu của hệ thống đấu giá trực tuyến (Online Auction System) dựa trên file định nghĩa [01_schema.sql](../../database/01_schema.sql).
 ---
 ## 1. Thiết kế Định danh & Khóa chính (Primary Key Generation)
 Hệ thống sử dụng cơ chế cấp phát giá trị tuần tự (Sequence-based auto-generation) cho các trường khóa chính thay vì sử dụng từ khóa `AUTO_INCREMENT` mặc định của MySQL:

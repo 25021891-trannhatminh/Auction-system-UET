@@ -6,8 +6,8 @@
 
 Hệ thống được thiết kế theo mô hình **Observer Pattern**, tách biệt rõ hai luồng xử lý:
 
-- **BusinessEventListener** — xử lý nghiệp vụ nặng (payment, lưu DB thông báo)
-- **RealTimeObserver** — phục vụ cập nhật UI tức thời qua socket
+- **BusinessEventListener** — xử lý thông báo nghiệp vụ nặng (payment, lưu DB thông báo)
+- **RealTimeObserver** — phục vụ cập nhật UI tức thời qua socket (Outbid, BidSuccess, TimeExtend)
 
 Hai interface này là *marker interface*, chỉ cho phép implement bởi các class được chỉ định cụ thể, ngăn các thành phần khác lắng nghe sai tầng.
 
@@ -40,7 +40,7 @@ NotificationEventHandler  (implements BusinessEventListener + RealTimeObserver)
 | `push()` | ✅ | ✅ | Sự kiện nghiệp vụ quan trọng (won, lost, payment) |
 | `pushRealtimeOnly()` | ❌ | ✅ | Realtime tức thời (outbid, bid placed, time extended) |
 
-**Lý do thiết kế:** Các sự kiện như `onOutbid` hay `onBidPlacedSuccess` xảy ra liên tục trong một phiên đấu giá và không cần lưu lịch sử. Việc chỉ push realtime giảm tải đáng kể cho database mà không mất thông tin quan trọng.
+**Lý do thiết kế:** Các sự kiện như `onOutbid` hay `onBidPlacedSuccess` xảy ra liên tục trong một phiên đấu giá và không cần lưu lịch sử vì BidHistory lưu thông tin này. Việc chỉ push realtime giảm tải đáng kể cho database mà không mất thông tin quan trọng.
 
 ### 2.3. NotificationDispatcher — Trung tâm phân phối
 

@@ -37,6 +37,8 @@ Gọi `Auction.placeBid()` trong `ReentrantLock(fair=true)`. Bên trong lock, ki
 **Bước 5 — Notify**
 Sau khi commit thành công, push realtime qua socket và gọi `auction.notifyBidCommitted()` để các `RealTimeObserver` cập nhật UI cho tất cả client trong phòng.
 
+**Tổng quan:**
+        Request đặt bid → AuctionService check State, condition → DB lock , RAM lock + Update RAM, DB đồng thời (có hỗ trợ rollback nếu DB persist fail) → Thông báo cho Observers
 ---
 
 ## 3. Anti-Sniping
@@ -60,7 +62,10 @@ Sau mỗi bid thủ công commit thành công, `AuctionService` gọi `AutoBidEn
 **Persist auto-bid** — Engine trả về `PlaceBidResult`, `AuctionService` gọi lại toàn bộ flow `placeBid()` với `isAutoBid=true` để persist qua đúng DB transaction, không duplicate code.
 
 Trigger được gọi trong 4 tình huống: auction bắt đầu (OPEN→RUNNING), sau mỗi bid thủ công thành công, khi có config auto-bid mới đăng ký vào phiên đang chạy hoặc hủy config đã đăng ký.
-Xử lý edge case: Leader (người dẫn đầu) cancel config -> Hệ thống rollback lại trạng thái trước khi Leader đó đặt bid (RAM + DB rollback)
+**Xử lý edge case:**
+- Khi có 1 bid thủ công đặt, gọi đến luôn AutoBidEngine tính toán `config` có `maxBid` cao nhất có thể bid lại không? Tránh hiện tượng gọi các `config` khác tốn tài nguyên
+- Hệ thống có xử lý logic cho việc thay đổi `config` AutoBid `maxBid` thấp hơn mà không bị self outbid
+- Leader (người dẫn đầu) cancel config → Hệ thống rollback lại trạng thái trước khi Leader đó đặt bid (RAM + DB rollback)
 
 ---
 
@@ -86,7 +91,7 @@ OPEN  →  RUNNING  →  FINISHED  →  PAID
 `AuctionManager` dùng `ScheduledExecutorService` (thread pool, daemon) để tự động chuyển trạng thái:
 - `scheduleOpen()` — chạy khi đến `startTime`, gọi `auction.startRunning()` rồi trigger auto-bid.
 - `scheduleClose()` — chạy khi đến `endTime`, kiểm tra remaining time trước khi đóng (re-schedule nếu anti-snipe đã gia hạn).
-
+- ScheduledExecutorService hoạt động với RAM, thực hiện callback khi Auction START/END cho `AuctionService` update Database luôn
 Khi server khởi động lại, `AuctionService.loadAllFromDatabase()` load lại toàn bộ auction `OPEN/RUNNING`, khôi phục bid history và auto-bid config, rồi đăng ký lại vào scheduler — đảm bảo không mất phiên sau khi restart.
 
 ---
