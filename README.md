@@ -98,7 +98,7 @@ java -jar client/target/auction-client.jar
 
 ## 6. Tài liệu và demo
 - **Báo cáo PDF:** [AuctionSystem_Report](docs/AuctionSystem_Report.pdf)
-- **Video demo:** [link video](________________)
+- **Video demo:** [link video](https://drive.google.com/file/d/11asuA44a46hL5MKsjkDKKm3QwOxHVpqL/view?usp=sharing)
 
 ## 7. Thành viên nhóm
 - `Trần Nhật Minh` - `Xây dựng domain, logic đặt giá, Auto-Bidding, Anti-snipping`
