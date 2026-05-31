@@ -335,7 +335,8 @@ public abstract class BaseDashboardController {
     protected boolean isNotificationHistoryMessage(String message) {
         return message != null && (message.equals("USER_NOTIFICATIONS_BEGIN")
             || message.equals("USER_NOTIFICATIONS_END")
-            || message.startsWith("USER_NOTIFICATION "));
+            || message.startsWith("USER_NOTIFICATION ")
+            || message.startsWith("USER_NOTIFICATIONS_ERROR"));
     }
 
     protected boolean isNotificationMarkReadResponse(String message) {
@@ -396,6 +397,19 @@ public abstract class BaseDashboardController {
             if (notificationPopup != null && notificationPopup.isShowing()) {
                 refreshNotificationPopupContent();
             }
+            return;
+        }
+
+        if (message.startsWith("USER_NOTIFICATIONS_ERROR")) {
+            unreadNotificationCount = incomingHistoryUnreadCount;
+            updateNotificationBadge();
+            if (notificationPopup != null && notificationPopup.isShowing()) {
+                refreshNotificationPopupContent();
+            }
+            notifUIHandler.showError(
+                "Notification sync failed",
+                "The server could not load notification history. Realtime alerts still work."
+            );
         }
     }
 

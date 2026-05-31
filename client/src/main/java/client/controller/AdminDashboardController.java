@@ -201,7 +201,7 @@ public class AdminDashboardController extends BaseDashboardController {
                 return;
             }
 
-            if (message.startsWith("ADMIN_")) {
+            if (message.startsWith("ADMIN_") || message.equals("USER_AUCTIONS_DIRTY")) {
                 Platform.runLater(() -> applyAdminServerMessage(message));
             }
         };
@@ -299,7 +299,15 @@ public class AdminDashboardController extends BaseDashboardController {
         }
 
         if (msg.equals("ADMIN_ITEMS_DIRTY")) {
-            // CREATE_ITEM broadcast from server: refresh items so Pending Approval updates live.
+            // CREATE_ITEM/approve/reject broadcasts: refresh item review and related auction links live.
+            adminNetworkManager.send("ADMIN_LIST_ITEMS");
+            adminNetworkManager.send("ADMIN_LIST_AUCTIONS");
+            return;
+        }
+
+        if (msg.equals("USER_AUCTIONS_DIRTY")) {
+            // Auction lifecycle/payment broadcasts are user-scoped, but admin tables also show auctions.
+            adminNetworkManager.send("ADMIN_LIST_AUCTIONS");
             adminNetworkManager.send("ADMIN_LIST_ITEMS");
             return;
         }
