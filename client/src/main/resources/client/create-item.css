@@ -1,0 +1,369 @@
+/* Create Item page styles.
+   Added for seller listing creation. The colors intentionally follow dashboard.css
+   green/gold/cream tone so the new page does not feel detached from the system. */
+
+.create-item-root {
+    -fx-background-color: linear-gradient(to bottom right, #f8f6ef, #eef4ef);
+    -fx-font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.content-scroll,
+.content-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.content-shell {
+    -fx-background-color: transparent;
+}
+
+.topbar {
+    -fx-background-color: rgba(255, 255, 255, 0.86);
+    -fx-border-color: rgba(170, 184, 175, 0.45);
+    -fx-border-width: 0 0 1 0;
+}
+
+.page-title {
+    -fx-font-size: 28px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #1f3d35;
+}
+
+.breadcrumb-label,
+.seller-role-label,
+.upload-subtext,
+.upload-file-name,
+.purchase-card-text,
+.message-label,
+.preview-seller {
+    -fx-font-size: 12px;
+    -fx-text-fill: #75867f;
+}
+
+.seller-name-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #224a40;
+}
+
+.seller-badge {
+    -fx-pref-width: 40px;
+    -fx-pref-height: 40px;
+    -fx-background-radius: 20px;
+    -fx-background-color: linear-gradient(to bottom right, #1e5a50, #74a08a);
+}
+
+.seller-badge-text {
+    -fx-text-fill: white;
+    -fx-font-weight: 800;
+}
+
+.card-panel {
+    -fx-background-color: rgba(255, 255, 255, 0.92);
+    -fx-background-radius: 22px;
+    -fx-border-radius: 22px;
+    -fx-border-color: rgba(161, 181, 171, 0.35);
+    -fx-padding: 22px;
+    -fx-effect: dropshadow(gaussian, rgba(30, 60, 52, 0.08), 18, 0.12, 0, 6);
+}
+
+.section-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #203d35;
+}
+
+.side-title {
+    -fx-padding: 4 0 0 4;
+}
+
+/* Dashed dropzone inspired by the reference image; actual file handling is in CreateItemController. */
+.upload-dropzone {
+    -fx-min-height: 220px;
+    -fx-background-color: linear-gradient(to bottom right, #fbfcfa, #f3f7f3);
+    -fx-border-color: rgba(125, 151, 139, 0.55);
+    -fx-border-style: segments(8, 8);
+    -fx-border-radius: 18px;
+    -fx-background-radius: 18px;
+    -fx-padding: 22px;
+}
+
+.upload-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #204239;
+}
+
+.purchase-card {
+    -fx-background-color: #fcfcfb;
+    -fx-border-color: rgba(170, 184, 175, 0.5);
+    -fx-border-radius: 16px;
+    -fx-background-radius: 16px;
+    -fx-padding: 16px;
+}
+
+.purchase-card-active {
+    -fx-border-color: rgba(38, 92, 79, 0.55);
+    -fx-background-color: #f5faf7;
+}
+
+.radio-card-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #203f36;
+}
+
+.field-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #29483f;
+}
+
+.form-field,
+.form-text-area {
+    -fx-background-color: #fbfcfb;
+    -fx-border-color: rgba(170, 184, 175, 0.58);
+    -fx-border-radius: 14px;
+    -fx-background-radius: 14px;
+    -fx-padding: 12px 14px;
+    -fx-font-size: 13px;
+    -fx-text-fill: #203c34;
+}
+
+.form-field:focused,
+.form-text-area:focused {
+    -fx-border-color: #2f6d5d;
+    -fx-background-color: white;
+}
+
+.form-text-area .content {
+    -fx-background-color: transparent;
+}
+
+.primary-btn,
+.secondary-btn,
+.ghost-btn,
+.dark-btn {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-background-radius: 18px;
+    -fx-padding: 11px 18px;
+    -fx-cursor: hand;
+}
+
+.primary-btn {
+    -fx-background-color: linear-gradient(to right, #1f5a4f, #6c9b87);
+    -fx-text-fill: white;
+}
+
+.primary-btn:hover {
+    -fx-opacity: 0.94;
+}
+
+.secondary-btn,
+.ghost-btn,
+.small-ghost-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(104, 128, 118, 0.55);
+    -fx-border-radius: 18px;
+    -fx-text-fill: #285247;
+}
+
+.dark-btn {
+    -fx-background-color: #18332d;
+    -fx-text-fill: white;
+}
+
+.small-primary-btn,
+.small-ghost-btn {
+    -fx-padding: 9px 16px;
+}
+
+/* Right preview card is visual feedback only; DB writes happen through CREATE_ITEM. */
+.preview-panel {
+    -fx-padding: 18px;
+}
+
+.preview-image-shell {
+    -fx-min-height: 180px;
+    -fx-pref-height: 180px;
+    -fx-background-color: linear-gradient(to bottom right, #e8f0eb, #f8fbf9);
+    -fx-background-radius: 18px;
+    -fx-border-radius: 18px;
+    -fx-border-color: rgba(161, 181, 171, 0.35);
+}
+
+.preview-status-badge {
+    -fx-background-color: rgba(29, 53, 48, 0.82);
+    -fx-background-radius: 14px;
+    -fx-padding: 6px 10px;
+    -fx-text-fill: white;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+}
+
+.preview-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #1f3d35;
+}
+
+.preview-price {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #255549;
+}
+
+/* Final tone sync with user-home navy / warm ivory theme. */
+.create-item-root,
+.create-item-root .label,
+.create-item-root .button,
+.create-item-root .text-field,
+.create-item-root .text-area,
+.create-item-root .combo-box,
+.create-item-root .radio-button {
+    -fx-font-family: "Times New Roman";
+}
+
+.create-item-root {
+    -fx-background-color: #0f2238;
+}
+
+.content-shell {
+    -fx-background-color: #f8f0e5;
+    -fx-background-radius: 24;
+    -fx-border-color: #e1c5a1;
+    -fx-border-radius: 24;
+    -fx-border-width: 1;
+}
+
+.topbar {
+    -fx-background-color: #102339;
+    -fx-border-color: rgba(224, 181, 113, 0.72);
+    -fx-border-width: 0 0 1 0;
+}
+
+.page-title {
+    -fx-font-size: 34px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #f8f0e5;
+}
+
+.breadcrumb-label,
+.seller-role-label {
+    -fx-text-fill: rgba(248, 240, 229, 0.78);
+}
+
+.seller-name-label {
+    -fx-text-fill: #f8f0e5;
+    -fx-font-weight: 900;
+}
+
+.seller-badge {
+    -fx-background-color: #102339;
+    -fx-border-color: #f1c17e;
+    -fx-border-radius: 999;
+    -fx-border-width: 2.2;
+}
+
+.seller-badge-text {
+    -fx-text-fill: #f3cc8c;
+    -fx-font-weight: 900;
+}
+
+.card-panel,
+.purchase-card,
+.preview-panel {
+    -fx-background-color: #f1e4d2;
+    -fx-background-radius: 18px;
+    -fx-border-radius: 18px;
+    -fx-border-color: #e5cfb5;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(53, 39, 25, 0.14), 14, 0.16, 0, 5);
+}
+
+.purchase-card-active {
+    -fx-border-color: #d5a466;
+    -fx-background-color: #eadbc7;
+}
+
+.section-title,
+.side-title,
+.upload-headline,
+.radio-card-title,
+.field-label,
+.preview-title,
+.preview-price {
+    -fx-text-fill: #1c2127;
+    -fx-font-weight: 900;
+}
+
+.upload-subtext,
+.upload-file-name,
+.purchase-card-text,
+.message-label,
+.preview-seller {
+    -fx-text-fill: #625b53;
+}
+
+.upload-dropzone,
+.preview-image-shell {
+    -fx-background-color: linear-gradient(to bottom right, #f8f0e5, #f1e4d2);
+    -fx-border-color: #d8bd98;
+}
+
+.form-field,
+.form-text-area,
+.form-text-area .content {
+    -fx-background-color: #f8f0e5;
+    -fx-control-inner-background: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-text-fill: #1c2127;
+    -fx-prompt-text-fill: #9b8874;
+}
+
+.form-field:focused,
+.form-text-area:focused {
+    -fx-border-color: #caa26c;
+    -fx-background-color: #fff9ec;
+}
+
+.primary-btn,
+.dark-btn,
+.small-primary-btn {
+    -fx-background-color: linear-gradient(to bottom, #f3cc8c, #e1b572);
+    -fx-background-radius: 14px;
+    -fx-border-color: #d5a466;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #102339;
+    -fx-font-weight: 900;
+}
+
+.primary-btn:hover,
+.dark-btn:hover,
+.small-primary-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #f8db9e, #eac58a);
+    -fx-opacity: 1;
+}
+
+.secondary-btn,
+.ghost-btn,
+.small-ghost-btn {
+    -fx-background-color: #f8f0e5;
+    -fx-border-color: #d8bd98;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #102339;
+    -fx-font-weight: 900;
+}
+
+.secondary-btn:hover,
+.ghost-btn:hover,
+.small-ghost-btn:hover {
+    -fx-background-color: #f2e5d5;
+}
+
+.preview-status-badge {
+    -fx-background-color: #102339;
+    -fx-border-color: #e0b571;
+    -fx-border-radius: 14px;
+    -fx-text-fill: #f3cc8c;
+}

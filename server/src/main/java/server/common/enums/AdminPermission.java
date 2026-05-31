@@ -1,0 +1,14 @@
+package server.common.enums;
+
+public enum AdminPermission {
+  BAN_USER,
+  UNBAN_USER,
+  FORCE_CLOSE_AUCTION,
+  APPROVE_ITEM,
+  REJECT_ITEM,
+  VIEW_ALL_USERS,
+  VIEW_ALL_ITEMS,
+  VIEW_ALL_AUCTIONS,
+  MANAGE_PAYMENTS,
+  SYSTEM_NOTIFICATION
+}

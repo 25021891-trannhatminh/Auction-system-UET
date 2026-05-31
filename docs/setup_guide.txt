@@ -1,0 +1,30 @@
+=====================================
+AUCTION APPLICATION - HƯỚNG DẪN SỬ DỤNG
+=====================================
+
+YÊU CẦU HỆ THỐNG:
+- Cài đặt Java 21 hoặc mới hơn
+- Cài đặt JRE
+- Connect Database MySQL: 
+	+ hostname: gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+	+ port: 4000
+	+ username: Mtvqn54fxNSEedW.root
+	+ password: J8iqJ41SrrN1GB8X
+
+CÁCH CHẠY SERVER (Máy chủ):
+1. Mở Command Prompt / Terminal
+2. Di chuyển đến thư mục chứa file auction-server.jar
+3. Chạy lệnh: java -jar auction-server.jar
+4. Server sẽ chạy và chờ kết nối
+
+CÁCH CHẠY CLIENT (Người dùng):
+1. Mở Command Prompt / Terminal
+2. Di chuyển đến thư mục chứa file auction-client.jar
+3. Chạy lệnh: java -jar auction-client.jar
+4. Ứng dụng sẽ mở giao diện JavaFX
+
+LƯU Ý:
+- Client cần kết nối được đến Server (cùng Wifi hoặc trên cùng máy)
+- Database sử dung MySQL kết nối trên Cloud bang TiDB 
+
+HỖ TRỢ: [nhatminhtran0130@gmail.com]

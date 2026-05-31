@@ -1,0 +1,136 @@
+.root-bg {
+    -fx-background-image: url("images/newbg.jpg");
+    -fx-background-size: cover;
+    -fx-background-position: center center;
+    -fx-background-repeat: no-repeat;
+    -fx-font-family: "Times New Roman";
+}
+
+.label,
+.button,
+.text-field,
+.password-field {
+    -fx-font-family: "Times New Roman";
+}
+
+.main-card {
+    -fx-background-color: rgba(10, 9, 6, 0.74);
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-color: rgba(198, 165, 83, 0.28);
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.40), 26, 0.16, 0, 10);
+}
+
+.form-pane {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+}
+
+.title {
+    -fx-text-fill: #d4b15a;
+    -fx-font-size: 32px;
+    -fx-font-weight: bold;
+}
+
+.sub-title {
+    -fx-text-fill: #f0eadb;
+    -fx-font-size: 14px;
+}
+
+.input {
+    -fx-background-color: rgba(29, 26, 17, 0.82);
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-color: rgba(213, 178, 88, 0.55);
+    -fx-border-width: 1;
+    -fx-font-size: 14px;
+    -fx-text-fill: #f2efe6;
+    -fx-prompt-text-fill: #d0c7ad;
+    -fx-padding: 0 14 0 14;
+}
+
+.input:focused {
+    -fx-background-color: rgba(39, 34, 20, 0.90);
+    -fx-border-color: #d4b15a;
+    -fx-border-width: 1.3;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+}
+
+.round-btn {
+    -fx-background-color: linear-gradient(to right, #d1b15d, #a78634);
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-text-fill: #100d06;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 11 28 11 28;
+    -fx-cursor: hand;
+}
+
+.round-btn:hover {
+    -fx-opacity: 0.92;
+}
+
+.overlay-pane {
+    -fx-background-color: linear-gradient(to bottom right, #070604, #151006 62%, #221606);
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+}
+
+.overlay-scrim {
+    -fx-background-color: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.72) 0%,
+        rgba(10, 8, 4, 0.58) 42%,
+        rgba(34, 22, 6, 0.36) 100%
+    );
+}
+
+.overlay-title-left {
+    -fx-text-fill: #fff1cf;
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-alignment: left;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.86), 10, 0.35, 0, 2);
+}
+
+.overlay-desc-left {
+    -fx-text-fill: #f0e5cf;
+    -fx-font-size: 14px;
+    -fx-text-alignment: left;
+    -fx-line-spacing: 3px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.72), 7, 0.28, 0, 1);
+}
+
+.overlay-desc-center {
+    -fx-text-fill: #f0e5cf;
+    -fx-font-size: 14px;
+    -fx-text-alignment: center;
+    -fx-line-spacing: 3px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.72), 7, 0.28, 0, 1);
+}
+
+.ghost-btn {
+    -fx-background-color: rgba(0, 0, 0, 0.18);
+    -fx-border-color: #d6c39a;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 0;
+    -fx-background-radius: 0;
+    -fx-text-fill: #fff1cf;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 11 28 11 28;
+    -fx-cursor: hand;
+}
+
+.ghost-btn:hover {
+    -fx-background-color: rgba(209, 177, 93, 0.15);
+}
+
+.message-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #e57373;
+}
