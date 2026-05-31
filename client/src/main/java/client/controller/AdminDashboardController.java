@@ -7,6 +7,12 @@ import client.model.NotificationModel;
 import client.model.User;
 import client.service.NetworkManager;
 import client.service.SessionManager;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -62,6 +68,14 @@ public class AdminDashboardController extends BaseDashboardController {
     private static final double THUMB_SIZE = 58;
     private static final int ADMIN_ROWS_PER_PAGE = 6;
     private static final Pattern MONEY_PATTERN = Pattern.compile("^[0-9]+(?:\\.[0-9]{1,2})?$");
+    private static final DateTimeFormatter AUCTION_TIME_FORMATTER =
+        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss").withResolverStyle(ResolverStyle.STRICT);
+    private static final BigDecimal MAX_AUCTION_MONEY = new BigDecimal("9999999999999.99");
+    private static final BigDecimal MIN_INCREMENT = new BigDecimal("1.00");
+    private static final int MAX_AUCTION_SECONDS = 32767;
+    private static final int MAX_MONEY_INPUT_LENGTH = 16;
+    private static final int MAX_SECONDS_INPUT_LENGTH = 5;
+    private static final int MAX_AUCTION_DURATION_DAYS = 365;
 
     private final Map<String, SectionContent> sections = AdminDashboardSections.buildSections();
     private final List<AdminRow> liveUserRows = new ArrayList<>();
@@ -2295,12 +2309,10 @@ public class AdminDashboardController extends BaseDashboardController {
         TextField reserveField = addFormCell(formGrid, 1, 1, "Reserve price", stripCurrency(data.startingPrice));
         TextField windowField = addFormCell(formGrid, 0, 2, "Snipe window seconds", "300");
         TextField extensionField = addFormCell(formGrid, 1, 2, "Snipe extension seconds", "60");
-        java.time.LocalDateTime defaultStart = java.time.LocalDateTime.now().plusMinutes(5);
-        java.time.LocalDateTime defaultEnd = defaultStart.plusDays(7);
-        java.time.format.DateTimeFormatter formatter =
-            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        startField.setText(defaultStart.format(formatter));
-        endField.setText(defaultEnd.format(formatter));
+        LocalDateTime defaultStart = LocalDateTime.now().plusMinutes(5);
+        LocalDateTime defaultEnd = defaultStart.plusDays(7);
+        startField.setText(defaultStart.format(AUCTION_TIME_FORMATTER));
+        endField.setText(defaultEnd.format(AUCTION_TIME_FORMATTER));
         incrementField.setText("10000");
         windowField.setText("300");
         extensionField.setText("60");
@@ -2370,27 +2382,110 @@ public class AdminDashboardController extends BaseDashboardController {
         String reservePrice,
         String snipeWindowSeconds,
         String snipeExtensionSeconds) {
-        if (data == null || data.itemId.isBlank() || data.sellerId.isBlank()) {
-            return "Thiếu item_id hoặc seller_id từ database.";
+        if (data == null || !isPositiveInteger(data.itemId) || !isPositiveInteger(data.sellerId)) {
+            return "Thiếu hoặc sai item_id/seller_id từ database, không được tạo auction.";
         }
-        if (startTime == null || startTime.isBlank() || endTime == null || endTime.isBlank()) {
-            return "Start time và End time là bắt buộc theo schema auctions.";
+
+        if (!normalize(data.status).equals("available")) {
+            return "Item không còn AVAILABLE, không được tạo auction mới.";
         }
-        if (!isMoney(minimumBidIncrement)) {
-            return "Minimum bid increment phải là số hợp lệ, ví dụ 10000.";
+
+        LocalDateTime parsedStart = parseAuctionDateTime(startTime);
+        if (parsedStart == null) {
+            return "Start time phải đúng format yyyy-MM-dd HH:mm:ss và là ngày giờ hợp lệ.";
         }
-        if (reservePrice != null && !reservePrice.isBlank() && !isMoney(reservePrice)) {
-            return "Reserve price phải để trống hoặc là số hợp lệ.";
+
+        LocalDateTime parsedEnd = parseAuctionDateTime(endTime);
+        if (parsedEnd == null) {
+            return "End time phải đúng format yyyy-MM-dd HH:mm:ss và là ngày giờ hợp lệ.";
         }
-        if (!isPositiveOrZeroInteger(snipeWindowSeconds) || !isPositiveOrZeroInteger(snipeExtensionSeconds)) {
-            return "Snipe window và snipe extension phải là số giây không âm.";
+
+        LocalDateTime now = LocalDateTime.now();
+        if (parsedStart.isBefore(now.minusMinutes(1))) {
+            return "Start time không được nằm trong quá khứ.";
+        }
+
+        if (!parsedEnd.isAfter(parsedStart)) {
+            return "End time phải sau Start time.";
+        }
+
+        Duration auctionDuration = Duration.between(parsedStart, parsedEnd);
+        if (auctionDuration.toMinutes() < 1) {
+            return "Auction phải kéo dài tối thiểu 1 phút.";
+        }
+        if (auctionDuration.toDays() > MAX_AUCTION_DURATION_DAYS) {
+            return "Auction không được kéo dài quá " + MAX_AUCTION_DURATION_DAYS + " ngày.";
+        }
+
+        BigDecimal minIncrement = parseAuctionMoney(minimumBidIncrement);
+        if (minIncrement == null) {
+            return "Minimum bid increment phải là số hợp lệ, tối đa 13 chữ số và 2 số thập phân.";
+        }
+        if (minIncrement.compareTo(MIN_INCREMENT) < 0) {
+            return "Minimum bid increment phải lớn hơn hoặc bằng 1.";
+        }
+
+        BigDecimal reserve = null;
+        if (reservePrice != null && !reservePrice.isBlank()) {
+            reserve = parseAuctionMoney(reservePrice);
+            if (reserve == null) {
+                return "Reserve price phải để trống hoặc là số hợp lệ, tối đa 13 chữ số và 2 số thập phân.";
+            }
+            if (reserve.compareTo(BigDecimal.ZERO) < 0) {
+                return "Reserve price không được âm.";
+            }
+        }
+
+        BigDecimal startingPrice = parseAuctionMoney(stripCurrency(data.startingPrice));
+        if (startingPrice != null && reserve != null && reserve.compareTo(startingPrice) < 0) {
+            return "Reserve price phải lớn hơn hoặc bằng Starting price.";
+        }
+
+        if (!isSafeAuctionSeconds(snipeWindowSeconds)) {
+            return "Snipe window seconds phải là số nguyên từ 0 đến " + MAX_AUCTION_SECONDS + ".";
+        }
+        if (!isSafeAuctionSeconds(snipeExtensionSeconds)) {
+            return "Snipe extension seconds phải là số nguyên từ 0 đến " + MAX_AUCTION_SECONDS + ".";
         }
         return "";
     }
 
-    private boolean isMoney(String value) {
+    private LocalDateTime parseAuctionDateTime(String value) {
+        if (value == null || value.isBlank() || hasControlCharacters(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() != 19) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(trimmed, AUCTION_TIME_FORMATTER);
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
+    }
+
+    private BigDecimal parseAuctionMoney(String value) {
         String sanitized = sanitizeMoney(value);
-        return !sanitized.isBlank() && MONEY_PATTERN.matcher(sanitized).matches();
+        if (sanitized.isBlank()
+            || sanitized.length() > MAX_MONEY_INPUT_LENGTH
+            || hasControlCharacters(sanitized)
+            || !MONEY_PATTERN.matcher(sanitized).matches()) {
+            return null;
+        }
+        try {
+            BigDecimal amount = new BigDecimal(sanitized);
+            if (amount.compareTo(BigDecimal.ZERO) < 0 || amount.compareTo(MAX_AUCTION_MONEY) > 0) {
+                return null;
+            }
+            return amount;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isMoney(String value) {
+        return parseAuctionMoney(value) != null;
     }
 
     private String sanitizeMoney(String value) {
@@ -2400,15 +2495,35 @@ public class AdminDashboardController extends BaseDashboardController {
         return value.replace(",", "").trim();
     }
 
-    private boolean isPositiveOrZeroInteger(String value) {
-        if (value == null || value.isBlank()) {
+    private boolean isSafeAuctionSeconds(String value) {
+        if (value == null || value.isBlank() || hasControlCharacters(value)) {
+            return false;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > MAX_SECONDS_INPUT_LENGTH || !trimmed.matches("[0-9]+")) {
             return false;
         }
         try {
-            return Integer.parseInt(value.trim()) >= 0;
+            int seconds = Integer.parseInt(trimmed);
+            return seconds >= 0 && seconds <= MAX_AUCTION_SECONDS;
         } catch (NumberFormatException ignored) {
             return false;
         }
+    }
+
+    private boolean isPositiveInteger(String value) {
+        if (value == null || value.isBlank() || hasControlCharacters(value)) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(value.trim()) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private boolean hasControlCharacters(String value) {
+        return value != null && value.chars().anyMatch(character -> character < 32 || character == 127);
     }
 
     private GridPane createDetailGrid() {
