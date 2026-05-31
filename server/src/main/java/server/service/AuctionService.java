@@ -684,7 +684,8 @@ public class AuctionService {
 
     BidTransaction winnerTransaction = auction.getWinningBid();
     // Duyệt bidHistory từ cuối lên, lấy bid OUTBID đầu tiên không phải của winner
-    BidTransaction secondWinnerTransaction = auction.getBidHistory().stream()
+    List<BidTransaction> bidHistory = auction.getBidHistory();
+    BidTransaction secondWinnerTransaction = bidHistory.stream()
         .filter(tx -> tx.getBidderId() != cancelledBidder.getId()
             && tx.getStatus() == BidStatus.OUTBID)
         .reduce((first, second) -> second) // lấy phần tử cuối cùng — gần nhất
